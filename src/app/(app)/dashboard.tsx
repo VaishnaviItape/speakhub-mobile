@@ -1,3 +1,4 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
   ScrollView,
@@ -6,9 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
-import { MaterialIcons } from "@expo/vector-icons";
-import { COLORS } from '../../constants/theme';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -40,7 +40,10 @@ export default function DashboardScreen() {
             }
           >
             <View style={styles.childHeader}>
-              <TouchableOpacity style={styles.avatarPlaceholder} onPress={() => router.push('/(app)/profile')}>
+              <TouchableOpacity
+                style={styles.avatarPlaceholder}
+                onPress={() => router.push("/(app)/profile")}
+              >
                 <MaterialIcons name="person" size={30} color="#fff" />
               </TouchableOpacity>
               <View>
@@ -50,7 +53,6 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
         ))}
-
       </ScrollView>
     );
   }
@@ -58,12 +60,24 @@ export default function DashboardScreen() {
   // Student Dashboard
   return (
     <ScrollView style={styles.container}>
-      <View style={[styles.header, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          },
+        ]}
+      >
         <View>
           <Text style={styles.greeting}>Hello, {user?.name}</Text>
           <Text style={styles.subGreeting}>Ready to learn today?</Text>
         </View>
-        <TouchableOpacity style={styles.avatarPlaceholder} onPress={() => router.push('/(app)/profile')}>
+        <TouchableOpacity
+          style={styles.avatarPlaceholder}
+          onPress={() => router.push("/(app)/profile")}
+        >
           <MaterialIcons name="person" size={30} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -73,7 +87,9 @@ export default function DashboardScreen() {
         <View style={styles.bannerCard}>
           <View>
             <Text style={styles.bannerTitle}>Next Class</Text>
-            <Text style={styles.bannerSubtitle}>Scholar Phonics (10:00 AM)</Text>
+            <Text style={styles.bannerSubtitle}>
+              Scholar Phonics (10:00 AM)
+            </Text>
           </View>
           <TouchableOpacity style={styles.bannerButton}>
             <Text style={styles.bannerButtonText}>Join</Text>
@@ -86,26 +102,40 @@ export default function DashboardScreen() {
             style={styles.gridItem}
             onPress={() => router.push("/(app)/exams")}
           >
-            <MaterialIcons name="edit-document" size={28} color={COLORS.primary} style={{marginBottom: 10}} />
+            <MaterialIcons
+              name="edit-document"
+              size={28}
+              color={COLORS.primary}
+              style={{ marginBottom: 10 }}
+            />
             <Text style={styles.gridText}>Exams</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.gridItem}
             onPress={() => router.push("/(app)/homework")}
           >
-            <MaterialIcons name="menu-book" size={28} color={COLORS.primary} style={{marginBottom: 10}} />
+            <MaterialIcons
+              name="menu-book"
+              size={28}
+              color={COLORS.primary}
+              style={{ marginBottom: 10 }}
+            />
             <Text style={styles.gridText}>Homework</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.gridItem}
             onPress={() => router.push("/(app)/profile")}
           >
-            <MaterialIcons name="payment" size={28} color={COLORS.primary} style={{marginBottom: 10}} />
+            <MaterialIcons
+              name="payment"
+              size={28}
+              color={COLORS.primary}
+              style={{ marginBottom: 10 }}
+            />
             <Text style={styles.gridText}>Fees</Text>
           </TouchableOpacity>
         </View>
       </View>
-
     </ScrollView>
   );
 }
@@ -117,7 +147,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    paddingTop: 30,
+    paddingTop: 40,
     // Removed border, shadow, and separate background for a flatter look
   },
   welcome: {
@@ -143,9 +173,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLightest,
     padding: 15,
     borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.primary,
   },

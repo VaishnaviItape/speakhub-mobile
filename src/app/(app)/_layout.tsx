@@ -20,7 +20,6 @@ export default function AppLayout() {
         name="dashboard" 
         options={{ 
           title: 'Dashboard',
-          headerShown: false,
           tabBarIcon: ({ color }) => <MaterialIcons name="dashboard" size={24} color={color} />
         }} 
       />
