@@ -2,11 +2,16 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { db } from '../../config/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { sendEmail } from '../../utils/emailService';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState<'student' | 'parent'>('student');
   const [loading, setLoading] = useState(false);
   
@@ -14,13 +19,37 @@ export default function RegisterScreen() {
   const router = useRouter();
 
   const handleRegister = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !email.trim() || !phone.trim()) {
+      alert("Please fill all required fields");
+      return;
+    }
     setLoading(true);
-    const success = await registerUser({ name, role });
-    setLoading(false);
-    
-    if (success) {
-      // Once registered, user is set, _layout will redirect to dashboard
+    try {
+      // 1. Save to Firestore (status: pending)
+      await addDoc(collection(db, 'users'), {
+        name,
+        email,
+        phone,
+        role,
+        status: 'pending',
+        forcePasswordChange: false,
+        createdAt: serverTimestamp()
+      });
+
+      // 2. Send Registration Email
+      await sendEmail(
+        email,
+        'Registration Received - Speak Hub Academy',
+        `Hello ${name},\n\nYour registration has been received successfully! You will be notified once an administrator approves your account and assigns you to a batch.\n\nThank you,\nSpeak Hub Academy`
+      );
+
+      setLoading(false);
+      alert("Registration Successful! Please check your email and wait for admin approval.");
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error(error);
+      setLoading(false);
+      alert("Registration failed. Please try again.");
     }
   };
 
@@ -40,6 +69,27 @@ export default function RegisterScreen() {
             placeholderTextColor={COLORS.textLight}
             value={name}
             onChangeText={setName}
+          />
+
+          <Text style={styles.label}>Email Address</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. john@example.com"
+            placeholderTextColor={COLORS.textLight}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+
+          <Text style={styles.label}>Phone Number</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 5555555555"
+            placeholderTextColor={COLORS.textLight}
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
           />
 
           <Text style={styles.label}>I am a...</Text>

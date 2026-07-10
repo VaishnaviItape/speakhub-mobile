@@ -6,56 +6,34 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 
 export default function LoginScreen() {
-  const [mobile, setMobile] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'MOBILE' | 'OTP'>('MOBILE');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { sendOtp, verifyOtp, user } = useAuth();
+  const { loginWithEmail } = useAuth();
   const router = useRouter();
 
-  const handleSendOtp = async () => {
-    if (mobile.length < 10) {
-      setError('Please enter a valid mobile number');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    
-    const success = await sendOtp(mobile);
-    setLoading(false);
-    
-    if (success) {
-      setStep('OTP');
-    } else {
-      setError('Failed to send OTP. Please try again.');
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length < 6) {
-      setError('Please enter the 6-digit OTP');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please enter both email and password.');
       return;
     }
     
     setLoading(true);
     setError('');
     
-    const success = await verifyOtp(otp);
+    const result = await loginWithEmail(email, password);
     setLoading(false);
     
-    if (success) {
-      // If user exists, AuthContext redirects them via _layout.tsx
-      // If user does not exist but OTP is correct, we route to register
-      setTimeout(() => {
-        // We can check if user is not set, we navigate to register
-        // But since we can't reliably read `user` synchronously here after state update,
-        // we'll rely on the mock context's behavior or just push to register
-        router.push('/(auth)/register');
-      }, 100);
+    if (result.success) {
+      if (result.forcePasswordChange) {
+        router.push('/(auth)/change-password');
+      } else {
+        // Layout will automatically redirect to dashboard once user state is populated
+      }
     } else {
-      setError('Invalid OTP. Try again.');
+      setError(result.error || 'Failed to login. Please try again.');
     }
   };
 
@@ -72,51 +50,44 @@ export default function LoginScreen() {
           />
         </View>
         <Text style={styles.title}>Speak Hub</Text>
-        <Text style={styles.subtitle}>
-          {step === 'MOBILE' ? 'Enter your mobile number to continue' : 'Enter the OTP sent to your mobile'}
-        </Text>
+        <Text style={styles.subtitle}>Enter your email and password</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {step === 'MOBILE' ? (
-          <TextInput
-            style={styles.input}
-            placeholder="Mobile Number (e.g. 5555555555)"
-            placeholderTextColor={COLORS.textLight}
-            keyboardType="phone-pad"
-            value={mobile}
-            onChangeText={setMobile}
-            maxLength={10}
-          />
-        ) : (
-          <TextInput
-            style={styles.input}
-            placeholder="6-digit OTP (123456)"
-            placeholderTextColor={COLORS.textLight}
-            keyboardType="number-pad"
-            value={otp}
-            onChangeText={setOtp}
-            maxLength={6}
-          />
-        )}
+        <TextInput
+          style={styles.input}
+          placeholder="Email Address"
+          placeholderTextColor={COLORS.textLight}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={COLORS.textLight}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
 
         <TouchableOpacity 
           style={styles.button} 
-          onPress={step === 'MOBILE' ? handleSendOtp : handleVerifyOtp}
+          onPress={handleLogin}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>{step === 'MOBILE' ? 'Send OTP' : 'Verify & Login'}</Text>
+            <Text style={styles.buttonText}>Login</Text>
           )}
         </TouchableOpacity>
 
-        {step === 'OTP' && (
-          <TouchableOpacity onPress={() => setStep('MOBILE')} style={styles.backButton}>
-            <Text style={styles.backText}>Change Mobile Number</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={() => router.push('/(auth)/register')} style={styles.backButton}>
+          <Text style={styles.backText}>New here? Register</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

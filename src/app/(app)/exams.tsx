@@ -1,50 +1,129 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert, AppState, ActivityIndicator, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-
-const MOCK_EXAMS = [
-  { id: '1', title: 'Phonics Reading Assessment', duration: 30, questions: 10, completed: false },
-  { id: '2', title: 'Abacus Speed Test', duration: 15, questions: 20, completed: true, score: '18/20' }
-];
+import { useAuth } from '../../contexts/AuthContext';
+import { db } from '../../config/firebase';
+import { collection, query, getDocs, where, addDoc } from 'firebase/firestore';
 
 export default function ExamsScreen() {
+  const { user } = useAuth();
+  const [exams, setExams] = useState<any[]>([]);
+  const [attempts, setAttempts] = useState<any[]>([]);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'Upcoming' | 'Live' | 'Completed' | 'Missed'>('Live');
+
+  // Exam State
   const [examStarted, setExamStarted] = useState(false);
   const [currentExam, setCurrentExam] = useState<any>(null);
-  
-  // Advanced Exam State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<{[key: number]: number}>({});
-  const [reviewMarks, setReviewMarks] = useState<{[key: number]: boolean}>({});
-  const [inProgressExams, setInProgressExams] = useState<{[key: string]: any}>({});
+  const [answers, setAnswers] = useState<{[key: string]: string}>({});
   const [showReview, setShowReview] = useState(false);
   const [showResult, setShowResult] = useState(false);
-  const [showIncomplete, setShowIncomplete] = useState(false);
-  const [incompleteQuestion, setIncompleteQuestion] = useState(-1);
-  const [score, setScore] = useState(0);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [scoreData, setScoreData] = useState<any>(null);
   
-  // Timer & Anti-cheat State
-  const [timeLeft, setTimeLeft] = useState(30 * 60); // default 30 mins
+  // Anti-Cheat State
+  const [showConsent, setShowConsent] = useState(false);
+  const [appSwitchCount, setAppSwitchCount] = useState(0);
+  const [totalExitDuration, setTotalExitDuration] = useState(0);
+  const [isSuspicious, setIsSuspicious] = useState(false);
+  const [autoSubmitReason, setAutoSubmitReason] = useState('');
+  const lastExitTimeRef = useRef<number | null>(null);
+
+  const [permission, requestPermission] = useCameraPermissions();
+  const [timeLeft, setTimeLeft] = useState(0);
   const [appState, setAppState] = useState(AppState.currentState);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Handle App Backgrounding
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  const fetchData = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+      const examsQ = query(collection(db, 'exams'), where('status', 'in', ['published', 'completed']));
+      const examsSnap = await getDocs(examsQ);
+      const examsList: any[] = [];
+      examsSnap.forEach(doc => examsList.push({ id: doc.id, ...doc.data() }));
+      
+      const attemptsQ = query(collection(db, 'exam_attempts'), where('studentId', '==', user.id));
+      const attemptsSnap = await getDocs(attemptsQ);
+      const attemptsList: any[] = [];
+      attemptsSnap.forEach(doc => attemptsList.push({ id: doc.id, ...doc.data() }));
+
+      setExams(examsList);
+      setAttempts(attemptsList);
+    } catch (error) {
+      console.error("Error fetching exams:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchQuestionsForExam = async (examId: string) => {
+    const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
+    const snap = await getDocs(q);
+    const qList: any[] = [];
+    snap.forEach(doc => qList.push({ id: doc.id, ...doc.data() }));
+    const currentE = exams.find(e => e.id === examId);
+    if (currentE?.shuffleQuestions) {
+      qList.sort(() => Math.random() - 0.5);
+    }
+    setQuestions(qList);
+  };
+
+  // Anti-Cheat App State Listener
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
-      if (examStarted && appState.match(/active/) && nextAppState.match(/inactive|background/)) {
-        // App went to background
-        Alert.alert("Exam Paused", "You left the app. Your timer is paused.");
+      if (examStarted) {
+        if (appState.match(/active/) && nextAppState.match(/inactive|background/)) {
+          // App goes to background
+          lastExitTimeRef.current = Date.now();
+        } else if (appState.match(/inactive|background/) && nextAppState === 'active') {
+          // App returns to foreground
+          if (lastExitTimeRef.current) {
+            const timeAwaySecs = Math.floor((Date.now() - lastExitTimeRef.current) / 1000);
+            const newExitDuration = totalExitDuration + timeAwaySecs;
+            const newSwitchCount = appSwitchCount + 1;
+            
+            setTotalExitDuration(newExitDuration);
+            setAppSwitchCount(newSwitchCount);
+
+            const maxAllowedExits = currentExam?.maxViolationsAllowed || 3;
+            const maxDuration = currentExam?.maxViolationDuration || 30;
+
+            if (newSwitchCount > maxAllowedExits || newExitDuration > maxDuration) {
+              setIsSuspicious(true);
+              const reason = newSwitchCount > maxAllowedExits ? `Exceeded max app exits (${maxAllowedExits})` : `Exceeded max time away (${maxDuration}s)`;
+              setAutoSubmitReason(reason);
+              
+              if (currentExam?.violationAction === 'AutoSubmit') {
+                Alert.alert("Exam Terminated", `Anti-cheat violation: ${reason}. Your exam is being submitted immediately.`);
+                forceSubmitExam(newSwitchCount, newExitDuration, true, reason);
+              } else {
+                Alert.alert("Warning", "Suspicious activity detected. Your teacher has been notified.");
+              }
+            } else {
+              Alert.alert(
+                "Warning: Do not exit the app!", 
+                `You have exited the exam ${newSwitchCount} time(s). Exceeding ${maxAllowedExits} exits will terminate the exam.`
+              );
+            }
+          }
+          lastExitTimeRef.current = null;
+        }
       }
       setAppState(nextAppState);
     });
-    return () => {
-      subscription.remove();
-    };
-  }, [appState, examStarted]);
 
-  // Live Timer Logic
+    return () => subscription.remove();
+  }, [appState, examStarted, appSwitchCount, totalExitDuration, currentExam]);
+
+  // Live Timer
   useEffect(() => {
     if (examStarted && appState === 'active' && timeLeft > 0) {
       timerRef.current = setInterval(() => {
@@ -64,248 +143,299 @@ export default function ExamsScreen() {
     };
   }, [examStarted, appState, timeLeft]);
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const requestStartExam = async (exam: any) => {
+    setCurrentExam(exam);
+    setShowConsent(true);
   };
 
-  // Mock jumbled questions (memoized so they don't shuffle on every render)
-  const MOCK_QUESTIONS = React.useMemo(() => {
-    return [
-      { id: 'q1', text: 'What is the sound of letter "A"?', options: ['/ae/', '/b/', '/c/', '/d/'], answer: 0 },
-      { id: 'q2', text: 'Identify the CVC word.', options: ['Cat', 'Apple', 'Banana', 'Elephant'], answer: 0 },
-      { id: 'q3', text: 'Which is a magic E word?', options: ['Make', 'Mat', 'Mad', 'Man'], answer: 0 },
-      { id: 'q4', text: 'Select the digraph.', options: ['sh', 'p', 't', 'k'], answer: 0 },
-      { id: 'q5', text: 'What rhymes with "Sun"?', options: ['Run', 'Moon', 'Star', 'Car'], answer: 0 },
-    ].sort(() => 0.5 - Math.random()); // Jumbled sequence
-  }, []);
-
-  const startExam = async (exam: any) => {
+  const confirmStartExam = async () => {
+    setShowConsent(false);
     if (!permission?.granted) {
       const { granted } = await requestPermission();
       if (!granted) {
-        Alert.alert("Permission Required", "Camera access is required for proctoring the exam.");
+        Alert.alert("Permission Required", "Camera access is required for proctoring.");
         return;
       }
     }
     
-    setCurrentExam(exam);
-    setExamStarted(true);
-
-    if (inProgressExams[exam.id]) {
-      // Resume from saved state
-      const savedState = inProgressExams[exam.id];
-      setCurrentQuestionIndex(savedState.currentQuestionIndex);
-      setAnswers(savedState.answers);
-      setReviewMarks(savedState.reviewMarks);
-      setTimeLeft(savedState.timeLeft);
-    } else {
-      // Fresh start
-      setTimeLeft(exam.duration * 60); 
-      setCurrentQuestionIndex(0);
-      setAnswers({});
-      setReviewMarks({});
-    }
+    await fetchQuestionsForExam(currentExam.id);
+    setTimeLeft(currentExam.duration * 60); 
+    setCurrentQuestionIndex(0);
+    setAnswers({});
+    
+    setAppSwitchCount(0);
+    setTotalExitDuration(0);
+    setIsSuspicious(false);
+    setAutoSubmitReason('');
+    lastExitTimeRef.current = null;
     
     setShowReview(false);
     setShowResult(false);
-    setScore(0);
+    setExamStarted(true);
   };
 
-  const handleSelectOption = (optionIndex: number) => {
-    setAnswers(prev => ({ ...prev, [currentQuestionIndex]: optionIndex }));
+  const handleSelectOption = (questionId: string, answer: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
-  const toggleReviewMark = () => {
-    setReviewMarks(prev => ({
-      ...prev,
-      [currentQuestionIndex]: !prev[currentQuestionIndex]
-    }));
+  const forceSubmitExam = async (switches: number, duration: number, suspicious: boolean, reason: string) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setExamStarted(false);
+    calculateAndSaveAttempt(switches, duration, suspicious, reason);
   };
 
-  const goNext = () => {
-    if (currentQuestionIndex < MOCK_QUESTIONS.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
+  const submitExam = async () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setExamStarted(false);
+    calculateAndSaveAttempt(appSwitchCount, totalExitDuration, isSuspicious, autoSubmitReason);
+  };
+
+  const calculateAndSaveAttempt = async (switches: number, exitDur: number, suspicious: boolean, reason: string) => {
+    let correctCount = 0, wrongCount = 0, score = 0, unansweredCount = 0;
+
+    questions.forEach(q => {
+      const studentAns = answers[q.id];
+      if (!studentAns) {
+        unansweredCount++;
+      } else if (studentAns === q.correctAnswer) {
+        correctCount++;
+        score += Number(q.marks || currentExam.marksPerQuestion || 1);
+      } else {
+        wrongCount++;
+        if (currentExam.negativeMarking) score -= 0.5;
+      }
+    });
+
+    const percentage = (score / Number(currentExam.totalMarks)) * 100;
+
+    const attemptData = {
+      examId: currentExam.id,
+      studentId: user?.id,
+      answers,
+      score,
+      percentage,
+      correctCount,
+      wrongCount,
+      unansweredCount,
+      timeUsed: (currentExam.duration * 60) - timeLeft,
+      appSwitchCount: switches,
+      totalExitDuration: exitDur,
+      isSuspicious: suspicious,
+      autoSubmitReason: reason,
+      submittedAt: new Date().toISOString()
+    };
+
+    try {
+      await addDoc(collection(db, 'exam_attempts'), attemptData);
+      setAttempts(prev => [...prev, attemptData]);
+      
+      if (currentExam.showResultImmediately !== false) {
+        setScoreData(attemptData);
+        setShowResult(true);
+      } else {
+        Alert.alert("Submitted", "Your exam has been submitted successfully. Results will be published later.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", "Failed to submit exam: " + e.message);
     }
   };
 
-  const goPrev = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(prev => prev - 1);
-    }
-  };
-
-  const submitExam = () => {
-    const unansweredIndex = MOCK_QUESTIONS.findIndex((_, index) => answers[index] === undefined);
-
-    if (unansweredIndex !== -1) {
-      setIncompleteQuestion(unansweredIndex);
-      setShowIncomplete(true);
-      return;
-    }
-
-    // Calculate Score (Mock logic: count answered questions for simplicity)
-    const answeredCount = Object.keys(answers).length;
-    setScore(answeredCount);
+  const viewLeaderboard = (exam: any, attempt: any) => {
+    setCurrentExam(exam);
+    setScoreData(attempt);
     setShowResult(true);
   };
 
-  const finishExam = () => {
-    setInProgressExams(prev => {
-      const newState = { ...prev };
-      delete newState[currentExam.id];
-      return newState;
+  const categorizedExams = () => {
+    const now = new Date().getTime();
+    const live: any[] = [];
+    const upcoming: any[] = [];
+    const completed: any[] = [];
+    const missed: any[] = [];
+
+    exams.forEach(ex => {
+      const start = new Date(ex.startDate).getTime();
+      const end = new Date(ex.endDate).getTime();
+      const attempt = attempts.find(a => a.examId === ex.id);
+
+      if (attempt) {
+        completed.push({ ...ex, attempt });
+      } else if (now < start) {
+        upcoming.push(ex);
+      } else if (now > end) {
+        missed.push(ex);
+      } else {
+        live.push(ex);
+      }
     });
-    setShowResult(false);
-    setExamStarted(false);
+
+    return { Live: live, Upcoming: upcoming, Completed: completed, Missed: missed };
   };
 
-  const cancelExam = () => {
-    Alert.alert(
-      "Pause Exam",
-      "Are you sure you want to go back? You can resume this test later.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Yes, Go Back", 
-          onPress: () => {
-            setExamStarted(false);
-            if (timerRef.current) clearInterval(timerRef.current);
-            
-            // Save progress
-            setInProgressExams(prev => ({
-              ...prev,
-              [currentExam.id]: {
-                currentQuestionIndex,
-                answers,
-                reviewMarks,
-                timeLeft
-              }
-            }));
-          }
-        }
-      ]
-    );
-  };
+  const currentList = categorizedExams()[activeTab];
 
   const renderExamCard = ({ item }: { item: any }) => (
     <View style={styles.card}>
-      <View>
+      <View style={{flex: 1}}>
         <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.subtitle}>{item.duration} mins • {item.questions} questions</Text>
+        <Text style={styles.subtitle}>{item.duration} mins • {item.numberOfQuestions} Qs</Text>
+        <Text style={styles.dateText}>Ends: {new Date(item.endDate).toLocaleString()}</Text>
       </View>
-      {item.completed ? (
-        <View style={styles.completedBadge}>
-          <Text style={styles.completedText}>Score: {item.score}</Text>
-        </View>
-      ) : (
-        <TouchableOpacity 
-          style={[styles.startButton, inProgressExams[item.id] && styles.resumeButton]} 
-          onPress={() => startExam(item)}
-        >
-          <Text style={styles.startText}>{inProgressExams[item.id] ? "Resume Test" : "Start"}</Text>
+      
+      {activeTab === 'Live' && (
+        <TouchableOpacity style={styles.startButton} onPress={() => requestStartExam(item)}>
+          <Text style={styles.startText}>Start</Text>
         </TouchableOpacity>
+      )}
+      {activeTab === 'Completed' && (
+        <TouchableOpacity style={styles.completedBadge} onPress={() => viewLeaderboard(item, item.attempt)}>
+          <Text style={styles.completedText}>Score: {item.attempt.score} • View</Text>
+        </TouchableOpacity>
+      )}
+      {activeTab === 'Upcoming' && (
+        <View style={styles.disabledBadge}>
+          <Text style={styles.disabledText}>Waiting</Text>
+        </View>
+      )}
+      {activeTab === 'Missed' && (
+        <View style={styles.missedBadge}>
+          <Text style={styles.missedText}>Missed</Text>
+        </View>
       )}
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <FlatList 
-        data={MOCK_EXAMS}
-        renderItem={renderExamCard}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 20 }}
-      />
+      <View style={styles.tabsContainer}>
+        {['Live', 'Upcoming', 'Completed', 'Missed'].map((tab) => (
+          <TouchableOpacity 
+            key={tab} 
+            style={[styles.tab, activeTab === tab && styles.activeTab]}
+            onPress={() => setActiveTab(tab as any)}
+          >
+            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      {/* Advanced Exam Modal */}
+      {isLoading ? (
+        <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 50}} />
+      ) : (
+        <FlatList 
+          data={currentList}
+          renderItem={renderExamCard}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 20 }}
+          ListEmptyComponent={<Text style={styles.emptyText}>No exams found.</Text>}
+        />
+      )}
+
+      {/* Pre-Exam Consent Modal */}
+      <Modal visible={showConsent} animationType="fade" transparent={true}>
+        <View style={styles.reviewModalOverlay}>
+          <View style={styles.reviewModalContent}>
+            <Text style={styles.resultTitle}>Anti-Cheat Warning</Text>
+            <Text style={styles.resultMessage}>
+              This exam must be taken in Full-Screen Mode. If you exit the app, change tabs, or receive a call, it will be recorded as a violation.
+            </Text>
+            <Text style={{color: COLORS.error, fontWeight: 'bold', marginBottom: 20, textAlign: 'center'}}>
+              Max App Exits Allowed: {currentExam?.maxViolationsAllowed || 3}
+            </Text>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+              <TouchableOpacity style={[styles.finishBtn, {backgroundColor: COLORS.textMedium}]} onPress={() => setShowConsent(false)}>
+                <Text style={styles.finishBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.finishBtn} onPress={confirmStartExam}>
+                <Text style={styles.finishBtnText}>I Agree, Start Exam</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Live Exam Modal */}
       <Modal visible={examStarted} animationType="slide">
         <View style={styles.examContainer}>
-          
-          {/* Header */}
           <View style={styles.examHeader}>
-            <TouchableOpacity onPress={cancelExam} style={styles.backButton}>
-              <MaterialIcons name="arrow-back" size={24} color="#333" />
-            </TouchableOpacity>
             <Text style={styles.examTitleText}>{currentExam?.title}</Text>
-            <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
-            <TouchableOpacity onPress={() => setShowReview(true)} style={styles.reviewBtnHeader}>
-              <Text style={styles.reviewBtnText}>Review Grid</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Camera Proctoring Feed */}
-          {permission?.granted && (
-            <View style={styles.proctorCameraContainer}>
-              <CameraView 
-                style={styles.camera} 
-                facing="front"
-              />
-            </View>
-          )}
-          
-          {/* Main Question Area */}
-          <View style={styles.questionContainer}>
-            <Text style={styles.questionNumber}>
-              Question {currentQuestionIndex + 1} of {MOCK_QUESTIONS.length}
-            </Text>
-            <Text style={styles.questionText}>
-              {MOCK_QUESTIONS[currentQuestionIndex]?.text}
-            </Text>
-            
-            {MOCK_QUESTIONS[currentQuestionIndex]?.options.map((option, index) => {
-              const isSelected = answers[currentQuestionIndex] === index;
-              return (
-                <TouchableOpacity 
-                  key={index} 
-                  style={[
-                    styles.optionButton, 
-                    isSelected && styles.optionButtonSelected
-                  ]}
-                  onPress={() => handleSelectOption(index)}
-                >
-                  <Text style={[
-                    styles.optionText,
-                    isSelected && styles.optionTextSelected
-                  ]}>
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
-
-          {/* Bottom Navigation Controls */}
-          <View style={styles.navigationFooter}>
-            <TouchableOpacity 
-              style={[styles.navBtn, currentQuestionIndex === 0 && styles.navBtnDisabled]} 
-              onPress={goPrev}
-              disabled={currentQuestionIndex === 0}
-            >
-              <Text style={[styles.navBtnText, currentQuestionIndex === 0 && styles.navBtnTextDisabled]}>Previous</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.navBtn, reviewMarks[currentQuestionIndex] && styles.markReviewActive]} 
-              onPress={toggleReviewMark}
-            >
-              <Text style={[styles.navBtnText, reviewMarks[currentQuestionIndex] && styles.markReviewTextActive]}>
-                {reviewMarks[currentQuestionIndex] ? "Unmark" : "Mark Review"}
-              </Text>
-            </TouchableOpacity>
-
-            {currentQuestionIndex === MOCK_QUESTIONS.length - 1 ? (
-              <TouchableOpacity style={[styles.navBtn, styles.submitBtn]} onPress={submitExam}>
-                <Text style={styles.submitBtnText}>Submit</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.navBtn} onPress={goNext}>
-                <Text style={styles.navBtnText}>Next</Text>
+            <Text style={styles.timerText}>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</Text>
+            {currentExam?.allowReview !== false && (
+              <TouchableOpacity onPress={() => setShowReview(true)} style={styles.reviewBtnHeader}>
+                <Text style={styles.reviewBtnText}>Grid</Text>
               </TouchableOpacity>
             )}
           </View>
 
+          {permission?.granted && (
+            <View style={styles.proctorCameraContainer}>
+              <CameraView style={styles.camera} facing="front" />
+            </View>
+          )}
+          
+          {questions.length > 0 && (
+            <ScrollView style={styles.questionContainer}>
+              <Text style={styles.questionNumber}>
+                Question {currentQuestionIndex + 1} of {questions.length}
+              </Text>
+              <Text style={styles.questionText}>
+                {questions[currentQuestionIndex]?.question}
+              </Text>
+              
+              {questions[currentQuestionIndex]?.questionType === 'MCQ' && (
+                ['A', 'B', 'C', 'D'].map((opt) => {
+                  const val = questions[currentQuestionIndex][`option${opt}`];
+                  if (!val) return null;
+                  const isSelected = answers[questions[currentQuestionIndex].id] === opt;
+                  return (
+                    <TouchableOpacity 
+                      key={opt} 
+                      style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                      onPress={() => handleSelectOption(questions[currentQuestionIndex].id, opt)}
+                    >
+                      <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                        {opt}. {val}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })
+              )}
+              {questions[currentQuestionIndex]?.questionType === 'TrueFalse' && (
+                ['True', 'False'].map((opt) => {
+                  const isSelected = answers[questions[currentQuestionIndex].id] === opt;
+                  return (
+                    <TouchableOpacity 
+                      key={opt} 
+                      style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                      onPress={() => handleSelectOption(questions[currentQuestionIndex].id, opt)}
+                    >
+                      <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{opt}</Text>
+                    </TouchableOpacity>
+                  )
+                })
+              )}
+            </ScrollView>
+          )}
+
+          <View style={styles.navigationFooter}>
+            <TouchableOpacity 
+              style={[styles.navBtn, currentQuestionIndex === 0 && styles.navBtnDisabled]} 
+              onPress={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+              disabled={currentQuestionIndex === 0}
+            >
+              <Text style={styles.navBtnText}>Previous</Text>
+            </TouchableOpacity>
+
+            {currentQuestionIndex === questions.length - 1 ? (
+              <TouchableOpacity style={[styles.navBtn, styles.submitBtn]} onPress={submitExam}>
+                <Text style={styles.submitBtnText}>Submit</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.navBtn} onPress={() => setCurrentQuestionIndex(prev => prev + 1)}>
+                <Text style={styles.navBtnText}>Next</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </Modal>
 
@@ -313,39 +443,21 @@ export default function ExamsScreen() {
       <Modal visible={showReview} animationType="fade" transparent={true}>
         <View style={styles.reviewModalOverlay}>
           <View style={styles.reviewModalContent}>
-            <Text style={styles.reviewTitle}>Review Questions</Text>
+            <Text style={styles.reviewTitle}>Question Grid</Text>
             <View style={styles.gridContainer}>
-              {MOCK_QUESTIONS.map((_, index) => {
-                const isAttempted = answers[index] !== undefined;
-                const isCurrent = currentQuestionIndex === index;
-                const isMarked = reviewMarks[index];
-                
+              {questions.map((q, index) => {
+                const isAttempted = !!answers[q.id];
                 return (
                   <TouchableOpacity 
-                    key={index}
-                    style={[
-                      styles.gridItem,
-                      isAttempted ? styles.gridItemAttempted : styles.gridItemUnattempted,
-                      isMarked && styles.gridItemMarked,
-                      isCurrent && styles.gridItemCurrent
-                    ]}
-                    onPress={() => {
-                      setCurrentQuestionIndex(index);
-                      setShowReview(false);
-                    }}
+                    key={q.id}
+                    style={[styles.gridItem, isAttempted ? styles.gridItemAttempted : styles.gridItemUnattempted]}
+                    onPress={() => { setCurrentQuestionIndex(index); setShowReview(false); }}
                   >
-                    <Text style={[
-                      styles.gridText,
-                      isAttempted && styles.gridTextAttempted,
-                      isMarked && styles.gridTextMarked,
-                    ]}>
-                      {index + 1}
-                    </Text>
+                    <Text style={isAttempted ? styles.gridTextAttempted : styles.gridText}>{index + 1}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
-
             <TouchableOpacity style={styles.closeReviewBtn} onPress={() => setShowReview(false)}>
               <Text style={styles.closeReviewText}>Back to Exam</Text>
             </TouchableOpacity>
@@ -353,46 +465,47 @@ export default function ExamsScreen() {
         </View>
       </Modal>
 
-      {/* Results Modal */}
+      {/* Result / Leaderboard Modal */}
       <Modal visible={showResult} animationType="slide" transparent={true}>
         <View style={styles.reviewModalOverlay}>
           <View style={styles.reviewModalContent}>
-            <Text style={styles.resultTitle}>Exam Completed!</Text>
+            <Text style={styles.resultTitle}>Exam Result</Text>
             
-            <View style={styles.scoreContainer}>
-              <Text style={styles.scoreText}>{score}</Text>
-              <Text style={styles.scoreSubtext}>out of {MOCK_QUESTIONS.length}</Text>
+            <View style={{flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20}}>
+              <View style={styles.scoreContainer}>
+                <Text style={styles.scoreText}>{scoreData?.score}</Text>
+                <Text style={styles.scoreSubtext}>Score</Text>
+              </View>
+              <View style={[styles.scoreContainer, {borderColor: COLORS.secondary}]}>
+                <Text style={[styles.scoreText, {color: COLORS.secondary}]}>{scoreData?.rank ? `#${scoreData.rank}` : 'TBD'}</Text>
+                <Text style={styles.scoreSubtext}>Your Rank</Text>
+              </View>
             </View>
-            
-            <Text style={styles.resultMessage}>
-              Your answers have been successfully submitted to the server.
-            </Text>
 
-            <TouchableOpacity style={styles.finishBtn} onPress={finishExam}>
-              <Text style={styles.finishBtnText}>Return to Dashboard</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+            <View style={{backgroundColor: COLORS.background, padding: 15, borderRadius: 10, marginBottom: 20}}>
+              <Text style={{textAlign: 'center', fontWeight: 'bold', color: COLORS.textDark, marginBottom: 10}}>Analytics</Text>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5}}>
+                <Text style={{color: COLORS.textMedium}}>Grade</Text>
+                <Text style={{fontWeight: 'bold'}}>{scoreData?.grade || 'Calculating...'}</Text>
+              </View>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5}}>
+                <Text style={{color: COLORS.textMedium}}>Percentage</Text>
+                <Text style={{fontWeight: 'bold'}}>{scoreData?.percentage?.toFixed(1)}%</Text>
+              </View>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                <Text style={{color: COLORS.textMedium}}>Time Taken</Text>
+                <Text style={{fontWeight: 'bold'}}>{Math.floor(scoreData?.timeUsed / 60)}m {scoreData?.timeUsed % 60}s</Text>
+              </View>
+            </View>
 
-      {/* Incomplete Warning Modal */}
-      <Modal visible={showIncomplete} animationType="fade" transparent={true}>
-        <View style={styles.reviewModalOverlay}>
-          <View style={styles.reviewModalContent}>
-            <Text style={styles.resultTitle}>Incomplete Exam</Text>
-            
-            <Text style={styles.resultMessage}>
-              Please solve Question No. {incompleteQuestion + 1} (remaining question). You must answer all questions before submitting.
-            </Text>
+            {scoreData?.isSuspicious && (
+              <Text style={{color: COLORS.error, textAlign: 'center', marginBottom: 20, fontWeight: 'bold'}}>
+                Warning: Attempt flagged as suspicious.
+              </Text>
+            )}
 
-            <TouchableOpacity 
-              style={styles.finishBtn} 
-              onPress={() => {
-                setShowIncomplete(false);
-                setCurrentQuestionIndex(incompleteQuestion);
-              }}
-            >
-              <Text style={styles.finishBtnText}>Go to Question</Text>
+            <TouchableOpacity style={[styles.finishBtn, {width: '100%'}]} onPress={() => { setShowResult(false); fetchData(); }}>
+              <Text style={styles.finishBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -403,321 +516,71 @@ export default function ExamsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.textMedium,
-    marginTop: 5,
-  },
-  startButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  resumeButton: {
-    backgroundColor: '#f39c12',
-  },
-  startText: {
-    color: COLORS.textInverse,
-    fontWeight: 'bold',
-  },
-  completedBadge: {
-    backgroundColor: COLORS.successBackground,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  completedText: {
-    color: COLORS.successText,
-    fontWeight: 'bold',
-  },
-  examContainer: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-  },
-  examHeader: {
-    backgroundColor: COLORS.surface,
-    padding: 20,
-    paddingTop: 50,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  examTitleText: {
-    color: COLORS.textDark,
-    fontSize: 18,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  backButton: {
-    marginRight: 15,
-  },
-  timerText: {
-    color: COLORS.primary,
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginHorizontal: 15,
-  },
-  reviewBtnHeader: {
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  reviewBtnText: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  proctorCameraContainer: {
-    width: 100,
-    height: 120,
-    position: 'absolute',
-    top: 100,
-    right: 20,
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    zIndex: 10,
-    elevation: 5,
-  },
-  camera: {
-    flex: 1,
-  },
-  questionContainer: {
-    padding: 20,
-    paddingTop: 40,
-    flex: 1,
-  },
-  questionNumber: {
-    fontSize: 14,
-    color: COLORS.textMedium,
-    marginBottom: 10,
-    fontWeight: 'bold',
-  },
-  questionText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-    marginBottom: 30,
-    paddingRight: 100, // Make room for camera
-  },
-  optionButton: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    backgroundColor: COLORS.background,
-  },
-  optionButtonSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLightest,
-  },
-  optionText: {
-    fontSize: 16,
-    color: COLORS.textDark,
-  },
-  optionTextSelected: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
-  navigationFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-  },
-  navBtn: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 10,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  navBtnDisabled: {
-    opacity: 0.5,
-  },
-  navBtnText: {
-    color: COLORS.textDark,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  navBtnTextDisabled: {
-    color: COLORS.textLight,
-  },
-  submitBtn: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  submitBtnText: {
-    color: COLORS.textInverse,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  markReviewActive: {
-    backgroundColor: '#fff3cd',
-    borderColor: '#ffc107',
-  },
-  markReviewTextActive: {
-    color: '#856404',
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  tabsContainer: { flexDirection: 'row', backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingTop: 10 },
+  tab: { flex: 1, paddingVertical: 15, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  activeTab: { borderBottomColor: COLORS.primary },
+  tabText: { color: COLORS.textMedium, fontWeight: 'bold' },
+  activeTabText: { color: COLORS.primary },
+  emptyText: { textAlign: 'center', marginTop: 50, color: COLORS.textMedium },
   
-  // Review Grid Styles
-  reviewModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reviewModalContent: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 30,
-    width: '90%',
-    maxWidth: 400,
-  },
-  reviewTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  gridItem: {
-    width: 45,
-    height: 45,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  gridItemAttempted: {
-    backgroundColor: COLORS.successBackground,
-    borderColor: COLORS.successText,
-  },
-  gridItemUnattempted: {
-    backgroundColor: COLORS.background,
-    borderColor: COLORS.border,
-  },
-  gridItemMarked: {
-    backgroundColor: '#fff3cd',
-    borderColor: '#ffc107',
-  },
-  gridItemCurrent: {
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-  },
-  gridText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.textMedium,
-  },
-  gridTextAttempted: {
-    color: COLORS.successText,
-  },
-  gridTextMarked: {
-    color: '#856404',
-  },
-  closeReviewBtn: {
-    marginTop: 30,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  closeReviewText: {
-    color: COLORS.textDark,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  card: { backgroundColor: COLORS.surface, padding: 20, borderRadius: 15, marginBottom: 15, flexDirection: 'row', alignItems: 'center', elevation: 2 },
+  title: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark },
+  subtitle: { fontSize: 14, color: COLORS.textMedium, marginTop: 5 },
+  dateText: { fontSize: 12, color: COLORS.primary, marginTop: 5 },
   
-  // Results Modal Styles
-  resultTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  scoreContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.primaryLightest,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    alignSelf: 'center',
-    marginBottom: 20,
-    borderWidth: 5,
-    borderColor: COLORS.primary,
-  },
-  scoreText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  scoreSubtext: {
-    fontSize: 16,
-    color: COLORS.textMedium,
-    fontWeight: 'bold',
-  },
-  resultMessage: {
-    textAlign: 'center',
-    color: COLORS.textMedium,
-    fontSize: 16,
-    marginBottom: 30,
-    paddingHorizontal: 10,
-  },
-  finishBtn: {
-    backgroundColor: COLORS.primary,
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  finishBtnText: {
-    color: COLORS.textInverse,
-    fontWeight: 'bold',
-    fontSize: 16,
-  }
+  startButton: { backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  startText: { color: COLORS.textInverse, fontWeight: 'bold' },
+  completedBadge: { backgroundColor: COLORS.primaryLightest, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
+  completedText: { color: COLORS.primary, fontWeight: 'bold' },
+  disabledBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
+  disabledText: { color: '#64748b', fontWeight: 'bold' },
+  missedBadge: { backgroundColor: '#fee2e2', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
+  missedText: { color: '#ef4444', fontWeight: 'bold' },
+
+  examContainer: { flex: 1, backgroundColor: COLORS.surface },
+  examHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 50, borderBottomWidth: 1, borderColor: COLORS.border },
+  examTitleText: { flex: 1, fontSize: 18, fontWeight: 'bold', color: COLORS.textDark },
+  timerText: { fontSize: 18, fontWeight: 'bold', color: COLORS.error, marginHorizontal: 15 },
+  reviewBtnHeader: { padding: 8, borderRadius: 10, borderWidth: 1, borderColor: COLORS.primary },
+  reviewBtnText: { color: COLORS.primary, fontWeight: 'bold', fontSize: 12 },
+  
+  proctorCameraContainer: { width: 100, height: 120, position: 'absolute', top: 100, right: 20, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: COLORS.primary, zIndex: 10 },
+  camera: { flex: 1 },
+  
+  questionContainer: { padding: 20, flex: 1 },
+  questionNumber: { fontSize: 14, color: COLORS.textMedium, fontWeight: 'bold', marginBottom: 10 },
+  questionText: { fontSize: 20, fontWeight: 'bold', color: COLORS.textDark, marginBottom: 30, paddingRight: 110 },
+  
+  optionButton: { borderWidth: 1, borderColor: COLORS.border, padding: 15, borderRadius: 10, marginBottom: 15, backgroundColor: COLORS.background },
+  optionButtonSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLightest },
+  optionText: { fontSize: 16, color: COLORS.textDark },
+  optionTextSelected: { color: COLORS.primary, fontWeight: 'bold' },
+  
+  navigationFooter: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderTopWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  navBtn: { paddingHorizontal: 30, paddingVertical: 15, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, minWidth: 120, alignItems: 'center' },
+  navBtnDisabled: { opacity: 0.5 },
+  navBtnText: { fontWeight: 'bold', fontSize: 16 },
+  submitBtn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  submitBtnText: { color: COLORS.textInverse, fontWeight: 'bold', fontSize: 16 },
+
+  reviewModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  reviewModalContent: { backgroundColor: COLORS.surface, padding: 30, borderRadius: 20, width: '90%' },
+  reviewTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  gridItem: { width: 45, height: 45, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  gridItemAttempted: { backgroundColor: COLORS.primaryLightest, borderColor: COLORS.primary },
+  gridItemUnattempted: { backgroundColor: COLORS.background, borderColor: COLORS.border },
+  gridText: { fontSize: 16, fontWeight: 'bold', color: COLORS.textMedium },
+  gridTextAttempted: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary },
+  closeReviewBtn: { marginTop: 30, padding: 15, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, alignItems: 'center' },
+  closeReviewText: { fontWeight: 'bold' },
+
+  resultTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: COLORS.textDark },
+  resultMessage: { textAlign: 'center', fontSize: 16, color: COLORS.textMedium, marginBottom: 20 },
+  scoreContainer: { width: 100, height: 100, borderRadius: 50, borderWidth: 5, borderColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  scoreText: { fontSize: 28, fontWeight: 'bold' },
+  scoreSubtext: { fontSize: 12, color: COLORS.textMedium, fontWeight: 'bold' },
+  finishBtn: { backgroundColor: COLORS.primary, padding: 15, borderRadius: 10, alignItems: 'center', paddingHorizontal: 20 },
+  finishBtnText: { color: COLORS.textInverse, fontWeight: 'bold', fontSize: 16 }
 });

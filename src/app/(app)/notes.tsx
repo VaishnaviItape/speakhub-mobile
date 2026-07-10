@@ -1,43 +1,176 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
 import { COLORS } from '../../constants/theme';
-
-const MOCK_NOTES = [
-  { id: '1', title: 'Chapter 1: Grammar Basics', type: 'PDF', course: 'Spoken English', url: 'https://example.com/grammar.pdf' },
-  { id: '2', title: 'Phonics Sounds Video', type: 'Video', course: 'Scholar Phonics', url: 'https://example.com/phonics.mp4' },
-  { id: '3', title: 'Level 1 Practice Sheet', type: 'Worksheet', course: 'Abacus', url: 'https://example.com/sheet.pdf' }
-];
+import { useAuth } from '../../contexts/AuthContext';
+import { db } from '../../config/firebase';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 export default function NotesScreen() {
-  const openNote = (url: string) => {
-    // In a real app, you might use expo-web-browser or a PDF viewer
-    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+  const { user } = useAuth();
+  const [notes, setNotes] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Filters
+  const [selectedSubject, setSelectedSubject] = useState<string>('All');
+
+  useEffect(() => {
+    fetchNotes();
+  }, [user]);
+
+  const fetchNotes = async () => {
+    if (!user?.batchIds || user.batchIds.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      // Get all published notes for the student's batches
+      const q = query(collection(db, 'notes'), where('batchId', 'in', user.batchIds), where('status', '==', 'published'));
+      const snap = await getDocs(q);
+      const notesList: any[] = [];
+      snap.forEach(doc => {
+        notesList.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Fetch Subject names mapping
+      const subQ = query(collection(db, 'subjects'));
+      const subSnap = await getDocs(subQ);
+      const subMap: any = {};
+      const subArr: any[] = [{ id: 'All', name: 'All Subjects' }];
+      subSnap.forEach(doc => {
+        subMap[doc.id] = doc.data().subjectName;
+        subArr.push({ id: doc.id, name: doc.data().subjectName });
+      });
+
+      // Assign subject names to notes
+      notesList.forEach(n => {
+        n.subjectName = subMap[n.subjectId] || 'Unknown Subject';
+      });
+
+      // Filter out scheduled notes (publishDate in future)
+      const now = new Date().getTime();
+      const visibleNotes = notesList.filter(n => {
+        if (!n.publishDate) return true;
+        const pDate = n.publishDate.toDate ? n.publishDate.toDate().getTime() : new Date(n.publishDate).getTime();
+        return pDate <= now;
+      });
+
+      // Sort by latest
+      visibleNotes.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+
+      setNotes(visibleNotes);
+      setSubjects(subArr);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const renderNoteCard = ({ item }: { item: any }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.title}>{item.title}</Text>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{item.type}</Text>
-        </View>
-      </View>
-      <Text style={styles.course}>{item.course}</Text>
+  const openNote = async (item: any) => {
+    const url = item.fileUrl || item.externalVideoLink || item.youtubeLink || item.referenceLink;
+    if (url) {
+      Linking.openURL(url).catch(err => console.error("Couldn't open URL", err));
       
-      <TouchableOpacity style={styles.viewButton} onPress={() => openNote(item.url)}>
-        <Text style={styles.viewButtonText}>View Material</Text>
-      </TouchableOpacity>
-    </View>
+      // Track View
+      try {
+        const vq = query(collection(db, 'content_views'), where('studentId', '==', user?.id), where('contentId', '==', item.id));
+        const vsnap = await getDocs(vq);
+        if (vsnap.empty) {
+          await addDoc(collection(db, 'content_views'), {
+            studentId: user?.id,
+            batchId: item.batchId,
+            contentId: item.id,
+            contentType: 'note',
+            firstViewedAt: serverTimestamp(),
+            lastViewedAt: serverTimestamp(),
+            viewCount: 1,
+            totalReadingDuration: 15 // simulate 15s
+          });
+        } else {
+          const vdoc = vsnap.docs[0];
+          await updateDoc(doc(db, 'content_views', vdoc.id), {
+            lastViewedAt: serverTimestamp(),
+            viewCount: vdoc.data().viewCount + 1,
+            totalReadingDuration: (vdoc.data().totalReadingDuration || 0) + 15
+          });
+        }
+      } catch (err) {
+        console.error('Failed to log view', err);
+      }
+    }
+  };
+
+  const filteredNotes = selectedSubject === 'All' 
+    ? notes 
+    : notes.filter(n => n.subjectId === selectedSubject);
+
+  const renderFilterItem = ({ item }: { item: any }) => (
+    <TouchableOpacity 
+      style={[styles.filterBadge, selectedSubject === item.id && styles.filterBadgeActive]}
+      onPress={() => setSelectedSubject(item.id)}
+    >
+      <Text style={[styles.filterText, selectedSubject === item.id && styles.filterTextActive]}>{item.name}</Text>
+    </TouchableOpacity>
   );
+
+  const renderNoteCard = ({ item }: { item: any }) => {
+    let typeLabel = 'Link';
+    if (item.fileUrl) typeLabel = item.fileType || 'Document';
+    else if (item.youtubeLink) typeLabel = 'YouTube';
+    else if (item.externalVideoLink) typeLabel = 'Video';
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.title}>{item.title}</Text>
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeText}>{typeLabel}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.metaContainer}>
+          <Text style={styles.subject}>{item.subjectName}</Text>
+          {item.topic && <Text style={styles.topic}> • {item.topic}</Text>}
+          {item.partChapter && <Text style={styles.topic}> ({item.partChapter})</Text>}
+        </View>
+        
+        {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
+
+        <Text style={styles.dateText}>Published: {new Date(item.publishDate?.toDate ? item.publishDate.toDate() : item.publishDate).toLocaleDateString()}</Text>
+
+        <TouchableOpacity style={styles.viewButton} onPress={() => openNote(item)}>
+          <Text style={styles.viewButtonText}>Open Material</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <FlatList 
-        data={MOCK_NOTES}
-        renderItem={renderNoteCard}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 20 }}
-      />
+      <View style={styles.filterContainer}>
+        <FlatList
+          horizontal
+          data={subjects}
+          renderItem={renderFilterItem}
+          keyExtractor={item => item.id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 15 }}
+        />
+      </View>
+
+      {isLoading ? (
+        <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 50}} />
+      ) : (
+        <FlatList 
+          data={filteredNotes}
+          renderItem={renderNoteCard}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 20 }}
+          ListEmptyComponent={<Text style={styles.emptyText}>No notes available for this subject.</Text>}
+        />
+      )}
     </View>
   );
 }
@@ -46,6 +179,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  filterContainer: {
+    paddingVertical: 15,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  filterBadge: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterBadgeActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterText: {
+    color: COLORS.textMedium,
+    fontWeight: 'bold',
+  },
+  filterTextActive: {
+    color: COLORS.textInverse,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: COLORS.textMedium,
+    marginTop: 50,
   },
   card: {
     backgroundColor: COLORS.surface,
@@ -72,9 +236,29 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  course: {
+  metaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  subject: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  topic: {
     fontSize: 14,
     color: COLORS.textMedium,
+  },
+  description: {
+    fontSize: 14,
+    color: COLORS.textDark,
+    marginBottom: 15,
+  },
+  dateText: {
+    fontSize: 12,
+    color: COLORS.textLight,
     marginBottom: 15,
   },
   typeBadge: {
