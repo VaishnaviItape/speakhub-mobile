@@ -71,7 +71,7 @@ export default function LoginScreen() {
             resizeMode="contain"
           />
         </View>
-        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.title}>Speak Hub</Text>
         <Text style={styles.subtitle}>
           {step === 'MOBILE' ? 'Enter your mobile number to continue' : 'Enter the OTP sent to your mobile'}
         </Text>
