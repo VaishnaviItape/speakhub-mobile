@@ -51,11 +51,7 @@ export default function ProfileScreen() {
             <Text style={styles.feeAmount}>{profile.dueDate}</Text>
           </View>
           
-          {profile.due > 0 && (
-            <TouchableOpacity style={styles.payButton}>
-              <Text style={styles.payButtonText}>Pay Now</Text>
-            </TouchableOpacity>
-          )}
+
         </View>
       </View>
 
@@ -151,18 +147,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.error,
   },
-  payButton: {
-    backgroundColor: COLORS.primary,
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 15,
-  },
-  payButtonText: {
-    color: COLORS.textInverse,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+
   logoutButton: {
     backgroundColor: COLORS.surface,
     padding: 15,
