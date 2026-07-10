@@ -37,6 +37,7 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             placeholder="e.g. John Doe"
+            placeholderTextColor={COLORS.textLight}
             value={name}
             onChangeText={setName}
           />

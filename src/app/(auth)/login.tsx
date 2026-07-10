@@ -82,6 +82,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="Mobile Number (e.g. 5555555555)"
+            placeholderTextColor={COLORS.textLight}
             keyboardType="phone-pad"
             value={mobile}
             onChangeText={setMobile}
@@ -91,6 +92,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="6-digit OTP (123456)"
+            placeholderTextColor={COLORS.textLight}
             keyboardType="number-pad"
             value={otp}
             onChangeText={setOtp}
