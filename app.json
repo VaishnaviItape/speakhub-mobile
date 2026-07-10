@@ -4,16 +4,16 @@
     "slug": "speakhub-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/favicon.jpg",
     "scheme": "speakhubmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/logo.png"
+      "icon": "./assets/images/favicon.jpg"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/logo.png"
+        "foregroundImage": "./assets/images/favicon.jpg"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.vaishnaviitape.speakhubmobile"
