@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { db, storage } from '../../config/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 
 export default function HomeworkScreen() {
   const { user } = useAuth();
@@ -26,11 +26,11 @@ export default function HomeworkScreen() {
   const [studentRemarks, setStudentRemarks] = useState('');
 
   // Audio State
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder);
   const [audioUri, setAudioUri] = useState<string | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const player = useAudioPlayer();
+  const playerStatus = useAudioPlayerStatus(player);
 
   useEffect(() => {
     fetchData();
@@ -131,12 +131,11 @@ export default function HomeworkScreen() {
 
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       if (permission.status === 'granted') {
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-        const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-        setRecording(recording);
-        setIsRecording(true);
+        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+        await recorder.prepareToRecordAsync();
+        recorder.record();
       }
     } catch (err) {
       console.error('Failed to start recording', err);
@@ -145,13 +144,11 @@ export default function HomeworkScreen() {
 
   const stopRecording = async () => {
     try {
-      setIsRecording(false);
-      if (recording) {
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
+      if (recorderState.isRecording) {
+        await recorder.stop();
+        const uri = recorder.uri;
         setAudioUri(uri);
         setSelectedFileUrl(''); // Clear file if audio recorded
-        setRecording(null);
       }
     } catch (err) {
       console.error('Failed to stop recording', err);
@@ -161,21 +158,17 @@ export default function HomeworkScreen() {
   const playRecording = async () => {
     if (!audioUri) return;
     try {
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUri });
-      setSound(sound);
-      setIsPlaying(true);
-      await sound.playAsync();
-      sound.setOnPlaybackStatusUpdate((status: any) => {
-        if (status.didJustFinish) setIsPlaying(false);
-      });
+      if (playerStatus.playing) {
+        player.pause();
+      } else {
+        player.replace(audioUri);
+        player.seekTo(0);
+        player.play();
+      }
     } catch (e) {
       console.error(e);
     }
   };
-
-  useEffect(() => {
-    return sound ? () => { sound.unloadAsync(); } : undefined;
-  }, [sound]);
 
   const trackView = async (hwItem: any) => {
     try {
@@ -273,7 +266,7 @@ export default function HomeworkScreen() {
     setSelectedFileUrl('');
     setStudentRemarks('');
     setAudioUri(null);
-    setIsRecording(false);
+    player.pause();
   };
 
   const renderHomeworkCard = ({ item }: { item: any }) => (
@@ -415,16 +408,16 @@ export default function HomeworkScreen() {
                     <Text style={styles.label}>Record Audio</Text>
                     <View style={{flexDirection: 'row', gap: 10}}>
                       <TouchableOpacity 
-                        style={[styles.fileButton, {flex: 1, backgroundColor: isRecording ? '#fee2e2' : COLORS.primaryLightest, borderColor: isRecording ? '#ef4444' : COLORS.primary}]} 
-                        onPress={isRecording ? stopRecording : startRecording}
+                        style={[styles.fileButton, {flex: 1, backgroundColor: recorderState.isRecording ? '#fee2e2' : COLORS.primaryLightest, borderColor: recorderState.isRecording ? '#ef4444' : COLORS.primary}]} 
+                        onPress={recorderState.isRecording ? stopRecording : startRecording}
                       >
-                        <MaterialIcons name="mic" size={20} color={isRecording ? '#ef4444' : COLORS.primary} />
-                        <Text style={[styles.fileButtonText, {color: isRecording ? '#ef4444' : COLORS.primary}]}>{isRecording ? 'Stop Recording' : 'Start Recording'}</Text>
+                        <MaterialIcons name="mic" size={20} color={recorderState.isRecording ? '#ef4444' : COLORS.primary} />
+                        <Text style={[styles.fileButtonText, {color: recorderState.isRecording ? '#ef4444' : COLORS.primary}]}>{recorderState.isRecording ? 'Stop Recording' : 'Start Recording'}</Text>
                       </TouchableOpacity>
-                      {audioUri && !isRecording && (
+                      {audioUri && !recorderState.isRecording && (
                         <TouchableOpacity style={[styles.fileButton, {flex: 1}]} onPress={playRecording}>
-                          <MaterialIcons name={isPlaying ? "pause" : "play-arrow"} size={20} color={COLORS.primary} />
-                          <Text style={styles.fileButtonText}>{isPlaying ? 'Playing...' : 'Play Audio'}</Text>
+                          <MaterialIcons name={playerStatus.playing ? "pause" : "play-arrow"} size={20} color={COLORS.primary} />
+                          <Text style={styles.fileButtonText}>{playerStatus.playing ? 'Playing...' : 'Play Audio'}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
