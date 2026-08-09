@@ -114,7 +114,21 @@ export default function ExamsScreen() {
     const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
     const snap = await getDocs(q);
     const qList: any[] = [];
-    snap.forEach(doc => qList.push({ id: doc.id, ...doc.data() }));
+    snap.forEach(doc => {
+      const data = doc.data();
+      const normalizedData = {
+        id: doc.id,
+        ...data,
+        question: data.question || data.questionText || '',
+        questionType: data.questionType || (data.type === 'mcq' ? 'MCQ' : data.type) || 'MCQ',
+        optionA: data.optionA || (data.options ? data.options[0] : ''),
+        optionB: data.optionB || (data.options ? data.options[1] : ''),
+        optionC: data.optionC || (data.options ? data.options[2] : ''),
+        optionD: data.optionD || (data.options ? data.options[3] : ''),
+        correctAnswer: data.correctAnswer || (data.correctOptionIndex !== undefined ? ['A','B','C','D'][data.correctOptionIndex] : 'A')
+      };
+      qList.push(normalizedData);
+    });
     const currentE = exams.find(e => e.id === examId);
     if (currentE?.shuffleQuestions) {
       qList.sort(() => Math.random() - 0.5);
