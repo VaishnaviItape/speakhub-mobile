@@ -320,7 +320,7 @@ export default function HomeworkScreen() {
   const renderHomeworkCard = ({ item }: { item: any }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.subject}>{subjects[item.subjectId] || 'Subject'} {item.topic ? `• ${item.topic}` : ''}</Text>
+        <Text style={styles.subject}>{item.topic || item.partChapter || 'Batch Assignment'}</Text>
         <View style={[styles.statusBadge, item.currentStatus === 'Reviewed' ? styles.statusReviewed : item.currentStatus === 'Submitted' ? styles.statusCompleted : item.currentStatus === 'Overdue' ? styles.statusOverdue : styles.statusPending]}>
           <Text style={item.currentStatus === 'Reviewed' ? styles.statusTextReviewed : item.currentStatus === 'Submitted' ? styles.statusTextCompleted : item.currentStatus === 'Overdue' ? styles.statusTextOverdue : styles.statusTextPending}>
             {item.currentStatus.toUpperCase()}

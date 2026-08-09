@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,21 +37,59 @@ export default function DashboardScreen() {
 
   // Form State
   const [bookingName, setBookingName] = useState(user?.name || '');
+  const [bookingParentName, setBookingParentName] = useState(user?.parentName || user?.parentOrHusbandName || '');
   const [bookingPhone, setBookingPhone] = useState(user?.phone || '');
   const [bookingNotes, setBookingNotes] = useState('');
 
   useEffect(() => {
-    fetchDashboardData();
+    if (!user) return;
+
+    let unsubUser: (() => void) | null = null;
+    let unsubBatches: (() => void) | null = null;
+
+    setLoading(true);
+    const userId = user.id || (user as any).uid;
+
+    if (userId) {
+      // 1. Real-time listener for user profile changes (e.g. batch assignment / status approval)
+      unsubUser = onSnapshot(
+        doc(db, 'users', userId),
+        (docSnap) => {
+          const liveUser = docSnap.exists() ? docSnap.data() : null;
+          fetchDashboardData(liveUser);
+        },
+        (err) => {
+          console.error("User snapshot error:", err);
+          fetchDashboardData();
+        }
+      );
+    } else {
+      fetchDashboardData();
+    }
+
+    // 2. Real-time listener for batches collection (e.g. meeting link updates / new batches)
+    unsubBatches = onSnapshot(
+      collection(db, 'batches'),
+      () => {
+        fetchDashboardData();
+      },
+      (err) => {
+        console.error("Batches snapshot error:", err);
+      }
+    );
+
+    return () => {
+      if (unsubUser) unsubUser();
+      if (unsubBatches) unsubBatches();
+    };
   }, [user]);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (liveUserData?: any) => {
     if (!user) return;
     try {
-      setLoading(true);
-
       // 1. Fetch latest student record from Firestore (by ID, phone, or mobile)
-      let studentData: any = {};
-      if (user.id) {
+      let studentData: any = liveUserData || {};
+      if (!liveUserData && user.id) {
         try {
           const uSnap = await getDoc(doc(db, 'users', user.id));
           if (uSnap.exists()) {
@@ -209,6 +247,7 @@ export default function DashboardScreen() {
   const handleOpenBookingModal = (course: any) => {
     setSelectedCourseForBooking(course);
     setBookingName(user?.name || '');
+    setBookingParentName(user?.parentName || user?.parentOrHusbandName || '');
     setBookingPhone(user?.phone || '');
     setBookingNotes('');
     setIsBookingModalOpen(true);
@@ -223,6 +262,8 @@ export default function DashboardScreen() {
       setIsSubmittingBooking(true);
       await addDoc(collection(db, 'inquiries'), {
         studentName: bookingName || 'Student',
+        parentName: bookingParentName || '',
+        parentOrHusbandName: bookingParentName || '',
         phone: bookingPhone,
         courseId: selectedCourseForBooking?.id || '',
         courseName: selectedCourseForBooking?.courseName || '',
@@ -491,6 +532,14 @@ export default function DashboardScreen() {
               placeholder="Enter your name"
               value={bookingName}
               onChangeText={setBookingName}
+            />
+
+            <Text style={styles.inputLabel}>Parent / Guardian Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Enter parent / guardian name"
+              value={bookingParentName}
+              onChangeText={setBookingParentName}
             />
 
             <Text style={styles.inputLabel}>Phone Number *</Text>

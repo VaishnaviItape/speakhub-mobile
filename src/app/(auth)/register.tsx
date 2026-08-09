@@ -12,6 +12,7 @@ import { validateName, validatePhoneNumber } from '../../utils/validation';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
+  const [parentName, setParentName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,6 +30,11 @@ export default function RegisterScreen() {
     const nameVal = validateName(name, 'Full Name');
     if (!nameVal.isValid) {
       setError(nameVal.error || 'Invalid name');
+      return;
+    }
+
+    if (!parentName.trim()) {
+      setError('Parent / Guardian Name is required.');
       return;
     }
 
@@ -88,6 +94,8 @@ export default function RegisterScreen() {
       await setDoc(userRef, {
         uid,
         name: name.trim(),
+        parentName: parentName.trim(),
+        parentOrHusbandName: parentName.trim(),
         mobile: cleanMobile,
         phone: cleanMobile,
         email: authEmail,
@@ -112,6 +120,8 @@ export default function RegisterScreen() {
           userId: uid,
           firstName: name.trim(),
           lastName: '',
+          parentName: parentName.trim(),
+          parentOrHusbandName: parentName.trim(),
           phone: cleanMobile,
           courseIds: [],
           batchIds: [],
@@ -154,6 +164,15 @@ export default function RegisterScreen() {
             placeholderTextColor={COLORS.textLight}
             value={name}
             onChangeText={setName}
+          />
+
+          <Text style={styles.label}>Parent / Guardian Name *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter parent / guardian name"
+            placeholderTextColor={COLORS.textLight}
+            value={parentName}
+            onChangeText={setParentName}
           />
 
           <Text style={styles.label}>Mobile Number (Used for Login) *</Text>

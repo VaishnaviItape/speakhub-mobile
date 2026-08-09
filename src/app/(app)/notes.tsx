@@ -1,22 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, ActivityIndicator, TextInput, ScrollView, Alert } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 
+interface NoteItem {
+  id: string;
+  title: string;
+  topic?: string;
+  partChapter?: string;
+  description?: string;
+  fileUrl?: string;
+  fileType?: string;
+  youtubeLink?: string;
+  externalVideoLink?: string;
+  referenceLink?: string;
+  publishDate?: any;
+  createdAt?: any;
+  batchId?: string;
+  downloadedAt?: string;
+}
+
+interface TopicGroup {
+  topicName: string;
+  notes: NoteItem[];
+}
+
 export default function NotesScreen() {
   const { user } = useAuth();
-  const [notes, setNotes] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'all' | 'offline'>('all');
+  const [allNotes, setAllNotes] = useState<NoteItem[]>([]);
+  const [downloadedNotes, setDownloadedNotes] = useState<NoteItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Filters
-  const [selectedSubject, setSelectedSubject] = useState<string>('All');
+  const [isAccessDenied, setIsAccessDenied] = useState(false);
+
+  // Accordion Expand/Collapse State (Topic Name -> boolean)
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchNotes();
+    loadDownloadedNotes();
   }, [user]);
+
+  const loadDownloadedNotes = async () => {
+    try {
+      const json = await AsyncStorage.getItem('@speakhub_downloaded_notes');
+      if (json) {
+        setDownloadedNotes(JSON.parse(json));
+      }
+    } catch (e) {
+      console.error("Failed to load offline notes:", e);
+    }
+  };
 
   const fetchNotes = async () => {
     if (!user) {
@@ -24,6 +64,7 @@ export default function NotesScreen() {
       return;
     }
     setIsLoading(true);
+    setIsAccessDenied(false);
     try {
       // 1. Get latest student record
       let studentData: any = {};
@@ -41,8 +82,10 @@ export default function NotesScreen() {
         if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
       }
 
+      // Check Active Access (Block non-active or closed class students)
       if (currentStatus !== 'active' && !isDemoActive) {
-        setNotes([]);
+        setIsAccessDenied(true);
+        setAllNotes([]);
         setIsLoading(false);
         return;
       }
@@ -69,31 +112,16 @@ export default function NotesScreen() {
       }
 
       // Query notes STRICTLY matching assigned batch
-      let notesList: any[] = [];
+      let notesList: NoteItem[] = [];
       if (targetBatchIdentifiers.length > 0) {
         const snap = await getDocs(query(collection(db, 'notes'), where('status', '==', 'published')));
         snap.forEach(doc => {
           const data = doc.data();
           if (targetBatchIdentifiers.includes(data.batchId)) {
-            notesList.push({ id: doc.id, ...data });
+            notesList.push({ id: doc.id, ...data } as NoteItem);
           }
         });
       }
-
-      // Fetch Subject names mapping
-      const subQ = query(collection(db, 'subjects'));
-      const subSnap = await getDocs(subQ);
-      const subMap: any = {};
-      const subArr: any[] = [{ id: 'All', name: 'All Subjects' }];
-      subSnap.forEach(doc => {
-        subMap[doc.id] = doc.data().subjectName;
-        subArr.push({ id: doc.id, name: doc.data().subjectName });
-      });
-
-      // Assign subject names to notes
-      notesList.forEach(n => {
-        n.subjectName = subMap[n.subjectId] || 'Unknown Subject';
-      });
 
       // Filter out scheduled notes (publishDate in future)
       const now = new Date().getTime();
@@ -103,24 +131,35 @@ export default function NotesScreen() {
         return pDate <= now;
       });
 
-      // Sort by latest
-      visibleNotes.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+      // Sort by latest created
+      visibleNotes.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-      setNotes(visibleNotes);
-      setSubjects(subArr);
+      setAllNotes(visibleNotes);
+
+      // Expand first topic by default
+      if (visibleNotes.length > 0) {
+        const firstTopic = visibleNotes[0].topic || 'General Study Materials';
+        setExpandedTopics({ [firstTopic]: true });
+      }
+
     } catch (e) {
-      console.error(e);
+      console.error("Error fetching notes:", e);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const openNote = async (item: any) => {
+  // Direct In-App PDF / File Opening
+  const openNote = async (item: NoteItem) => {
     const url = item.fileUrl || item.externalVideoLink || item.youtubeLink || item.referenceLink;
     if (url) {
-      Linking.openURL(url).catch(err => console.error("Couldn't open URL", err));
-      
-      // Track View
+      try {
+        await WebBrowser.openBrowserAsync(url);
+      } catch (err) {
+        Linking.openURL(url).catch(e => console.error("Couldn't open URL", e));
+      }
+
+      // Track View in Firestore
       try {
         const vq = query(collection(db, 'content_views'), where('studentId', '==', user?.id), where('contentId', '==', item.id));
         const vsnap = await getDocs(vq);
@@ -133,13 +172,13 @@ export default function NotesScreen() {
             firstViewedAt: serverTimestamp(),
             lastViewedAt: serverTimestamp(),
             viewCount: 1,
-            totalReadingDuration: 15 // simulate 15s
+            totalReadingDuration: 15
           });
         } else {
           const vdoc = vsnap.docs[0];
           await updateDoc(doc(db, 'content_views', vdoc.id), {
             lastViewedAt: serverTimestamp(),
-            viewCount: vdoc.data().viewCount + 1,
+            viewCount: (vdoc.data().viewCount || 1) + 1,
             totalReadingDuration: (vdoc.data().totalReadingDuration || 0) + 15
           });
         }
@@ -149,74 +188,291 @@ export default function NotesScreen() {
     }
   };
 
-  const filteredNotes = selectedSubject === 'All' 
-    ? notes 
-    : notes.filter(n => n.subjectId === selectedSubject);
+  // Download & Save Note for Offline Viewing
+  const handleDownloadNote = async (item: NoteItem) => {
+    const url = item.fileUrl || item.externalVideoLink || item.youtubeLink || item.referenceLink;
+    if (!url) {
+      Alert.alert("Notice", "No download link available for this material.");
+      return;
+    }
 
-  const renderFilterItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={[styles.filterBadge, selectedSubject === item.id && styles.filterBadgeActive]}
-      onPress={() => setSelectedSubject(item.id)}
-    >
-      <Text style={[styles.filterText, selectedSubject === item.id && styles.filterTextActive]}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+    try {
+      const existingJson = await AsyncStorage.getItem('@speakhub_downloaded_notes');
+      let existing: NoteItem[] = existingJson ? JSON.parse(existingJson) : [];
+      
+      const alreadySaved = existing.some(n => n.id === item.id);
+      if (!alreadySaved) {
+        existing.push({ ...item, downloadedAt: new Date().toISOString() });
+        await AsyncStorage.setItem('@speakhub_downloaded_notes', JSON.stringify(existing));
+        setDownloadedNotes(existing);
+      }
 
-  const renderNoteCard = ({ item }: { item: any }) => {
-    let typeLabel = 'Link';
-    if (item.fileUrl) typeLabel = item.fileType || 'Document';
-    else if (item.youtubeLink) typeLabel = 'YouTube';
-    else if (item.externalVideoLink) typeLabel = 'Video';
+      await WebBrowser.openBrowserAsync(url);
+      Alert.alert("Saved for Offline View", `"${item.title}" has been saved to your Offline Downloads tab!`);
+    } catch (e) {
+      console.error("Error downloading note:", e);
+      Linking.openURL(url).catch(err => console.error("Couldn't open URL", err));
+    }
+  };
 
+  // Remove Note from Offline Storage
+  const handleRemoveOfflineNote = async (id: string) => {
+    try {
+      const existingJson = await AsyncStorage.getItem('@speakhub_downloaded_notes');
+      let existing: NoteItem[] = existingJson ? JSON.parse(existingJson) : [];
+      const updated = existing.filter(n => n.id !== id);
+      await AsyncStorage.setItem('@speakhub_downloaded_notes', JSON.stringify(updated));
+      setDownloadedNotes(updated);
+      Alert.alert("Removed", "Material removed from offline downloads.");
+    } catch (e) {
+      console.error("Error removing offline note:", e);
+    }
+  };
+
+  const toggleTopicExpand = (topicName: string) => {
+    setExpandedTopics(prev => ({
+      ...prev,
+      [topicName]: !prev[topicName]
+    }));
+  };
+
+  // Filter notes by search query
+  const filteredNotes = allNotes.filter(n => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
     return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.title}>{item.title}</Text>
-          <View style={styles.typeBadge}>
-            <Text style={styles.typeText}>{typeLabel}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.metaContainer}>
-          <Text style={styles.subject}>{item.subjectName}</Text>
-          {item.topic && <Text style={styles.topic}> • {item.topic}</Text>}
-          {item.partChapter && <Text style={styles.topic}> ({item.partChapter})</Text>}
-        </View>
-        
-        {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
+      (n.title && n.title.toLowerCase().includes(q)) ||
+      (n.topic && n.topic.toLowerCase().includes(q)) ||
+      (n.partChapter && n.partChapter.toLowerCase().includes(q)) ||
+      (n.description && n.description.toLowerCase().includes(q))
+    );
+  });
 
-        <Text style={styles.dateText}>Published: {new Date(item.publishDate?.toDate ? item.publishDate.toDate() : item.publishDate).toLocaleDateString()}</Text>
+  // Group filtered notes by Topic (e.g. Topic 1: This That, Topic 2: WH Questions)
+  const groupedTopics: TopicGroup[] = [];
+  const topicMap: Record<string, NoteItem[]> = {};
 
-        <TouchableOpacity style={styles.viewButton} onPress={() => openNote(item)}>
-          <Text style={styles.viewButtonText}>Open Material</Text>
-        </TouchableOpacity>
+  filteredNotes.forEach(n => {
+    const tName = n.topic || 'General Study Materials';
+    if (!topicMap[tName]) {
+      topicMap[tName] = [];
+    }
+    topicMap[tName].push(n);
+  });
+
+  Object.keys(topicMap).forEach(tName => {
+    groupedTopics.push({
+      topicName: tName,
+      notes: topicMap[tName]
+    });
+  });
+
+  // Render Access Denied View for Closed / Inactive Students
+  if (isAccessDenied) {
+    return (
+      <View style={styles.accessDeniedContainer}>
+        <View style={styles.lockIconBox}>
+          <MaterialIcons name="lock" size={48} color={COLORS.primary} />
+        </View>
+        <Text style={styles.accessDeniedTitle}>Course Access Inactive</Text>
+        <Text style={styles.accessDeniedText}>
+          Your student enrollment or demo access is currently closed. Study materials are exclusively available for active students.
+        </Text>
+        <Text style={styles.accessDeniedSubtext}>
+          Please contact Speak Hub Academy administration to renew your enrollment.
+        </Text>
       </View>
     );
-  };
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        <FlatList
-          horizontal
-          data={subjects}
-          renderItem={renderFilterItem}
-          keyExtractor={item => item.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 15 }}
-        />
+      {/* 2 Navigation Mode Tabs */}
+      <View style={styles.tabBarContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'all' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('all')}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="menu-book" size={16} color={activeTab === 'all' ? '#ffffff' : COLORS.textMedium} style={{ marginRight: 6 }} />
+          <Text style={[styles.tabButtonText, activeTab === 'all' && styles.tabButtonTextActive]}>
+            All Topics ({allNotes.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'offline' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('offline')}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="file-download" size={16} color={activeTab === 'offline' ? '#ffffff' : COLORS.textMedium} style={{ marginRight: 6 }} />
+          <Text style={[styles.tabButtonText, activeTab === 'offline' && styles.tabButtonTextActive]}>
+            Downloaded ({downloadedNotes.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
+      {/* Search Input Bar */}
+      {activeTab === 'all' && (
+        <View style={styles.searchContainer}>
+          <MaterialIcons name="search" size={20} color={COLORS.textMedium} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search topics, parts, notes..."
+            placeholderTextColor={COLORS.textLight}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="cancel" size={18} color={COLORS.textMedium} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      )}
+
       {isLoading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 50}} />
+        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} />
+      ) : activeTab === 'all' ? (
+        /* TAB 1: ALL TOPICS & PARTS ACCORDION */
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          {groupedTopics.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="menu-book" size={48} color={COLORS.textLight} />
+              <Text style={styles.emptyTitle}>No Notes Available</Text>
+              <Text style={styles.emptyText}>There are currently no study notes published for your batch.</Text>
+            </View>
+          ) : (
+            groupedTopics.map((group) => {
+              const isExpanded = expandedTopics[group.topicName] ?? true;
+
+              return (
+                <View key={group.topicName} style={styles.topicCard}>
+                  {/* Topic Group Header Accordion */}
+                  <TouchableOpacity 
+                    style={styles.topicHeader} 
+                    onPress={() => toggleTopicExpand(group.topicName)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.topicTitleRow}>
+                      <MaterialIcons name="folder" size={22} color={COLORS.primary} style={{ marginRight: 8 }} />
+                      <Text style={styles.topicTitleText}>{group.topicName}</Text>
+                    </View>
+                    
+                    <View style={styles.topicMetaRight}>
+                      <Text style={styles.partsCountBadge}>
+                        {group.notes.length} {group.notes.length === 1 ? 'Part' : 'Parts'}
+                      </Text>
+                      <MaterialIcons 
+                        name={isExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+                        size={24} 
+                        color={COLORS.textMedium} 
+                      />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Expanded Parts List */}
+                  {isExpanded && (
+                    <View style={styles.partsListContainer}>
+                      {group.notes.map((item, idx) => {
+                        let typeLabel = 'PDF / Material';
+                        if (item.fileUrl) typeLabel = item.fileType || 'PDF Document';
+                        else if (item.youtubeLink) typeLabel = 'YouTube Video';
+                        else if (item.externalVideoLink) typeLabel = 'Video Link';
+
+                        const isSavedOffline = downloadedNotes.some(d => d.id === item.id);
+
+                        return (
+                          <View key={item.id || idx} style={styles.partItemCard}>
+                            <View style={styles.partHeaderRow}>
+                              <View style={{ flex: 1 }}>
+                                {item.partChapter ? (
+                                  <Text style={styles.partLabel}>{item.partChapter}</Text>
+                                ) : null}
+                                <Text style={styles.partTitle}>{item.title}</Text>
+                              </View>
+
+                              <View style={styles.typeBadge}>
+                                <Text style={styles.typeBadgeText}>{typeLabel}</Text>
+                              </View>
+                            </View>
+
+                            {item.description ? (
+                              <Text style={styles.partDescription}>{item.description}</Text>
+                            ) : null}
+
+                            <View style={styles.partFooter}>
+                              <TouchableOpacity 
+                                style={[styles.downloadIconBtn, isSavedOffline && styles.downloadIconBtnSaved]}
+                                onPress={() => handleDownloadNote(item)}
+                              >
+                                <MaterialIcons 
+                                  name={isSavedOffline ? "check-circle" : "file-download"} 
+                                  size={16} 
+                                  color={isSavedOffline ? "#15803d" : COLORS.primary} 
+                                />
+                                <Text style={[styles.downloadIconBtnText, isSavedOffline && styles.downloadIconBtnTextSaved]}>
+                                  {isSavedOffline ? 'Saved' : 'Download'}
+                                </Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity 
+                                style={styles.openPdfButton} 
+                                onPress={() => openNote(item)}
+                              >
+                                <Text style={styles.openPdfButtonText}>Open Material</Text>
+                                <MaterialIcons name="open-in-new" size={14} color="#ffffff" style={{ marginLeft: 4 }} />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
       ) : (
-        <FlatList 
-          data={filteredNotes}
-          renderItem={renderNoteCard}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ padding: 20 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>No notes available for this subject.</Text>}
-        />
+        /* TAB 2: DOWNLOADED OFFLINE MATERIALS VIEW */
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          {downloadedNotes.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="cloud-download" size={48} color={COLORS.textLight} />
+              <Text style={styles.emptyTitle}>No Downloaded Notes</Text>
+              <Text style={styles.emptyText}>Tap "Download" on any study note to save it here for quick offline access!</Text>
+            </View>
+          ) : (
+            downloadedNotes.map((item, idx) => (
+              <View key={item.id || idx} style={styles.offlineCard}>
+                <View style={styles.offlineHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.offlineTopicTag}>{item.topic || 'Study Note'}</Text>
+                    <Text style={styles.partTitle}>{item.title}</Text>
+                    {item.partChapter ? <Text style={styles.partLabel}>{item.partChapter}</Text> : null}
+                  </View>
+                  <TouchableOpacity onPress={() => handleRemoveOfflineNote(item.id)}>
+                    <MaterialIcons name="delete-outline" size={22} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+
+                {item.description ? <Text style={styles.partDescription}>{item.description}</Text> : null}
+
+                <View style={styles.partFooter}>
+                  <Text style={styles.savedDateText}>Saved on: {new Date(item.downloadedAt || Date.now()).toLocaleDateString()}</Text>
+                  <TouchableOpacity 
+                    style={styles.openPdfButton} 
+                    onPress={() => openNote(item)}
+                  >
+                    <Text style={styles.openPdfButtonText}>View Material</Text>
+                    <MaterialIcons name="open-in-new" size={14} color="#ffffff" style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -227,109 +483,281 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  filterContainer: {
-    paddingVertical: 15,
+  tabBarContainer: {
+    flexDirection: 'row',
     backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  filterBadge: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    marginRight: 10,
+    padding: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  filterBadgeActive: {
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  tabButtonActive: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
   },
-  filterText: {
+  tabButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: COLORS.textMedium,
-    fontWeight: 'bold',
   },
-  filterTextActive: {
-    color: COLORS.textInverse,
+  tabButtonTextActive: {
+    color: '#ffffff',
   },
-  emptyText: {
-    textAlign: 'center',
-    color: COLORS.textMedium,
-    marginTop: 50,
-  },
-  card: {
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.surface,
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  cardHeader: {
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textDark,
+    padding: 0,
+  },
+  topicCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  topicHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 5,
+    padding: 16,
+    backgroundColor: '#fff0f0',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-    flex: 1,
-    marginRight: 10,
-  },
-  metaContainer: {
+  topicTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 10,
+    flex: 1,
   },
-  subject: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  topicTitleText: {
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.primary,
+    flex: 1,
   },
-  topic: {
-    fontSize: 14,
-    color: COLORS.textMedium,
+  topicMetaRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  description: {
-    fontSize: 14,
-    color: COLORS.textDark,
-    marginBottom: 15,
-  },
-  dateText: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginBottom: 15,
-  },
-  typeBadge: {
-    backgroundColor: COLORS.primaryLightest,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  partsCountBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(227, 24, 55, 0.2)',
   },
-  typeText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: 'bold',
+  partsListContainer: {
+    padding: 12,
+    backgroundColor: COLORS.surface,
   },
-  viewButton: {
+  partItemCard: {
     backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: 12,
-    borderRadius: 10,
+  },
+  partHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  partLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 2,
+  },
+  partTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textDark,
+  },
+  typeBadge: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textMedium,
+  },
+  partDescription: {
+    fontSize: 12,
+    color: COLORS.textMedium,
+    marginTop: 4,
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  partFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: 6,
+  },
+  downloadIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(227, 24, 55, 0.2)',
+  },
+  downloadIconBtnSaved: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  downloadIconBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  downloadIconBtnTextSaved: {
+    color: '#15803d',
+  },
+  openPdfButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  viewButtonText: {
+  openPdfButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  offlineCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+  },
+  offlineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  offlineTopicTag: {
+    fontSize: 11,
+    fontWeight: '700',
     color: COLORS.primary,
-    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  savedDateText: {
+    fontSize: 11,
+    color: COLORS.textLight,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyTitle: {
     fontSize: 16,
-  }
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginTop: 12,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: 30,
+  },
+  accessDeniedContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+    backgroundColor: COLORS.background,
+  },
+  lockIconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#fff0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(227, 24, 55, 0.2)',
+  },
+  accessDeniedTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textDark,
+    marginBottom: 8,
+  },
+  accessDeniedText: {
+    fontSize: 14,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  accessDeniedSubtext: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
 });

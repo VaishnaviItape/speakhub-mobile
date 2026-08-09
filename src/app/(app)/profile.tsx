@@ -95,6 +95,7 @@ export default function ProfileScreen() {
   };
 
   const studentName = profileData?.name || user?.name || 'Student';
+  const parentNameDisplay = profileData?.parentName || profileData?.parentOrHusbandName || user?.parentName || user?.parentOrHusbandName || '-';
   const phone = profileData?.phone || profileData?.mobile || user?.phone || '-';
   const address = profileData?.address || user?.address || 'Not Provided';
   const isDemo = profileData?.isDemoMode || user?.isDemoMode;
@@ -179,7 +180,7 @@ export default function ProfileScreen() {
               activeOpacity={0.7}
             >
               <View style={[styles.menuIconBox, { backgroundColor: '#eff6ff' }]}>
-                <MaterialIcons name="assessment" size={22} color="#2563eb" />
+                <MaterialIcons name="quiz" size={22} color="#2563eb" />
               </View>
               <View style={styles.menuContent}>
                 <Text style={styles.menuTitle}>Test Series & Results</Text>
@@ -197,7 +198,7 @@ export default function ProfileScreen() {
               activeOpacity={0.7}
             >
               <View style={[styles.menuIconBox, { backgroundColor: '#f0fdf4' }]}>
-                <MaterialIcons name="menu-book" size={22} color="#16a34a" />
+                <MaterialIcons name="description" size={22} color="#16a34a" />
               </View>
               <View style={styles.menuContent}>
                 <Text style={styles.menuTitle}>Notes & Study Materials</Text>
@@ -236,6 +237,11 @@ export default function ProfileScreen() {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Full Name</Text>
                   <Text style={styles.detailValue}>{studentName}</Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Parent / Guardian</Text>
+                  <Text style={styles.detailValue}>{parentNameDisplay}</Text>
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.detailRow}>
