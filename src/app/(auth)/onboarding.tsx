@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const { width } = Dimensions.get('window');
 
 const ONBOARDING_STEPS = [
@@ -28,16 +30,25 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const router = useRouter();
 
+  const finishOnboarding = async () => {
+    try {
+      await AsyncStorage.setItem('@has_seen_onboarding', 'true');
+    } catch (e) {
+      console.error(e);
+    }
+    router.replace('/(auth)/login');
+  };
+
   const handleNext = () => {
     if (step < ONBOARDING_STEPS.length - 1) {
       setStep(step + 1);
     } else {
-      router.push('/(auth)/login');
+      finishOnboarding();
     }
   };
 
   const handleSkip = () => {
-    router.push('/(auth)/login');
+    finishOnboarding();
   };
 
   const currentStep = ONBOARDING_STEPS[step];

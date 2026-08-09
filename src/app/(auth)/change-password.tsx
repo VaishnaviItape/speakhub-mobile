@@ -7,9 +7,11 @@ import { updatePassword } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function ChangePasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
@@ -52,14 +54,26 @@ export default function ChangePasswordScreen() {
         <Text style={styles.title}>Update Password</Text>
         <Text style={styles.subtitle}>For security reasons, you must change your default password before continuing.</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="New Password (min 6 characters)"
-          placeholderTextColor={COLORS.textLight}
-          secureTextEntry
-          value={newPassword}
-          onChangeText={setNewPassword}
-        />
+        <View style={styles.passwordWrapper}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="New Password (min 6 characters)"
+            placeholderTextColor={COLORS.textLight}
+            secureTextEntry={!showPassword}
+            value={newPassword}
+            onChangeText={setNewPassword}
+          />
+          <TouchableOpacity 
+            style={styles.eyeButton} 
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <MaterialIcons 
+              name={showPassword ? "visibility" : "visibility-off"} 
+              size={22} 
+              color={COLORS.textMedium} 
+            />
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity 
           style={styles.button} 
@@ -116,6 +130,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 20,
     backgroundColor: COLORS.surface,
+  },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    marginBottom: 20,
+    backgroundColor: COLORS.surface,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 15,
+    fontSize: 15,
+    color: COLORS.textDark,
+  },
+  eyeButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
   },
   button: {
     backgroundColor: COLORS.primary,

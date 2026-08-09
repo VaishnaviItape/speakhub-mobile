@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from "react";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
-  Linking,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput,
-  Modal,
 } from "react-native";
+import { db } from "../../config/firebase";
 import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
-import { db } from "../../config/firebase";
-import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -231,10 +231,14 @@ export default function DashboardScreen() {
         createdAt: serverTimestamp()
       });
 
+      // Close the popup modal immediately
+      setIsBookingModalOpen(false);
+
+      // Show success alert message
       Alert.alert(
         "🎉 Seat Booking Inquiry Sent!",
         `Thank you ${bookingName || 'Student'}! Your seat booking inquiry for "${selectedCourseForBooking?.courseName}" has been submitted.\n\nOur counseling team will call you at ${bookingPhone} to confirm your seat and schedule your free demo class.`,
-        [{ text: "OK", onPress: () => setIsBookingModalOpen(false) }]
+        [{ text: "OK" }]
       );
     } catch (err: any) {
       Alert.alert("Booking Error", err.message);
@@ -271,29 +275,6 @@ export default function DashboardScreen() {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <View
-        style={[
-          styles.header,
-          {
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          },
-        ]}
-      >
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.name || "Student"}</Text>
-          <Text style={styles.subGreeting}>
-            {activeBatch ? "Ready to learn today?" : "Welcome to Speak Hub Academy!"}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.avatarPlaceholder}
-          onPress={() => router.push("/(app)/profile")}
-        >
-          <MaterialIcons name="person" size={30} color="#fff" />
-        </TouchableOpacity>
-      </View>
 
       <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
         {activeBatch ? (

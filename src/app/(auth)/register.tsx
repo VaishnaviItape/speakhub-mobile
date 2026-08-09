@@ -6,32 +6,39 @@ import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { MaterialIcons } from '@expo/vector-icons';
+import { validateName, validatePhoneNumber } from '../../utils/validation';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const router = useRouter();
 
   const handleRegister = async () => {
     setError('');
     
-    if (!name.trim()) {
-      setError("Please enter your full name.");
+    const nameVal = validateName(name, 'Full Name');
+    if (!nameVal.isValid) {
+      setError(nameVal.error || 'Invalid name');
+      return;
+    }
+
+    const phoneVal = validatePhoneNumber(phone, 'Mobile Number');
+    if (!phoneVal.isValid) {
+      setError(phoneVal.error || 'Invalid mobile number');
       return;
     }
     
     const cleanMobile = phone.replace(/[^0-9]/g, '');
-    if (cleanMobile.length < 10) {
-      setError("Please enter a valid 10-digit mobile number.");
-      return;
-    }
 
     if (password.length < 6) {
       setError("Password must be at least 6 characters long.");
@@ -45,6 +52,27 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
+      // Best-effort check if mobile number is already registered in Firestore
+      try {
+        const phoneQuery = query(collection(db, 'users'), where('phone', '==', cleanMobile));
+        const phoneSnap = await getDocs(phoneQuery);
+        if (!phoneSnap.empty) {
+          setLoading(false);
+          setError("This mobile number is already registered to another user. Each mobile number must be unique.");
+          return;
+        }
+
+        const mobileQuery = query(collection(db, 'users'), where('mobile', '==', cleanMobile));
+        const mobileSnap = await getDocs(mobileQuery);
+        if (!mobileSnap.empty) {
+          setLoading(false);
+          setError("This mobile number is already registered to another user. Each mobile number must be unique.");
+          return;
+        }
+      } catch (checkErr) {
+        console.warn("Pre-registration Firestore check skipped.", checkErr);
+      }
+
       const authEmail = `${cleanMobile}@speakhub.com`;
       
       // 1. Create User Credential in Firebase Auth
@@ -55,7 +83,7 @@ export default function RegisterScreen() {
       const demoDays = 7;
       const demoEndDate = new Date(now.getTime() + demoDays * 24 * 60 * 60 * 1000);
 
-      // 2. Create document in `users` collection
+      // 2. Create document in `users` collection (Authenticated write)
       const userRef = doc(db, 'users', uid);
       await setDoc(userRef, {
         uid,
@@ -76,19 +104,23 @@ export default function RegisterScreen() {
         updatedAt: now
       });
 
-      // 3. Create document in `students` collection
-      const studentCode = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
-      await addDoc(collection(db, 'students'), {
-        studentCode,
-        userId: uid,
-        firstName: name.trim(),
-        lastName: '',
-        phone: cleanMobile,
-        courseIds: [],
-        batchIds: [],
-        joiningDate: now,
-        status: 'active'
-      });
+      // 3. Create document in `students` collection (Authenticated write)
+      try {
+        const studentCode = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
+        await addDoc(collection(db, 'students'), {
+          studentCode,
+          userId: uid,
+          firstName: name.trim(),
+          lastName: '',
+          phone: cleanMobile,
+          courseIds: [],
+          batchIds: [],
+          joiningDate: now,
+          status: 'active'
+        });
+      } catch (studentDocErr) {
+        console.warn("Could not create auxiliary student record:", studentDocErr);
+      }
 
       setLoading(false);
       alert("Registration Successful! You now have 7 days demo access to watch courses.");
@@ -97,7 +129,7 @@ export default function RegisterScreen() {
       console.error(err);
       setLoading(false);
       if (err.code === 'auth/email-already-in-use') {
-        setError('This mobile number is already registered. Please sign in.');
+        setError('This mobile number is already registered to another user. Each mobile number must be unique.');
       } else {
         setError(err.message || 'Registration failed. Please try again.');
       }
@@ -136,24 +168,48 @@ export default function RegisterScreen() {
           />
 
           <Text style={styles.label}>Set Password *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Create password (min 6 chars)"
-            placeholderTextColor={COLORS.textLight}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Create password (min 6 chars)"
+              placeholderTextColor={COLORS.textLight}
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity 
+              style={styles.eyeButton} 
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <MaterialIcons 
+                name={showPassword ? "visibility" : "visibility-off"} 
+                size={22} 
+                color={COLORS.textMedium} 
+              />
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.label}>Confirm Password *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Re-enter password"
-            placeholderTextColor={COLORS.textLight}
-            secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Re-enter password"
+              placeholderTextColor={COLORS.textLight}
+              secureTextEntry={!showConfirmPassword}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+            <TouchableOpacity 
+              style={styles.eyeButton} 
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
+              <MaterialIcons 
+                name={showConfirmPassword ? "visibility" : "visibility-off"} 
+                size={22} 
+                color={COLORS.textMedium} 
+              />
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.label}>Address (Optional)</Text>
           <TextInput
@@ -238,6 +294,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 15,
+  },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 15,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 15,
+    color: COLORS.textDark,
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   button: {
     backgroundColor: COLORS.primary,

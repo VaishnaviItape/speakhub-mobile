@@ -4,10 +4,13 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
+import { MaterialIcons } from '@expo/vector-icons';
+import { validatePhoneNumber } from '../../utils/validation';
 
 export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -15,8 +18,14 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const handleLogin = async () => {
-    if (!mobile.trim() || !password) {
-      setError('Please enter your mobile number and password.');
+    const mobVal = validatePhoneNumber(mobile, 'Mobile Number');
+    if (!mobVal.isValid) {
+      setError(mobVal.error || 'Please enter a valid mobile number.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password.');
       return;
     }
     
@@ -64,14 +73,26 @@ export default function LoginScreen() {
           onChangeText={setMobile}
         />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={COLORS.textLight}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+        <View style={styles.passwordWrapper}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            placeholderTextColor={COLORS.textLight}
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+          />
+          <TouchableOpacity 
+            style={styles.eyeButton} 
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <MaterialIcons 
+              name={showPassword ? "visibility" : "visibility-off"} 
+              size={22} 
+              color={COLORS.textMedium} 
+            />
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity 
           style={styles.button} 
@@ -136,6 +157,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 20,
     backgroundColor: COLORS.surface,
+  },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    marginBottom: 20,
+    backgroundColor: COLORS.surface,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 15,
+    fontSize: 15,
+    color: COLORS.textDark,
+  },
+  eyeButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
   },
   button: {
     backgroundColor: COLORS.primary,

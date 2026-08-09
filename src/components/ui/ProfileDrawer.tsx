@@ -138,88 +138,53 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
             <View style={styles.menuWrapper}>
               {/* Top User Info Header */}
               <View style={styles.userHeaderRow}>
-                <View style={styles.avatarIconCircle}>
-                  <MaterialIcons name="person" size={32} color="#16a34a" />
+                <View style={[styles.avatarIconCircle, { backgroundColor: COLORS.primaryLightest }]}>
+                  <MaterialIcons name="person" size={32} color={COLORS.primary} />
                 </View>
 
                 <View style={styles.userInfoCol}>
                   <Text style={styles.greetingTitle}>Hi, {name.split(' ')[0]}</Text>
                   <TouchableOpacity onPress={() => setIsProfileModalOpen(true)}>
-                    <Text style={styles.viewProfileText}>View profile ›</Text>
+                    <Text style={[styles.viewProfileText, { color: COLORS.primary, fontWeight: '600' }]}>View profile ›</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {/* Top Highlight Card: My Purchases */}
-              <TouchableOpacity 
-                style={styles.myPurchasesCard}
-                onPress={() => handleNavigation('/(app)/fees')}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="work-outline" size={20} color="#334155" />
-                <Text style={styles.myPurchasesText}>My Purchases & Receipts</Text>
-              </TouchableOpacity>
-
-              {/* Promo Card: Join Beta Program ✨ */}
-              <TouchableOpacity 
-                style={styles.betaCard}
-                onPress={() => Alert.alert("Speak Hub Beta", "You are using Speak Hub Academy v1.0.0 with latest live class features!")}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.betaText}>Join Beta Program ✨</Text>
-                <MaterialIcons name="chevron-right" size={24} color="#0f172a" />
-              </TouchableOpacity>
-
-              {/* Minimalist Icon List Options */}
+              {/* Minimalist Developed Icon List Options */}
               <View style={styles.menuList}>
-                <TouchableOpacity style={styles.menuRow} onPress={() => Alert.alert("Bookmarks", "No bookmarks yet.")}>
-                  <MaterialIcons name="bookmark-border" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>Bookmarks</Text>
+                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/fees')}>
+                  <MaterialIcons name="receipt-long" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>My Purchases & Receipts</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/homework')}>
+                  <MaterialIcons name="assignment" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>Homework & Assignments</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/exams')}>
-                  <MaterialIcons name="phonelink-setup" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>Test Series</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/exams')}>
-                  <MaterialIcons name="rate-review" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>My Test</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/dashboard')}>
-                  <MaterialIcons name="shopping-cart" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>Speak Hub Store</Text>
+                  <MaterialIcons name="assessment" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>Test Series & Results</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
-                  <MaterialIcons name="local-library" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>Library & Notes</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
-                  <MaterialIcons name="file-download" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>My Downloads</Text>
+                  <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>Notes & Study Materials</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
-                  <MaterialIcons name="event-available" size={24} color="#1e293b" />
+                  <MaterialIcons name="event-available" size={24} color={COLORS.primary} />
                   <Text style={styles.menuRowLabel}>My Attendance</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.menuRow} onPress={handleShareApp}>
-                  <MaterialIcons name="shortcut" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>Refer & Earn</Text>
+                <TouchableOpacity style={styles.menuRow} onPress={handleHelpSupport}>
+                  <MaterialIcons name="headset-mic" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>Help & Support</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => setIsAboutModalOpen(true)}>
-                  <MaterialIcons name="info-outline" size={24} color="#1e293b" />
+                  <MaterialIcons name="info-outline" size={24} color={COLORS.primary} />
                   <Text style={styles.menuRowLabel}>About Us</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={handleHelpSupport}>
-                  <MaterialIcons name="call" size={24} color="#1e293b" />
-                  <Text style={styles.menuRowLabel}>Help & Support</Text>
                 </TouchableOpacity>
               </View>
 
@@ -232,7 +197,7 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
 
               <View style={styles.footerSection}>
                 <Text style={styles.appVersionText}>App Version: 1.0.0</Text>
-                <Text style={styles.madeInIndiaText}>Made with ❤️ in India</Text>
+                <Text style={styles.madeInIndiaText}>Speak Hub Academy</Text>
               </View>
             </View>
           </ScrollView>

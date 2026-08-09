@@ -51,38 +51,67 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fetchAndSetUserData = async (uid: string, emailOrPhone: string) => {
     try {
-      const { collection, query, where, getDocs } = await import('firebase/firestore');
-      let q = query(collection(db, 'users'), where('email', '==', emailOrPhone));
-      let snapshot = await getDocs(q);
+      const { doc, getDoc, collection, query, where, getDocs } = await import('firebase/firestore');
       
-      if (snapshot.empty && emailOrPhone.includes('@speakhub.com')) {
-        const rawPhone = emailOrPhone.replace('@speakhub.com', '');
-        q = query(collection(db, 'users'), where('phone', '==', rawPhone));
-        snapshot = await getDocs(q);
+      let data: any = null;
+      let docId = uid;
+
+      // 1. Direct document ID lookup in `users` collection by UID
+      if (uid) {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          data = userSnap.data();
+          docId = userSnap.id;
+        }
       }
 
-      if (snapshot.empty) {
-        q = query(collection(db, 'users'), where('mobile', '==', emailOrPhone));
-        snapshot = await getDocs(q);
-      }
-
-      if (snapshot.empty && uid) {
-        q = query(collection(db, 'users'), where('uid', '==', uid));
-        snapshot = await getDocs(q);
-      }
-      
-      if (!snapshot.empty) {
-        const docSnap = snapshot.docs[0];
-        const data = docSnap.data();
+      // 2. Fallback query if direct lookup did not find document
+      if (!data) {
+        let cleanInput = emailOrPhone.trim();
+        let q = query(collection(db, 'users'), where('email', '==', cleanInput));
+        let snapshot = await getDocs(q);
         
+        if (snapshot.empty && cleanInput.includes('@speakhub.com')) {
+          const rawPhone = cleanInput.replace('@speakhub.com', '');
+          q = query(collection(db, 'users'), where('phone', '==', rawPhone));
+          snapshot = await getDocs(q);
+
+          if (snapshot.empty) {
+            q = query(collection(db, 'users'), where('mobile', '==', rawPhone));
+            snapshot = await getDocs(q);
+          }
+        }
+
+        if (snapshot.empty) {
+          const cleanPhone = cleanInput.replace(/[^0-9]/g, '');
+          if (cleanPhone.length >= 10) {
+            q = query(collection(db, 'users'), where('phone', '==', cleanPhone));
+            snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+              q = query(collection(db, 'users'), where('mobile', '==', cleanPhone));
+              snapshot = await getDocs(q);
+            }
+          }
+        }
+
+        if (!snapshot.empty) {
+          const docSnap = snapshot.docs[0];
+          data = docSnap.data();
+          docId = docSnap.id;
+        }
+      }
+      
+      if (data) {
         setUser({
-          id: docSnap.id,
+          id: docId,
           email: data.email,
           phone: data.phone || data.mobile,
           address: data.address,
-          name: data.name,
+          name: data.name || data.firstName || 'Student',
           role: data.role || 'student',
-          status: data.status,
+          status: data.status || 'active',
           forcePasswordChange: data.forcePasswordChange,
           isDemoMode: data.isDemoMode,
           demoStartDate: data.demoStartDate,
@@ -102,41 +131,88 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginWithEmail = async (identifier: string, password: string) => {
     try {
-      let authEmail = identifier.trim();
-      if (!authEmail.includes('@')) {
-        const cleanPhone = authEmail.replace(/[^0-9]/g, '');
-        authEmail = `${cleanPhone}@speakhub.com`;
+      const cleanInput = identifier.trim();
+
+      // If input is an email address
+      if (cleanInput.includes('@')) {
+        const userCred = await signInWithEmailAndPassword(auth, cleanInput, password);
+        const { doc, getDoc } = await import('firebase/firestore');
+        const userSnap = await getDoc(doc(db, 'users', userCred.user.uid));
+        const data = userSnap.exists() ? userSnap.data() : null;
+        return { success: true, forcePasswordChange: data?.forcePasswordChange };
       }
 
-      await signInWithEmailAndPassword(auth, authEmail, password);
-      
-      const { collection, query, where, getDocs } = await import('firebase/firestore');
-      let q = query(collection(db, 'users'), where('email', '==', identifier));
-      let snapshot = await getDocs(q);
+      // Input is a mobile number
+      const cleanPhone = cleanInput.replace(/[^0-9]/g, '');
+      const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+      const aliasEmail = `${last10}@speakhub.com`;
 
-      if (snapshot.empty) {
-        q = query(collection(db, 'users'), where('phone', '==', identifier));
-        snapshot = await getDocs(q);
+      // Method A: Try direct sign-in with alias email
+      try {
+        const userCred = await signInWithEmailAndPassword(auth, aliasEmail, password);
+        const { doc, getDoc } = await import('firebase/firestore');
+        const userSnap = await getDoc(doc(db, 'users', userCred.user.uid));
+        const data = userSnap.exists() ? userSnap.data() : null;
+        return { success: true, forcePasswordChange: data?.forcePasswordChange };
+      } catch (aliasErr: any) {
+        if (aliasErr.code === 'auth/wrong-password') {
+          throw aliasErr;
+        }
       }
 
-      if (snapshot.empty) {
-        const cleanPhone = identifier.replace(/[^0-9]/g, '');
-        q = query(collection(db, 'users'), where('mobile', '==', cleanPhone));
-        snapshot = await getDocs(q);
+      // Method B: Search Firestore users collection for real email address linked to mobile number
+      let targetEmail = '';
+      try {
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+        const variations = [last10, `+91${last10}`, `91${last10}`, cleanPhone];
+        const numVal = Number(last10);
+        if (!isNaN(numVal)) variations.push(numVal as any);
+
+        let foundDoc: any = null;
+        for (const field of ['phone', 'mobile']) {
+          for (const val of variations) {
+            if (foundDoc) break;
+            const q = query(collection(db, 'users'), where(field, '==', val));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              foundDoc = snap.docs[0].data();
+            }
+          }
+        }
+
+        if (!foundDoc && last10.length >= 10) {
+          const allUsersSnap = await getDocs(collection(db, 'users'));
+          allUsersSnap.forEach((uDoc) => {
+            if (foundDoc) return;
+            const uData = uDoc.data();
+            const pStr = (uData.phone || uData.mobile || '').toString().replace(/[^0-9]/g, '');
+            if (pStr.length >= 10 && pStr.slice(-10) === last10) {
+              foundDoc = uData;
+            }
+          });
+        }
+
+        if (foundDoc && foundDoc.email) {
+          targetEmail = foundDoc.email;
+        }
+      } catch (e) {
+        console.warn("Firestore mobile search error:", e);
       }
-      
-      if (!snapshot.empty) {
-        const docSnap = snapshot.docs[0];
-        const data = docSnap.data();
-        
-        return { 
-          success: true, 
-          forcePasswordChange: data.forcePasswordChange 
-        };
+
+      if (targetEmail && targetEmail !== aliasEmail) {
+        const userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
+        const { doc, getDoc } = await import('firebase/firestore');
+        const userSnap = await getDoc(doc(db, 'users', userCred.user.uid));
+        const data = userSnap.exists() ? userSnap.data() : null;
+        return { success: true, forcePasswordChange: data?.forcePasswordChange };
       }
-      return { success: true, forcePasswordChange: false };
+
+      throw { code: 'auth/invalid-credential', message: 'Invalid credentials' };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        return { success: false, error: 'Invalid mobile number or password. Please try again.' };
+      }
+      return { success: false, error: error.message || 'Login failed. Please try again.' };
     }
   };
 
