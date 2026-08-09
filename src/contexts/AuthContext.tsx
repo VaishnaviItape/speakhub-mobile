@@ -6,23 +6,25 @@ import { doc, getDoc } from 'firebase/firestore';
 
 export interface User {
   id: string;
-  email: string;
+  email?: string;
+  phone?: string;
+  address?: string;
   name: string;
-  role: 'parent' | 'student';
+  role: 'student';
   status: string;
   forcePasswordChange?: boolean;
   isDemoMode?: boolean;
   demoStartDate?: any;
   demoEndDate?: any;
-  children?: string[]; 
   courses?: string[];
+  batchIds?: string[];
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean;
-  loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; forcePasswordChange?: boolean; error?: string }>;
+  loginWithEmail: (identifier: string, password: string) => Promise<{ success: boolean; forcePasswordChange?: boolean; error?: string }>;
   logout: () => Promise<void>;
   registerUser: (userData: Partial<User>) => Promise<boolean>;
 }
@@ -47,16 +49,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => unsubscribe();
   }, []);
 
-  const fetchAndSetUserData = async (uid: string, email: string) => {
+  const fetchAndSetUserData = async (uid: string, emailOrPhone: string) => {
     try {
-      // In our setup, document ID in 'users' is either uid or generated ID. 
-      // Admin might have created the Auth user but we need to find the Firestore doc by email.
-      // For simplicity, let's assume the auth uid matches the firestore doc ID or we query by email.
-      // Wait, Admin created the user in Firebase Auth but the Firestore doc ID was generated previously!
-      // We must query Firestore by email.
       const { collection, query, where, getDocs } = await import('firebase/firestore');
-      const q = query(collection(db, 'users'), where('email', '==', email));
-      const snapshot = await getDocs(q);
+      let q = query(collection(db, 'users'), where('email', '==', emailOrPhone));
+      let snapshot = await getDocs(q);
+      
+      if (snapshot.empty && emailOrPhone.includes('@speakhub.com')) {
+        const rawPhone = emailOrPhone.replace('@speakhub.com', '');
+        q = query(collection(db, 'users'), where('phone', '==', rawPhone));
+        snapshot = await getDocs(q);
+      }
+
+      if (snapshot.empty) {
+        q = query(collection(db, 'users'), where('mobile', '==', emailOrPhone));
+        snapshot = await getDocs(q);
+      }
+
+      if (snapshot.empty && uid) {
+        q = query(collection(db, 'users'), where('uid', '==', uid));
+        snapshot = await getDocs(q);
+      }
       
       if (!snapshot.empty) {
         const docSnap = snapshot.docs[0];
@@ -65,6 +78,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser({
           id: docSnap.id,
           email: data.email,
+          phone: data.phone || data.mobile,
+          address: data.address,
           name: data.name,
           role: data.role || 'student',
           status: data.status,
@@ -72,7 +87,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           isDemoMode: data.isDemoMode,
           demoStartDate: data.demoStartDate,
           demoEndDate: data.demoEndDate,
-          courses: data.courseIds || []
+          courses: data.courseIds || [],
+          batchIds: data.batchIds || []
         });
       } else {
         console.warn("User document not found in Firestore.");
@@ -84,14 +100,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const loginWithEmail = async (email: string, password: string) => {
+  const loginWithEmail = async (identifier: string, password: string) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      let authEmail = identifier.trim();
+      if (!authEmail.includes('@')) {
+        const cleanPhone = authEmail.replace(/[^0-9]/g, '');
+        authEmail = `${cleanPhone}@speakhub.com`;
+      }
+
+      await signInWithEmailAndPassword(auth, authEmail, password);
       
-      // Fetch user data manually to check forcePasswordChange before returning
       const { collection, query, where, getDocs } = await import('firebase/firestore');
-      const q = query(collection(db, 'users'), where('email', '==', email));
-      const snapshot = await getDocs(q);
+      let q = query(collection(db, 'users'), where('email', '==', identifier));
+      let snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        q = query(collection(db, 'users'), where('phone', '==', identifier));
+        snapshot = await getDocs(q);
+      }
+
+      if (snapshot.empty) {
+        const cleanPhone = identifier.replace(/[^0-9]/g, '');
+        q = query(collection(db, 'users'), where('mobile', '==', cleanPhone));
+        snapshot = await getDocs(q);
+      }
       
       if (!snapshot.empty) {
         const docSnap = snapshot.docs[0];

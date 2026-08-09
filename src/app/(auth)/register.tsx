@@ -4,52 +4,103 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
-import { db } from '../../config/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { sendEmail } from '../../utils/emailService';
+import { auth, db } from '../../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<'student' | 'parent'>('student');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
-  const { registerUser } = useAuth();
   const router = useRouter();
 
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !phone.trim()) {
-      alert("Please fill all required fields");
+    setError('');
+    
+    if (!name.trim()) {
+      setError("Please enter your full name.");
       return;
     }
+    
+    const cleanMobile = phone.replace(/[^0-9]/g, '');
+    if (cleanMobile.length < 10) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
     setLoading(true);
     try {
-      // 1. Save to Firestore (status: pending)
-      await addDoc(collection(db, 'users'), {
-        name,
-        email,
-        phone,
-        role,
-        status: 'pending',
+      const authEmail = `${cleanMobile}@speakhub.com`;
+      
+      // 1. Create User Credential in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
+      const uid = userCredential.user.uid;
+
+      const now = new Date();
+      const demoDays = 7;
+      const demoEndDate = new Date(now.getTime() + demoDays * 24 * 60 * 60 * 1000);
+
+      // 2. Create document in `users` collection
+      const userRef = doc(db, 'users', uid);
+      await setDoc(userRef, {
+        uid,
+        name: name.trim(),
+        mobile: cleanMobile,
+        phone: cleanMobile,
+        email: authEmail,
+        address: address.trim(),
+        role: 'student',
+        status: 'active',
         forcePasswordChange: false,
-        createdAt: serverTimestamp()
+        isDemoMode: true,
+        demoStartDate: now,
+        demoEndDate: demoEndDate,
+        demoDays: demoDays,
+        batchIds: [],
+        createdAt: now,
+        updatedAt: now
       });
 
-      // 2. Send Registration Email
-      await sendEmail(
-        email,
-        'Registration Received - Speak Hub Academy',
-        `Hello ${name},\n\nYour registration has been received successfully! You will be notified once an administrator approves your account and assigns you to a batch.\n\nThank you,\nSpeak Hub Academy`
-      );
+      // 3. Create document in `students` collection
+      const studentCode = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
+      await addDoc(collection(db, 'students'), {
+        studentCode,
+        userId: uid,
+        firstName: name.trim(),
+        lastName: '',
+        phone: cleanMobile,
+        courseIds: [],
+        batchIds: [],
+        joiningDate: now,
+        status: 'active'
+      });
 
       setLoading(false);
-      alert("Registration Successful! Please check your email and wait for admin approval.");
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error(error);
+      alert("Registration Successful! You now have 7 days demo access to watch courses.");
+      router.replace('/(app)/dashboard');
+    } catch (err: any) {
+      console.error(err);
       setLoading(false);
-      alert("Registration failed. Please try again.");
+      if (err.code === 'auth/email-already-in-use') {
+        setError('This mobile number is already registered. Please sign in.');
+      } else {
+        setError(err.message || 'Registration failed. Please try again.');
+      }
     }
   };
 
@@ -59,66 +110,74 @@ export default function RegisterScreen() {
       
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
-          <Text style={styles.title}>Complete Profile</Text>
-          <Text style={styles.subtitle}>You are new here! Tell us more about yourself.</Text>
+          <Text style={styles.title}>Student Registration</Text>
+          <Text style={styles.subtitle}>Create your account to watch courses</Text>
 
-          <Text style={styles.label}>Full Name</Text>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <Text style={styles.label}>Full Name *</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. John Doe"
+            placeholder="Enter your full name"
             placeholderTextColor={COLORS.textLight}
             value={name}
             onChangeText={setName}
           />
 
-          <Text style={styles.label}>Email Address</Text>
+          <Text style={styles.label}>Mobile Number (Used for Login) *</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. john@example.com"
-            placeholderTextColor={COLORS.textLight}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 5555555555"
+            placeholder="10-digit mobile number"
             placeholderTextColor={COLORS.textLight}
             keyboardType="phone-pad"
+            maxLength={10}
             value={phone}
             onChangeText={setPhone}
           />
 
-          <Text style={styles.label}>I am a...</Text>
-          <View style={styles.roleContainer}>
-            <TouchableOpacity 
-              style={[styles.roleButton, role === 'student' && styles.roleButtonActive]}
-              onPress={() => setRole('student')}
-            >
-              <Text style={[styles.roleText, role === 'student' && styles.roleTextActive]}>Student</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.roleButton, role === 'parent' && styles.roleButtonActive]}
-              onPress={() => setRole('parent')}
-            >
-              <Text style={[styles.roleText, role === 'parent' && styles.roleTextActive]}>Parent</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.label}>Set Password *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Create password (min 6 chars)"
+            placeholderTextColor={COLORS.textLight}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+
+          <Text style={styles.label}>Confirm Password *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Re-enter password"
+            placeholderTextColor={COLORS.textLight}
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+
+          <Text style={styles.label}>Address (Optional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. City / Address"
+            placeholderTextColor={COLORS.textLight}
+            value={address}
+            onChangeText={setAddress}
+          />
 
           <TouchableOpacity 
             style={styles.button} 
             onPress={handleRegister}
-            disabled={loading || !name.trim()}
+            disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color={COLORS.textInverse} />
             ) : (
-              <Text style={styles.buttonText}>Complete Registration</Text>
+              <Text style={styles.buttonText}>Register & Watch Courses</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.backButton}>
+            <Text style={styles.backText}>Already registered? Sign In</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -144,7 +203,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    padding: 30,
+    padding: 25,
     borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -153,68 +212,58 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: COLORS.textDark,
-    marginBottom: 10,
+    marginBottom: 5,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
     color: COLORS.textMedium,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.textDark,
-    marginBottom: 10,
+    marginBottom: 6,
   },
   input: {
     backgroundColor: COLORS.background,
-    padding: 15,
+    padding: 12,
     borderRadius: 10,
-    fontSize: 16,
+    fontSize: 15,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 20,
-  },
-  roleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-  },
-  roleButton: {
-    flex: 1,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    marginHorizontal: 5,
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-  },
-  roleButtonActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary,
-  },
-  roleText: {
-    color: COLORS.textMedium,
-    fontWeight: '600',
-  },
-  roleTextActive: {
-    color: COLORS.textInverse,
+    marginBottom: 15,
   },
   button: {
     backgroundColor: COLORS.primary,
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
+    marginTop: 10,
   },
   buttonText: {
     color: COLORS.textInverse,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  errorText: {
+    color: COLORS.error,
+    marginBottom: 15,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  backButton: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  backText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '600',
   }
 });

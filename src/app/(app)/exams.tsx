@@ -45,10 +45,56 @@ export default function ExamsScreen() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const examsQ = query(collection(db, 'exams'), where('status', 'in', ['published', 'completed']));
-      const examsSnap = await getDocs(examsQ);
-      const examsList: any[] = [];
-      examsSnap.forEach(doc => examsList.push({ id: doc.id, ...doc.data() }));
+      const { doc, getDoc } = await import('firebase/firestore');
+      let studentBatchIdOrName = user.batchIds?.[0];
+
+      let studentData: any = {};
+      if (user.id) {
+        const uSnap = await getDoc(doc(db, 'users', user.id));
+        if (uSnap.exists()) {
+          studentData = uSnap.data();
+        }
+      }
+
+      const currentStatus = studentData.status || user?.status || 'pending';
+      let isDemoActive = false;
+      if (studentData.isDemoMode && studentData.demoEndDate) {
+        const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
+        if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
+      }
+
+      if (currentStatus !== 'active' && !isDemoActive) {
+        setExams([]);
+        setAttempts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const targetBatchIdentifiers: string[] = [];
+      if (studentBatchIdOrName) {
+        targetBatchIdentifiers.push(studentBatchIdOrName);
+        try {
+          const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
+          if (bSnap.exists() && bSnap.data().batchName) {
+            targetBatchIdentifiers.push(bSnap.data().batchName);
+          }
+        } catch (e) {}
+
+        try {
+          const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
+          const bSnap = await getDocs(bq);
+          if (!bSnap.empty) {
+            targetBatchIdentifiers.push(bSnap.docs[0].id);
+          }
+        } catch (e) {}
+      }
+
+      let examsList: any[] = [];
+      if (targetBatchIdentifiers.length > 0) {
+        const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published', 'completed']));
+        const examsSnap = await getDocs(examsQ);
+        examsSnap.forEach(doc => examsList.push({ id: doc.id, ...doc.data() }));
+      }
       
       const attemptsQ = query(collection(db, 'exam_attempts'), where('studentId', '==', user.id));
       const attemptsSnap = await getDocs(attemptsQ);

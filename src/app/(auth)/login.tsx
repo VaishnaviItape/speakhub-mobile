@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -15,15 +15,15 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      setError('Please enter both email and password.');
+    if (!mobile.trim() || !password) {
+      setError('Please enter your mobile number and password.');
       return;
     }
     
     setLoading(true);
     setError('');
     
-    const result = await loginWithEmail(email, password);
+    const result = await loginWithEmail(mobile.trim(), password);
     setLoading(false);
     
     if (result.success) {
@@ -33,7 +33,7 @@ export default function LoginScreen() {
         // Layout will automatically redirect to dashboard once user state is populated
       }
     } else {
-      setError(result.error || 'Failed to login. Please try again.');
+      setError(result.error || 'Failed to login. Please check your credentials.');
     }
   };
 
@@ -50,18 +50,18 @@ export default function LoginScreen() {
           />
         </View>
         <Text style={styles.title}>Speak Hub</Text>
-        <Text style={styles.subtitle}>Enter your email and password</Text>
+        <Text style={styles.subtitle}>Enter your mobile number and password</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <TextInput
           style={styles.input}
-          placeholder="Email Address"
+          placeholder="10-digit Mobile Number"
           placeholderTextColor={COLORS.textLight}
-          keyboardType="email-address"
+          keyboardType="phone-pad"
           autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
+          value={mobile}
+          onChangeText={setMobile}
         />
 
         <TextInput
@@ -86,7 +86,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push('/(auth)/register')} style={styles.backButton}>
-          <Text style={styles.backText}>New here? Register</Text>
+          <Text style={styles.backText}>New student? Register here</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, ActivityIn
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 export default function NotesScreen() {
   const { user } = useAuth();
@@ -19,19 +19,66 @@ export default function NotesScreen() {
   }, [user]);
 
   const fetchNotes = async () => {
-    if (!user?.batchIds || user.batchIds.length === 0) {
+    if (!user) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      // Get all published notes for the student's batches
-      const q = query(collection(db, 'notes'), where('batchId', 'in', user.batchIds), where('status', '==', 'published'));
-      const snap = await getDocs(q);
-      const notesList: any[] = [];
-      snap.forEach(doc => {
-        notesList.push({ id: doc.id, ...doc.data() });
-      });
+      // 1. Get latest student record
+      let studentData: any = {};
+      if (user.id) {
+        try {
+          const uSnap = await getDoc(doc(db, 'users', user.id));
+          if (uSnap.exists()) studentData = uSnap.data();
+        } catch (e) {}
+      }
+
+      const currentStatus = studentData.status || user?.status || 'pending';
+      let isDemoActive = false;
+      if (studentData.isDemoMode && studentData.demoEndDate) {
+        const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
+        if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
+      }
+
+      if (currentStatus !== 'active' && !isDemoActive) {
+        setNotes([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const studentBatchKeys: string[] = [];
+      if (studentData.batchIds && Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+      if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
+      if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
+      if (user.batchIds && Array.isArray(user.batchIds)) studentBatchKeys.push(...user.batchIds);
+
+      // Fetch all batches to get matching document IDs and names
+      const bSnap = await getDocs(collection(db, 'batches'));
+      const allBatches: any[] = [];
+      bSnap.forEach(d => allBatches.push({ id: d.id, ...d.data() }));
+
+      const matchedBatch = allBatches.find(b => 
+        studentBatchKeys.includes(b.id) || (b.batchName && studentBatchKeys.includes(b.batchName))
+      );
+
+      const targetBatchIdentifiers: string[] = [...studentBatchKeys];
+      if (matchedBatch) {
+        targetBatchIdentifiers.push(matchedBatch.id);
+        if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
+      }
+
+      // Query notes STRICTLY matching assigned batch
+      let notesList: any[] = [];
+      if (targetBatchIdentifiers.length > 0) {
+        const snap = await getDocs(query(collection(db, 'notes'), where('status', '==', 'published')));
+        snap.forEach(doc => {
+          const data = doc.data();
+          if (targetBatchIdentifiers.includes(data.batchId)) {
+            notesList.push({ id: doc.id, ...data });
+          }
+        });
+      }
 
       // Fetch Subject names mapping
       const subQ = query(collection(db, 'subjects'));

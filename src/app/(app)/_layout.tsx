@@ -27,64 +27,65 @@ export default function AppLayout() {
     );
   }
 
-  // Dynamic tabs based on role
+  // Dynamic tabs based on role - Keep only 4 essential items on bottom bar
   return (
     <Tabs screenOptions={{ 
       headerShown: true, 
       tabBarActiveTintColor: COLORS.textInverse,
       tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.6)',
-      tabBarStyle: { backgroundColor: COLORS.primary, borderTopWidth: 0 },
+      tabBarStyle: { backgroundColor: COLORS.primary, borderTopWidth: 0, height: 60, paddingBottom: 6 },
       headerStyle: { backgroundColor: COLORS.surface },
       headerTintColor: COLORS.textDark
     }}>
       <Tabs.Screen 
         name="dashboard" 
         options={{ 
-          title: 'Dashboard',
-          tabBarIcon: ({ color }) => <MaterialIcons name="dashboard" size={24} color={color} />
+          title: 'Home',
+          tabBarIcon: ({ color }) => <MaterialIcons name="home" size={24} color={color} />
         }} 
       />
-      {!isDemo && (
-        <Tabs.Screen 
-          name="exams" 
-          options={{ 
-            title: 'Exams',
-            tabBarIcon: ({ color }) => <MaterialIcons name="assignment" size={24} color={color} />
-          }} 
-        />
-      )}
-      {!isDemo && (
-        <Tabs.Screen 
-          name="homework" 
-          options={{ 
-            title: 'Homework',
-            tabBarIcon: ({ color }) => <MaterialIcons name="menu-book" size={24} color={color} />
-          }} 
-        />
-      )}
-      {!isDemo && (
-        <Tabs.Screen 
-          name="notes" 
-          options={{ 
-            title: 'Notes',
-            tabBarIcon: ({ color }) => <MaterialIcons name="library-books" size={24} color={color} />
-          }} 
-        />
-      )}
-      {!isDemo && (
-        <Tabs.Screen 
-          name="fees" 
-          options={{ 
-            title: 'Fees',
-            tabBarIcon: ({ color }) => <MaterialIcons name="payment" size={24} color={color} />
-          }} 
-        />
-      )}
+      <Tabs.Screen 
+        name="notes" 
+        options={{ 
+          title: 'Batches & Notes',
+          tabBarIcon: ({ color }) => <MaterialIcons name="menu-book" size={24} color={color} />
+        }} 
+      />
+      <Tabs.Screen 
+        name="exams" 
+        options={{ 
+          title: 'Exams',
+          tabBarIcon: ({ color }) => <MaterialIcons name="assignment" size={24} color={color} />
+        }} 
+      />
       <Tabs.Screen 
         name="profile" 
         options={{ 
-          title: 'Profile',
+          title: 'Student Hub',
           tabBarIcon: ({ color }) => <MaterialIcons name="person" size={24} color={color} />
+        }} 
+      />
+
+      {/* Hidden Auxiliary Screens accessible via Student Hub and Dashboard navigation */}
+      <Tabs.Screen 
+        name="homework" 
+        options={{ 
+          href: null,
+          title: 'Homework'
+        }} 
+      />
+      <Tabs.Screen 
+        name="fees" 
+        options={{ 
+          href: null,
+          title: 'Fee Receipts'
+        }} 
+      />
+      <Tabs.Screen 
+        name="attendance" 
+        options={{ 
+          href: null,
+          title: 'My Attendance'
         }} 
       />
     </Tabs>

@@ -24,32 +24,76 @@ export default function FeesScreen() {
     if (!user) return;
     try {
       // 1. Fetch Student Fee Plan
-      const q = query(collection(db, 'student_fee_plans'), where('studentId', '==', user.id));
-      const pSnap = await getDocs(q);
+      let q = query(collection(db, 'student_fee_plans'), where('studentId', '==', user.id));
+      let pSnap = await getDocs(q);
       
+      let sfpData: any = null;
       if (!pSnap.empty) {
         const pDoc = pSnap.docs[0];
-        const sfpData = { id: pDoc.id, ...pDoc.data() };
+        sfpData = { id: pDoc.id, ...pDoc.data() };
         setFeePlan(sfpData);
 
-        // 2. Fetch Fee Plan Details
+        // Fetch Fee Plan Details
+        if (sfpData.feePlanId) {
+          const fpq = query(collection(db, 'fee_plans'));
+          const fpSnap = await getDocs(fpq);
+          const planDef = fpSnap.docs.map(d => ({id: d.id, ...d.data()})).find((p:any) => p.id === sfpData.feePlanId);
+          setPlanDetails(planDef);
+        }
+      } else {
+        // Fallback: If no student_fee_plan record exists yet, search fee_plans matching student's course
+        const studentCourseId = user.courses?.[0] || user.id;
         const fpq = query(collection(db, 'fee_plans'));
         const fpSnap = await getDocs(fpq);
-        const planDef = fpSnap.docs.map(d => ({id: d.id, ...d.data()})).find((p:any) => p.id === sfpData.feePlanId);
-        setPlanDetails(planDef);
+        const allPlans = fpSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        const matchedPlan: any = allPlans.find((p: any) => p.courseId === studentCourseId) || allPlans[0];
+        
+        if (matchedPlan) {
+          setPlanDetails(matchedPlan);
+          setFeePlan({
+            id: 'temp_plan',
+            studentId: user.id,
+            feePlanId: matchedPlan.id,
+            billingFrequency: matchedPlan.billingFrequency || 'Monthly',
+            totalPaid: 0,
+            status: 'active'
+          });
+        }
+      }
 
-        // 3. Fetch Transactions
-        const tq = query(collection(db, 'fee_transactions'), where('studentFeePlanId', '==', sfpData.id));
-        const tSnap = await getDocs(tq);
-        const trans = tSnap.docs.map(d => {
+      // 2. Fetch Transactions by studentId
+      const tq = query(collection(db, 'fee_transactions'), where('studentId', '==', user.id));
+      const tSnap = await getDocs(tq);
+      let trans = tSnap.docs.map(d => {
+        const dt = d.data();
+        return {
+           id: d.id, 
+           ...dt, 
+           paymentDate: dt.paymentDate?.toDate ? dt.paymentDate.toDate() : new Date(dt.paymentDate)
+        };
+      });
+
+      // If queried by studentId gave empty, try by studentFeePlanId if sfpData exists
+      if (trans.length === 0 && sfpData?.id) {
+        const tq2 = query(collection(db, 'fee_transactions'), where('studentFeePlanId', '==', sfpData.id));
+        const tSnap2 = await getDocs(tq2);
+        trans = tSnap2.docs.map(d => {
           const dt = d.data();
           return {
              id: d.id, 
              ...dt, 
              paymentDate: dt.paymentDate?.toDate ? dt.paymentDate.toDate() : new Date(dt.paymentDate)
           };
-        }).sort((a:any, b:any) => b.paymentDate - a.paymentDate);
-        setTransactions(trans);
+        });
+      }
+
+      trans.sort((a:any, b:any) => b.paymentDate - a.paymentDate);
+      setTransactions(trans);
+
+      // Recalculate paid amount from transactions if feePlan was set
+      if (trans.length > 0) {
+        const totalPaidFromTrans = trans.reduce((sum: number, item: any) => sum + (Number(item.amountPaid) || 0), 0);
+        setFeePlan((prev: any) => prev ? { ...prev, totalPaid: totalPaidFromTrans } : prev);
       }
     } catch (e) {
       console.error(e);

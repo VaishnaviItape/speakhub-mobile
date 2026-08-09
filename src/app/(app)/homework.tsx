@@ -37,12 +37,58 @@ export default function HomeworkScreen() {
   }, [user]);
 
   const fetchData = async () => {
-    if (!user?.batchIds || user.batchIds.length === 0) {
+    if (!user) {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
+      // 1. Get latest student record
+      const { doc, getDoc } = await import('firebase/firestore');
+      let studentBatchIdOrName = user.batchIds?.[0];
+      let studentCourseId = user.courses?.[0];
+
+      let studentData: any = {};
+      if (user.id) {
+        const uSnap = await getDoc(doc(db, 'users', user.id));
+        if (uSnap.exists()) {
+          studentData = uSnap.data();
+        }
+      }
+
+      const currentStatus = studentData.status || user?.status || 'pending';
+      let isDemoActive = false;
+      if (studentData.isDemoMode && studentData.demoEndDate) {
+        const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
+        if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
+      }
+
+      if (currentStatus !== 'active' && !isDemoActive) {
+        setHomeworks([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Collect all identifiers for student's assigned batch
+      const targetBatchIdentifiers: string[] = [];
+      if (studentBatchIdOrName) {
+        targetBatchIdentifiers.push(studentBatchIdOrName);
+        try {
+          const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
+          if (bSnap.exists() && bSnap.data().batchName) {
+            targetBatchIdentifiers.push(bSnap.data().batchName);
+          }
+        } catch (e) {}
+
+        try {
+          const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
+          const bSnap = await getDocs(bq);
+          if (!bSnap.empty) {
+            targetBatchIdentifiers.push(bSnap.docs[0].id);
+          }
+        } catch (e) {}
+      }
+
       // Fetch Subjects
       const subQ = query(collection(db, 'subjects'));
       const subSnap = await getDocs(subQ);
@@ -50,11 +96,13 @@ export default function HomeworkScreen() {
       subSnap.forEach(doc => { subMap[doc.id] = doc.data().subjectName; });
       setSubjects(subMap);
 
-      // Fetch Homework
-      const q = query(collection(db, 'homeworks'), where('batchId', 'in', user.batchIds), where('status', 'in', ['published', 'closed']));
-      const hwSnap = await getDocs(q);
-      const hwList: any[] = [];
-      hwSnap.forEach(doc => hwList.push({ id: doc.id, ...doc.data() }));
+      // Fetch Homeworks STRICTLY matching assigned batch
+      let hwList: any[] = [];
+      if (targetBatchIdentifiers.length > 0) {
+        const q = query(collection(db, 'homeworks'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published', 'closed']));
+        const hwSnap = await getDocs(q);
+        hwSnap.forEach(doc => hwList.push({ id: doc.id, ...doc.data() }));
+      }
 
       // Fetch Submissions
       const subq = query(collection(db, 'homework_submissions'), where('studentId', '==', user.id));
