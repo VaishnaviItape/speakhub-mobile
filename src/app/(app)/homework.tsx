@@ -333,12 +333,6 @@ export default function HomeworkScreen() {
       <Text style={styles.date}>Due: {item.dDateCombined.toLocaleString()}</Text>
       
       <View style={{flexDirection: 'row', gap: 10, marginTop: 10}}>
-        {(item.currentStatus === 'Pending' || (item.currentStatus === 'Overdue' && item.allowLateSubmission)) && (
-          <TouchableOpacity style={[styles.actionButton, {flex: 1}]} onPress={() => handleOpenModal(item)}>
-            <Text style={styles.actionButtonText}>Submit Work</Text>
-          </TouchableOpacity>
-        )}
-        
         {item.attachmentUrl && (
           <TouchableOpacity style={[styles.actionButton, {backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary}]} onPress={() => handleOpenLink(item)}>
             <Text style={[styles.actionButtonText, {color: COLORS.primary}]}>View Attachment</Text>
@@ -387,7 +381,7 @@ export default function HomeworkScreen() {
             <TouchableOpacity onPress={() => { setIsSubmitModalOpen(false); resetSubmission(); }}>
               <MaterialIcons name="close" size={24} color={COLORS.textDark} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{selectedHw?.currentStatus === 'Reviewed' ? 'Teacher Feedback' : 'Submit Homework'}</Text>
+            <Text style={styles.modalTitle}>Teacher Feedback</Text>
             <View style={{width: 24}}/>
           </View>
 
@@ -395,7 +389,7 @@ export default function HomeworkScreen() {
             <Text style={styles.hwTitle}>{selectedHw?.title}</Text>
             <Text style={styles.hwInstructions}>{selectedHw?.instructions || selectedHw?.description}</Text>
 
-            {selectedHw?.currentStatus === 'Reviewed' ? (
+            {selectedHw?.currentStatus === 'Reviewed' && (
               <View style={styles.feedbackContainer}>
                 <View style={styles.scoreBox}>
                   <Text style={styles.scoreText}>{selectedHw.submission?.marks} / {selectedHw.maximumMarks}</Text>
@@ -415,82 +409,6 @@ export default function HomeworkScreen() {
                     <Text style={styles.feedbackText}>{selectedHw.submission.teacherComments}</Text>
                   </View>
                 ) : null}
-              </View>
-            ) : (
-              <View style={styles.submissionContainer}>
-                {selectedHw?.submissionType?.includes('Text') && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Text Answer</Text>
-                    <TextInput 
-                      style={styles.textArea} 
-                      multiline 
-                      placeholder="Type your answer here..."
-                      value={textAnswer}
-                      onChangeText={setTextAnswer}
-                    />
-                  </View>
-                )}
-
-                {(selectedHw?.submissionType?.includes('Document') || selectedHw?.submissionType?.includes('PDF') || selectedHw?.submissionType?.includes('Image')) && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Attachment</Text>
-                    <TouchableOpacity style={styles.fileButton} onPress={openDocumentPicker}>
-                      <MaterialIcons name="attach-file" size={20} color={COLORS.primary} />
-                      <Text style={styles.fileButtonText}>{selectedFileUrl ? 'File Selected' : 'Select File'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {selectedHw?.submissionType?.includes('Video Recording') && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Record Video</Text>
-                    <TouchableOpacity style={styles.fileButton} onPress={openVideoPicker}>
-                      <MaterialIcons name="videocam" size={20} color={COLORS.primary} />
-                      <Text style={styles.fileButtonText}>{selectedFileUrl ? 'Video Recorded' : 'Open Camera'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {selectedHw?.submissionType?.includes('Audio Recording') && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Record Audio</Text>
-                    <View style={{flexDirection: 'row', gap: 10}}>
-                      <TouchableOpacity 
-                        style={[styles.fileButton, {flex: 1, backgroundColor: recorderState.isRecording ? '#fee2e2' : COLORS.primaryLightest, borderColor: recorderState.isRecording ? '#ef4444' : COLORS.primary}]} 
-                        onPress={recorderState.isRecording ? stopRecording : startRecording}
-                      >
-                        <MaterialIcons name="mic" size={20} color={recorderState.isRecording ? '#ef4444' : COLORS.primary} />
-                        <Text style={[styles.fileButtonText, {color: recorderState.isRecording ? '#ef4444' : COLORS.primary}]}>{recorderState.isRecording ? 'Stop Recording' : 'Start Recording'}</Text>
-                      </TouchableOpacity>
-                      {audioUri && !recorderState.isRecording && (
-                        <TouchableOpacity style={[styles.fileButton, {flex: 1}]} onPress={playRecording}>
-                          <MaterialIcons name={playerStatus.playing ? "pause" : "play-arrow"} size={20} color={COLORS.primary} />
-                          <Text style={styles.fileButtonText}>{playerStatus.playing ? 'Playing...' : 'Play Audio'}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                )}
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Remarks (Optional)</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="Any message for the teacher..."
-                    value={studentRemarks}
-                    onChangeText={setStudentRemarks}
-                  />
-                </View>
-
-                {selectedHw?.isLate && (
-                  <Text style={{color: COLORS.error, fontSize: 12, marginBottom: 15}}>
-                    Note: This assignment is past the due date. It will be marked as a Late Submission.
-                  </Text>
-                )}
-
-                <TouchableOpacity style={styles.submitBtn} onPress={handleHomeworkSubmit} disabled={isUploading}>
-                  {isUploading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Submit Assignment</Text>}
-                </TouchableOpacity>
               </View>
             )}
           </View>

@@ -166,7 +166,7 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.menuContent}>
                 <Text style={styles.menuTitle}>Homework & Assignments</Text>
-                <Text style={styles.menuSub}>Submit answers and view teacher feedback</Text>
+                <Text style={styles.menuSub}>View homework and teacher feedback</Text>
               </View>
               <MaterialIcons name="chevron-right" size={24} color="#94a3b8" />
             </TouchableOpacity>
