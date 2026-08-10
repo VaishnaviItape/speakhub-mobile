@@ -102,6 +102,13 @@ export default function AppLayout() {
             title: 'My Attendance'
           }} 
         />
+        <Tabs.Screen 
+          name="support" 
+          options={{ 
+            href: null,
+            title: 'Help & Support'
+          }} 
+        />
       </Tabs>
       
       {/* Global Drawer Overlay */}

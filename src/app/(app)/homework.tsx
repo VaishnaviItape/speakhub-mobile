@@ -70,7 +70,7 @@ export default function HomeworkScreen() {
       }
 
       // Collect all identifiers for student's assigned batch
-      const targetBatchIdentifiers: string[] = [];
+      const targetBatchIdentifiers: string[] = ['all'];
       if (studentBatchIdOrName) {
         targetBatchIdentifiers.push(studentBatchIdOrName);
         try {

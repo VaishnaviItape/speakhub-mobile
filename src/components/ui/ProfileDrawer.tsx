@@ -105,17 +105,7 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
     }
   };
 
-  const handleHelpSupport = () => {
-    Alert.alert(
-      "Speak Hub Help & Support",
-      "Connect directly with your student counselor for batch timings, fee receipts, or technical issues.",
-      [
-        { text: "Call Support", onPress: () => Linking.openURL("tel:+919876543210") },
-        { text: "WhatsApp Counselor", onPress: () => Linking.openURL("https://wa.me/919876543210") },
-        { text: "Close", style: "cancel" }
-      ]
-    );
-  };
+
 
   const handleNavigation = (path: any) => {
     onClose();
@@ -177,7 +167,7 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
                   <Text style={styles.menuRowLabel}>My Attendance</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.menuRow} onPress={handleHelpSupport}>
+                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/support')}>
                   <MaterialIcons name="headset-mic" size={24} color={COLORS.primary} />
                   <Text style={styles.menuRowLabel}>Help & Support</Text>
                 </TouchableOpacity>

@@ -38,77 +38,89 @@ export default function ExamsScreen() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, [user]);
+    let unsubExams: (() => void) | undefined;
+    let unsubAttempts: (() => void) | undefined;
 
-  const fetchData = async () => {
-    if (!user) return;
-    setIsLoading(true);
-    try {
-      const { doc, getDoc } = await import('firebase/firestore');
-      let studentBatchIdOrName = user.batchIds?.[0];
+    const setupListeners = async () => {
+      if (!user) return;
+      setIsLoading(true);
+      try {
+        const { doc, getDoc, getDocs, onSnapshot } = await import('firebase/firestore');
+        let studentBatchIdOrName = user.batchIds?.[0];
 
-      let studentData: any = {};
-      if (user.id) {
-        const uSnap = await getDoc(doc(db, 'users', user.id));
-        if (uSnap.exists()) {
-          studentData = uSnap.data();
+        let studentData: any = {};
+        if (user.id) {
+          const uSnap = await getDoc(doc(db, 'users', user.id));
+          if (uSnap.exists()) {
+            studentData = uSnap.data();
+          }
         }
-      }
 
-      const currentStatus = studentData.status || user?.status || 'pending';
-      let isDemoActive = false;
-      if (studentData.isDemoMode && studentData.demoEndDate) {
-        const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
-        if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
-      }
+        const currentStatus = studentData.status || user?.status || 'pending';
+        let isDemoActive = false;
+        if (studentData.isDemoMode && studentData.demoEndDate) {
+          const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
+          if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
+        }
 
-      if (currentStatus !== 'active' && !isDemoActive) {
-        setExams([]);
-        setAttempts([]);
+        if (currentStatus !== 'active' && !isDemoActive) {
+          setExams([]);
+          setAttempts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const targetBatchIdentifiers: string[] = ['all'];
+        if (studentBatchIdOrName) {
+          targetBatchIdentifiers.push(studentBatchIdOrName);
+          try {
+            const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
+            if (bSnap.exists() && bSnap.data().batchName) {
+              targetBatchIdentifiers.push(bSnap.data().batchName);
+            }
+          } catch (e) {}
+
+          try {
+            const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
+            const bSnap = await getDocs(bq);
+            if (!bSnap.empty) {
+              targetBatchIdentifiers.push(bSnap.docs[0].id);
+            }
+          } catch (e) {}
+        }
+
+        if (targetBatchIdentifiers.length > 0) {
+          const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published', 'completed']));
+          unsubExams = onSnapshot(examsQ, (snapshot) => {
+            const examsList: any[] = [];
+            snapshot.forEach(d => examsList.push({ id: d.id, ...d.data() }));
+            setExams(examsList);
+          });
+        } else {
+          setExams([]);
+        }
+        
+        const attemptsQ = query(collection(db, 'exam_attempts'), where('studentId', '==', user.id));
+        unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
+          const attemptsList: any[] = [];
+          snapshot.forEach(d => attemptsList.push({ id: d.id, ...d.data() }));
+          setAttempts(attemptsList);
+        });
+
+      } catch (error) {
+        console.error("Error setting up exam listeners:", error);
+      } finally {
         setIsLoading(false);
-        return;
       }
+    };
 
-      const targetBatchIdentifiers: string[] = [];
-      if (studentBatchIdOrName) {
-        targetBatchIdentifiers.push(studentBatchIdOrName);
-        try {
-          const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
-          if (bSnap.exists() && bSnap.data().batchName) {
-            targetBatchIdentifiers.push(bSnap.data().batchName);
-          }
-        } catch (e) {}
+    setupListeners();
 
-        try {
-          const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
-          const bSnap = await getDocs(bq);
-          if (!bSnap.empty) {
-            targetBatchIdentifiers.push(bSnap.docs[0].id);
-          }
-        } catch (e) {}
-      }
-
-      let examsList: any[] = [];
-      if (targetBatchIdentifiers.length > 0) {
-        const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published', 'completed']));
-        const examsSnap = await getDocs(examsQ);
-        examsSnap.forEach(doc => examsList.push({ id: doc.id, ...doc.data() }));
-      }
-      
-      const attemptsQ = query(collection(db, 'exam_attempts'), where('studentId', '==', user.id));
-      const attemptsSnap = await getDocs(attemptsQ);
-      const attemptsList: any[] = [];
-      attemptsSnap.forEach(doc => attemptsList.push({ id: doc.id, ...doc.data() }));
-
-      setExams(examsList);
-      setAttempts(attemptsList);
-    } catch (error) {
-      console.error("Error fetching exams:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    return () => {
+      if (unsubExams) unsubExams();
+      if (unsubAttempts) unsubAttempts();
+    };
+  }, [user]);
 
   const fetchQuestionsForExam = async (examId: string) => {
     const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
@@ -564,7 +576,7 @@ export default function ExamsScreen() {
               </Text>
             )}
 
-            <TouchableOpacity style={[styles.finishBtn, {width: '100%'}]} onPress={() => { setShowResult(false); fetchData(); }}>
+            <TouchableOpacity style={[styles.finishBtn, {width: '100%'}]} onPress={() => { setShowResult(false); }}>
               <Text style={styles.finishBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
