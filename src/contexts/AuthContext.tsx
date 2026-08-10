@@ -222,9 +222,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    await firebaseSignOut(auth);
-    setUser(null);
-    router.replace('/(auth)/login');
+    try {
+      await firebaseSignOut(auth);
+    } catch (e) {
+      console.warn("Firebase sign out error:", e);
+    } finally {
+      setUser(null);
+      router.replace('/(auth)/login');
+    }
   };
 
   return (
