@@ -19,6 +19,7 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [address, setAddress] = useState('');
+  const [dob, setDob] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -110,6 +111,7 @@ export default function RegisterScreen() {
         demoEndDate: demoEndDate,
         demoDays: demoDays,
         batchIds: [],
+        dob: dob.trim(),
         createdAt: now,
         updatedAt: now
       });
@@ -126,6 +128,7 @@ export default function RegisterScreen() {
         phone: cleanMobile,
         courseIds: [],
         batchIds: [],
+        dob: dob.trim(),
         joiningDate: now,
         status: 'active'
       });
@@ -251,6 +254,15 @@ export default function RegisterScreen() {
             placeholderTextColor={COLORS.textLight}
             value={address}
             onChangeText={setAddress}
+          />
+
+          <Text style={styles.label}>Date of Birth (Optional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor={COLORS.textLight}
+            value={dob}
+            onChangeText={setDob}
           />
 
           <TouchableOpacity 

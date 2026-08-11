@@ -28,6 +28,11 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Notifications & Fee State
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [feeDueDate, setFeeDueDate] = useState<string>('');
+
   // Available Courses & Booking State
   const [availableCourses, setAvailableCourses] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -221,6 +226,112 @@ export default function DashboardScreen() {
           }
         } catch (e) {}
       }
+
+      // Notifications Generation
+      let fetchedNotifications: any[] = [];
+
+      if (studentData && user.id) {
+        try {
+          const feeQ = query(collection(db, 'transactions'), where('studentId', '==', user.id));
+          const fSnap = await getDocs(feeQ);
+          const studentTransactions = fSnap.docs.map(d => ({id: d.id, ...d.data()}));
+          studentTransactions.sort((a: any, b: any) => {
+            const dateA = a.transactionDate?.toDate ? a.transactionDate.toDate().getTime() : 0;
+            const dateB = b.transactionDate?.toDate ? b.transactionDate.toDate().getTime() : 0;
+            return dateB - dateA;
+          });
+          
+          let latestNextDueDate = '';
+          if (studentTransactions.length > 0 && studentTransactions[0].nextDueDate) {
+            const dueVal = studentTransactions[0].nextDueDate;
+            if (typeof dueVal === 'string') latestNextDueDate = dueVal;
+            else if (dueVal && dueVal.toDate) latestNextDueDate = dueVal.toDate().toISOString().split('T')[0];
+          }
+          setFeeDueDate(latestNextDueDate);
+
+          if (latestNextDueDate) {
+            const dueDateTime = new Date(latestNextDueDate).getTime();
+            const nowTime = new Date().getTime();
+            const diffDays = Math.ceil((dueDateTime - nowTime) / (1000 * 3600 * 24));
+            if (diffDays <= 7 && diffDays >= 0) {
+               fetchedNotifications.push({ id: 'fee1', title: 'Fee Due Soon', description: `Your next fee installment is due on ${latestNextDueDate}.`, type: 'fee', date: new Date(latestNextDueDate) });
+            } else if (diffDays < 0) {
+               fetchedNotifications.push({ id: 'fee2', title: 'Fee Overdue', description: `Your fee was due on ${latestNextDueDate}. Please pay immediately.`, type: 'fee', date: new Date(latestNextDueDate) });
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (matchedBatch) {
+        // Fetch new notes
+        try {
+           const notesQ = query(collection(db, 'notes'), where('status', '==', 'published'));
+           const notesSnap = await getDocs(notesQ);
+           const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
+           notesSnap.forEach(d => {
+             const n = d.data();
+             if (n.batchId === matchedBatch.id || n.batchIds?.includes(matchedBatch.id) || n.batchName === matchedBatch.batchName) {
+               const nDate = n.createdAt?.toDate ? n.createdAt.toDate() : new Date(n.createdAt || Date.now());
+               if (nDate.getTime() > sevenDaysAgo) {
+                 fetchedNotifications.push({ id: d.id, title: 'New Note Added', description: n.title, type: 'note', date: nDate });
+               }
+             }
+           });
+        } catch(e) {}
+
+        // Fetch new exams
+        try {
+           const targetBatchIdentifiers = [matchedBatch.id];
+           if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
+           const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published']));
+           const examsSnap = await getDocs(examsQ);
+           const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
+           examsSnap.forEach(d => {
+             const ex = d.data();
+             const exDate = ex.createdAt?.toDate ? ex.createdAt.toDate() : new Date(ex.createdAt || Date.now());
+             if (exDate.getTime() > sevenDaysAgo) {
+               fetchedNotifications.push({ id: d.id, title: 'New Exam Published', description: ex.examTitle, type: 'exam', date: exDate });
+             }
+           });
+        } catch(e) {}
+
+        // Fetch Classmate Birthdays
+        try {
+           const usersQ = query(collection(db, 'users'), where('role', '==', 'student'));
+           const usersSnap = await getDocs(usersQ);
+           const today = new Date();
+           const todayDate = today.getDate();
+           const todayMonth = today.getMonth() + 1;
+
+           usersSnap.forEach(d => {
+             const u = d.data();
+             if (u.uid !== user.id && (u.batchId === matchedBatch.id || u.batchIds?.includes(matchedBatch.id))) {
+               if (u.dob) {
+                 let dobDate, dobMonth;
+                 if (typeof u.dob === 'string') {
+                    const parts = u.dob.split('/');
+                    if (parts.length >= 2) {
+                       dobDate = parseInt(parts[0], 10);
+                       dobMonth = parseInt(parts[1], 10);
+                    }
+                 } else if (u.dob.toDate) {
+                    const dobObj = u.dob.toDate();
+                    dobDate = dobObj.getDate();
+                    dobMonth = dobObj.getMonth() + 1;
+                 }
+
+                 if (dobDate === todayDate && dobMonth === todayMonth) {
+                    fetchedNotifications.push({ id: `bday_${d.id}`, title: 'Classmate Birthday!', description: `It is ${u.name}'s birthday today! Wish them well.`, type: 'birthday', date: today });
+                 }
+               }
+             }
+           });
+        } catch(e) {}
+      }
+
+      fetchedNotifications.sort((a,b) => b.date.getTime() - a.date.getTime());
+      setNotifications(fetchedNotifications);
+
     } catch (e) {
       console.error("Error fetching dashboard data:", e);
     } finally {
@@ -325,10 +436,27 @@ export default function DashboardScreen() {
   );
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
+    <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
+      {/* Header with Notification Icon */}
+      <View style={styles.headerArea}>
+        <View>
+          <Text style={styles.headerGreeting}>Hi, {user?.name?.split(' ')[0] || 'Student'} 👋</Text>
+          <Text style={styles.headerSubtitle}>Welcome to Speak Hub Dashboard</Text>
+        </View>
+        <TouchableOpacity style={styles.notificationIconBtn} onPress={() => setShowNotificationsModal(true)}>
+          <MaterialIcons name="notifications" size={26} color={COLORS.textDark} />
+          {notifications.length > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>{notifications.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView 
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
 
       <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
         {activeBatch ? (
@@ -374,6 +502,16 @@ export default function DashboardScreen() {
                 </View>
               )}
             </View>
+
+            {/* Fee Due Date Banner */}
+            {feeDueDate ? (
+              <View style={styles.feeDueBanner}>
+                <MaterialIcons name="warning" size={20} color="#b45309" />
+                <Text style={styles.feeDueText}>
+                  Fee Due Date: <Text style={{ fontWeight: 'bold' }}>{new Date(feeDueDate).toLocaleDateString()}</Text>
+                </Text>
+              </View>
+            ) : null}
 
             {/* Action Grid for Enrolled Batch Students */}
             <View style={[styles.grid, { marginBottom: 30 }]}>
@@ -585,13 +723,107 @@ export default function DashboardScreen() {
               )}
             </TouchableOpacity>
           </View>
+      </Modal>
+
+      {/* Notifications Modal */}
+      <Modal
+        visible={showNotificationsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowNotificationsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.notificationsModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notifications</Text>
+              <TouchableOpacity onPress={() => setShowNotificationsModal(false)}>
+                <MaterialIcons name="close" size={24} color={COLORS.textDark} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              {notifications.length > 0 ? (
+                notifications.map((notif, index) => {
+                  let iconName = "notifications";
+                  let iconColor = COLORS.primary;
+                  if (notif.type === 'fee') { iconName = "payment"; iconColor = "#eab308"; }
+                  if (notif.type === 'note') { iconName = "menu-book"; iconColor = "#3b82f6"; }
+                  if (notif.type === 'exam') { iconName = "edit-document"; iconColor = "#ef4444"; }
+                  if (notif.type === 'birthday') { iconName = "cake"; iconColor = "#ec4899"; }
+
+                  return (
+                    <View key={notif.id || index} style={styles.notificationItem}>
+                      <View style={[styles.notificationIconBg, { backgroundColor: iconColor + '20' }]}>
+                        <MaterialIcons name={iconName as any} size={20} color={iconColor} />
+                      </View>
+                      <View style={styles.notificationTextContainer}>
+                        <Text style={styles.notificationTitle}>{notif.title}</Text>
+                        <Text style={styles.notificationDesc}>{notif.description}</Text>
+                        <Text style={styles.notificationTime}>
+                          {notif.date ? notif.date.toLocaleDateString() : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyNotifications}>
+                  <MaterialIcons name="notifications-none" size={40} color={COLORS.textLight} />
+                  <Text style={styles.emptyNotificationsText}>No new notifications</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
         </View>
       </Modal>
+
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  headerArea: {
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 15,
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  headerGreeting: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMedium,
+    marginTop: 2,
+  },
+  notificationIconBtn: {
+    padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: COLORS.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.surface,
@@ -1031,4 +1263,70 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 15,
   },
+  feeDueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fde047',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 20,
+    gap: 8,
+  },
+  feeDueText: {
+    color: '#92400e',
+    fontSize: 13,
+  },
+  notificationsModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '90%',
+    minHeight: '50%',
+  },
+  notificationItem: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  notificationIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  notificationTextContainer: {
+    flex: 1,
+  },
+  notificationTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+  },
+  notificationDesc: {
+    fontSize: 13,
+    color: COLORS.textMedium,
+    marginTop: 2,
+  },
+  notificationTime: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    marginTop: 4,
+  },
+  emptyNotifications: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 50,
+  },
+  emptyNotificationsText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: COLORS.textMedium,
+  }
 });
