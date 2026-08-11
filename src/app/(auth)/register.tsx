@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '../../config/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, User as FirebaseAuthUser } from 'firebase/auth';
 import { doc, setDoc, addDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { MaterialIcons } from '@expo/vector-icons';
 import { validateName, validatePhoneNumber } from '../../utils/validation';
@@ -57,6 +57,7 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
+    let createdUser: FirebaseAuthUser | null = null;
     try {
       // Best-effort check if mobile number is already registered in Firestore
       try {
@@ -83,6 +84,7 @@ export default function RegisterScreen() {
       
       // 1. Create User Credential in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
+      createdUser = userCredential.user;
       const uid = userCredential.user.uid;
 
       const now = new Date();
@@ -113,30 +115,35 @@ export default function RegisterScreen() {
       });
 
       // 3. Create document in `students` collection (Authenticated write)
-      try {
-        const studentCode = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
-        await addDoc(collection(db, 'students'), {
-          studentCode,
-          userId: uid,
-          firstName: name.trim(),
-          lastName: '',
-          parentName: parentName.trim(),
-          parentOrHusbandName: parentName.trim(),
-          phone: cleanMobile,
-          courseIds: [],
-          batchIds: [],
-          joiningDate: now,
-          status: 'active'
-        });
-      } catch (studentDocErr) {
-        console.warn("Could not create auxiliary student record:", studentDocErr);
-      }
+      const studentCode = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
+      await addDoc(collection(db, 'students'), {
+        studentCode,
+        userId: uid,
+        firstName: name.trim(),
+        lastName: '',
+        parentName: parentName.trim(),
+        parentOrHusbandName: parentName.trim(),
+        phone: cleanMobile,
+        courseIds: [],
+        batchIds: [],
+        joiningDate: now,
+        status: 'active'
+      });
 
       setLoading(false);
       alert("Registration Successful! You now have 7 days demo access to watch courses.");
       router.replace('/(app)/dashboard');
     } catch (err: any) {
       console.error(err);
+      
+      if (createdUser) {
+        try {
+          await deleteUser(createdUser);
+        } catch (cleanupErr) {
+          console.error("Failed to cleanup auth user after db error", cleanupErr);
+        }
+      }
+
       setLoading(false);
       if (err.code === 'auth/email-already-in-use') {
         setError('This mobile number is already registered to another user. Each mobile number must be unique.');
@@ -147,10 +154,17 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
       
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
           <Text style={styles.title}>Student Registration</Text>
           <Text style={styles.subtitle}>Create your account to watch courses</Text>
@@ -256,7 +270,7 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

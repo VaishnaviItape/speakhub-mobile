@@ -46,6 +46,7 @@ export default function DashboardScreen() {
 
     let unsubUser: (() => void) | null = null;
     let unsubBatches: (() => void) | null = null;
+    let unsubCourses: (() => void) | null = null;
 
     setLoading(true);
     const userId = user.id || (user as any).uid;
@@ -78,9 +79,21 @@ export default function DashboardScreen() {
       }
     );
 
+    // 3. Real-time listener for courses collection (auto-updates course list)
+    unsubCourses = onSnapshot(
+      collection(db, 'courses'),
+      () => {
+        fetchDashboardData();
+      },
+      (err) => {
+        console.error("Courses snapshot error:", err);
+      }
+    );
+
     return () => {
       if (unsubUser) unsubUser();
       if (unsubBatches) unsubBatches();
+      if (unsubCourses) unsubCourses();
     };
   }, [user]);
 
