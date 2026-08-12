@@ -118,13 +118,13 @@ export default function ProfileScreen() {
         {
           text: 'Call',
           onPress: () =>
-            Linking.openURL('tel:+919876543210'),
+            Linking.openURL('tel:+919307829005'),
         },
         {
           text: 'WhatsApp',
           onPress: () =>
             Linking.openURL(
-              'https://wa.me/919876543210'
+              'https://wa.me/919307829005'
             ),
         },
         {
