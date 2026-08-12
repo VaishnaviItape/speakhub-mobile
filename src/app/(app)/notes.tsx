@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, getDoc, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -32,11 +33,11 @@ interface TopicGroup {
 
 export default function NotesScreen() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'all' | 'offline'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'recent' | 'saved'>('all');
+  const { showLoader, hideLoader } = useLoader();
   const [allNotes, setAllNotes] = useState<NoteItem[]>([]);
   const [downloadedNotes, setDownloadedNotes] = useState<NoteItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
   // Accordion Expand/Collapse State (Topic Name -> boolean)
@@ -60,10 +61,10 @@ export default function NotesScreen() {
 
   const fetchNotes = async () => {
     if (!user) {
-      setIsLoading(false);
+      hideLoader();
       return;
     }
-    setIsLoading(true);
+    showLoader();
     setIsAccessDenied(false);
     try {
       // 1. Get latest student record
@@ -86,7 +87,7 @@ export default function NotesScreen() {
       if (currentStatus !== 'active' && !isDemoActive) {
         setIsAccessDenied(true);
         setAllNotes([]);
-        setIsLoading(false);
+        hideLoader();
         return;
       }
 
@@ -145,7 +146,7 @@ export default function NotesScreen() {
     } catch (e) {
       console.error("Error fetching notes:", e);
     } finally {
-      setIsLoading(false);
+      hideLoader();
     }
   };
 
@@ -331,9 +332,7 @@ export default function NotesScreen() {
         </View>
       )}
 
-      {isLoading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} />
-      ) : activeTab === 'all' ? (
+      {activeTab === 'all' ? (
         /* TAB 1: ALL TOPICS & PARTS ACCORDION */
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           {groupedTopics.length === 0 ? (

@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Alert, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
   Linking,
   ActivityIndicator
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { db } from '../../config/firebase';
@@ -23,19 +24,19 @@ export default function ProfileScreen() {
 
   const [profileData, setProfileData] = useState<any>(null);
   const [batchName, setBatchName] = useState<string>('Unassigned Batch');
-  const [loading, setLoading] = useState<boolean>(true);
+  const { showLoader, hideLoader } = useLoader();
 
   useEffect(() => {
     if (user?.id) {
       fetchProfileData();
     } else {
-      setLoading(false);
+      hideLoader();
     }
   }, [user]);
 
   const fetchProfileData = async () => {
     try {
-      setLoading(true);
+      showLoader();
       const userDocRef = doc(db, 'users', user!.id);
       const userSnap = await getDoc(userDocRef);
 
@@ -67,7 +68,7 @@ export default function ProfileScreen() {
     } catch (e) {
       console.error("Error fetching profile data:", e);
     } finally {
-      setLoading(false);
+      hideLoader();
     }
   };
 
@@ -97,8 +98,8 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         {/* Top Header Card in Primary Brand Colors */}
-        <LinearGradient 
-          colors={[COLORS.primary, '#b91c1c']} 
+        <LinearGradient
+          colors={[COLORS.primary, '#b91c1c']}
           style={styles.headerCard}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -131,8 +132,8 @@ export default function ProfileScreen() {
 
           <View style={styles.menuListCard}>
             {/* 1. Fee Payments & Receipts */}
-            <TouchableOpacity 
-              style={styles.menuRow} 
+            <TouchableOpacity
+              style={styles.menuRow}
               onPress={() => router.push('/(app)/fees')}
               activeOpacity={0.7}
             >
@@ -149,8 +150,8 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
 
             {/* 2. Homework & Assignments */}
-            <TouchableOpacity 
-              style={styles.menuRow} 
+            <TouchableOpacity
+              style={styles.menuRow}
               onPress={() => router.push('/(app)/homework')}
               activeOpacity={0.7}
             >
@@ -167,8 +168,8 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
 
             {/* 3. Exams & Test Results */}
-            <TouchableOpacity 
-              style={styles.menuRow} 
+            <TouchableOpacity
+              style={styles.menuRow}
               onPress={() => router.push('/(app)/exams')}
               activeOpacity={0.7}
             >
@@ -185,8 +186,8 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
 
             {/* 4. Notes & Study Material */}
-            <TouchableOpacity 
-              style={styles.menuRow} 
+            <TouchableOpacity
+              style={styles.menuRow}
               onPress={() => router.push('/(app)/notes')}
               activeOpacity={0.7}
             >
@@ -203,8 +204,8 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
 
             {/* 5. Attendance Log */}
-            <TouchableOpacity 
-              style={styles.menuRow} 
+            <TouchableOpacity
+              style={styles.menuRow}
               onPress={() => router.push('/(app)/attendance')}
               activeOpacity={0.7}
             >
@@ -223,36 +224,30 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Account Details</Text>
 
           <View style={styles.detailsCard}>
-            {loading ? (
-              <ActivityIndicator color={COLORS.primary} style={{ padding: 20 }} />
-            ) : (
-              <>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Full Name</Text>
-                  <Text style={styles.detailValue}>{studentName}</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Parent / Guardian</Text>
-                  <Text style={styles.detailValue}>{parentNameDisplay}</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Registered Mobile</Text>
-                  <Text style={styles.detailValue}>{phone}</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Assigned Batch</Text>
-                  <Text style={styles.detailValue}>{batchName}</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Location / Address</Text>
-                  <Text style={styles.detailValue}>{address}</Text>
-                </View>
-              </>
-            )}
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Full Name</Text>
+              <Text style={styles.detailValue}>{studentName}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Parent / Guardian</Text>
+              <Text style={styles.detailValue}>{parentNameDisplay}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Registered Mobile</Text>
+              <Text style={styles.detailValue}>{phone}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Assigned Batch</Text>
+              <Text style={styles.detailValue}>{batchName}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Location / Address</Text>
+              <Text style={styles.detailValue}>{address}</Text>
+            </View>
           </View>
 
           {/* Help & Support Button */}
@@ -278,6 +273,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    paddingTop: 20
   },
   headerCard: {
     paddingTop: 36,

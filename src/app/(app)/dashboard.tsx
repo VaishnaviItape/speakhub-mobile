@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, Tabs } from "expo-router";
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
@@ -18,6 +18,7 @@ import {
 import { db } from "../../config/firebase";
 import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLoader } from "../../contexts/LoaderContext";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -25,7 +26,7 @@ export default function DashboardScreen() {
 
   const [activeBatch, setActiveBatch] = useState<any>(null);
   const [courseName, setCourseName] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+  const { showLoader, hideLoader } = useLoader();
   const [refreshing, setRefreshing] = useState(false);
 
   // Notifications & Fee State
@@ -53,7 +54,7 @@ export default function DashboardScreen() {
     let unsubBatches: (() => void) | null = null;
     let unsubCourses: (() => void) | null = null;
 
-    setLoading(true);
+    showLoader();
     const userId = user.id || (user as any).uid;
 
     if (userId) {
@@ -113,7 +114,7 @@ export default function DashboardScreen() {
           if (uSnap.exists()) {
             studentData = uSnap.data();
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const userPhone = user.phone || studentData.phone || studentData.mobile;
@@ -132,14 +133,14 @@ export default function DashboardScreen() {
                 studentData = { ...mSnap.docs[0].data(), ...studentData };
               }
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
 
       // Check student active status
       const currentStatus = studentData.status || user.status || 'active';
       const isActiveStatus = currentStatus === 'active';
-      
+
       // Check demo mode validity
       let isDemoActive = false;
       if (studentData.isDemoMode && studentData.demoEndDate) {
@@ -160,7 +161,7 @@ export default function DashboardScreen() {
           }
         });
         setAvailableCourses(fetchedCourses);
-      } catch (e) {}
+      } catch (e) { }
 
       // Collect all student batch & course identifiers
       const studentBatchKeys: string[] = [];
@@ -194,8 +195,8 @@ export default function DashboardScreen() {
 
       // Priority 1: Match by batch document ID or batchName
       if (studentBatchKeys.length > 0) {
-        matchedBatch = allBatches.find(b => 
-          studentBatchKeys.includes(b.id) || 
+        matchedBatch = allBatches.find(b =>
+          studentBatchKeys.includes(b.id) ||
           (b.batchName && studentBatchKeys.includes(b.batchName)) ||
           studentBatchKeys.some(k => b.batchName && b.batchName.toLowerCase().trim() === String(k).toLowerCase().trim())
         );
@@ -203,8 +204,8 @@ export default function DashboardScreen() {
 
       // Priority 2: Match by courseId or courseName
       if (!matchedBatch && studentCourseKeys.length > 0) {
-        matchedBatch = allBatches.find(b => 
-          studentCourseKeys.includes(b.courseId) || 
+        matchedBatch = allBatches.find(b =>
+          studentCourseKeys.includes(b.courseId) ||
           (b.courseName && studentCourseKeys.includes(b.courseName))
         );
       }
@@ -224,7 +225,7 @@ export default function DashboardScreen() {
           if (cSnap.exists()) {
             setCourseName(cSnap.data().courseName || '');
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       // Notifications Generation
@@ -234,13 +235,13 @@ export default function DashboardScreen() {
         try {
           const feeQ = query(collection(db, 'transactions'), where('studentId', '==', user.id));
           const fSnap = await getDocs(feeQ);
-          const studentTransactions = fSnap.docs.map(d => ({id: d.id, ...d.data()}));
+          const studentTransactions = fSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           studentTransactions.sort((a: any, b: any) => {
             const dateA = a.transactionDate?.toDate ? a.transactionDate.toDate().getTime() : 0;
             const dateB = b.transactionDate?.toDate ? b.transactionDate.toDate().getTime() : 0;
             return dateB - dateA;
           });
-          
+
           let latestNextDueDate = '';
           if (studentTransactions.length > 0 && studentTransactions[0].nextDueDate) {
             const dueVal = studentTransactions[0].nextDueDate;
@@ -254,88 +255,88 @@ export default function DashboardScreen() {
             const nowTime = new Date().getTime();
             const diffDays = Math.ceil((dueDateTime - nowTime) / (1000 * 3600 * 24));
             if (diffDays <= 7 && diffDays >= 0) {
-               fetchedNotifications.push({ id: 'fee1', title: 'Fee Due Soon', description: `Your next fee installment is due on ${latestNextDueDate}.`, type: 'fee', date: new Date(latestNextDueDate) });
+              fetchedNotifications.push({ id: 'fee1', title: 'Fee Due Soon', description: `Your next fee installment is due on ${latestNextDueDate}.`, type: 'fee', date: new Date(latestNextDueDate) });
             } else if (diffDays < 0) {
-               fetchedNotifications.push({ id: 'fee2', title: 'Fee Overdue', description: `Your fee was due on ${latestNextDueDate}. Please pay immediately.`, type: 'fee', date: new Date(latestNextDueDate) });
+              fetchedNotifications.push({ id: 'fee2', title: 'Fee Overdue', description: `Your fee was due on ${latestNextDueDate}. Please pay immediately.`, type: 'fee', date: new Date(latestNextDueDate) });
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       if (matchedBatch) {
         // Fetch new notes
         try {
-           const notesQ = query(collection(db, 'notes'), where('status', '==', 'published'));
-           const notesSnap = await getDocs(notesQ);
-           const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
-           notesSnap.forEach(d => {
-             const n = d.data();
-             if (n.batchId === matchedBatch.id || n.batchIds?.includes(matchedBatch.id) || n.batchName === matchedBatch.batchName) {
-               const nDate = n.createdAt?.toDate ? n.createdAt.toDate() : new Date(n.createdAt || Date.now());
-               if (nDate.getTime() > sevenDaysAgo) {
-                 fetchedNotifications.push({ id: d.id, title: 'New Note Added', description: n.title, type: 'note', date: nDate });
-               }
-             }
-           });
-        } catch(e) {}
+          const notesQ = query(collection(db, 'notes'), where('status', '==', 'published'));
+          const notesSnap = await getDocs(notesQ);
+          const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
+          notesSnap.forEach(d => {
+            const n = d.data();
+            if (n.batchId === matchedBatch.id || n.batchIds?.includes(matchedBatch.id) || n.batchName === matchedBatch.batchName) {
+              const nDate = n.createdAt?.toDate ? n.createdAt.toDate() : new Date(n.createdAt || Date.now());
+              if (nDate.getTime() > sevenDaysAgo) {
+                fetchedNotifications.push({ id: d.id, title: 'New Note Added', description: n.title, type: 'note', date: nDate });
+              }
+            }
+          });
+        } catch (e) { }
 
         // Fetch new exams
         try {
-           const targetBatchIdentifiers = [matchedBatch.id];
-           if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
-           const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published']));
-           const examsSnap = await getDocs(examsQ);
-           const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
-           examsSnap.forEach(d => {
-             const ex = d.data();
-             const exDate = ex.createdAt?.toDate ? ex.createdAt.toDate() : new Date(ex.createdAt || Date.now());
-             if (exDate.getTime() > sevenDaysAgo) {
-               fetchedNotifications.push({ id: d.id, title: 'New Exam Published', description: ex.examTitle, type: 'exam', date: exDate });
-             }
-           });
-        } catch(e) {}
+          const targetBatchIdentifiers = [matchedBatch.id];
+          if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
+          const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published']));
+          const examsSnap = await getDocs(examsQ);
+          const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
+          examsSnap.forEach(d => {
+            const ex = d.data();
+            const exDate = ex.createdAt?.toDate ? ex.createdAt.toDate() : new Date(ex.createdAt || Date.now());
+            if (exDate.getTime() > sevenDaysAgo) {
+              fetchedNotifications.push({ id: d.id, title: 'New Exam Published', description: ex.examTitle, type: 'exam', date: exDate });
+            }
+          });
+        } catch (e) { }
 
         // Fetch Classmate Birthdays
         try {
-           const usersQ = query(collection(db, 'users'), where('role', '==', 'student'));
-           const usersSnap = await getDocs(usersQ);
-           const today = new Date();
-           const todayDate = today.getDate();
-           const todayMonth = today.getMonth() + 1;
+          const usersQ = query(collection(db, 'users'), where('role', '==', 'student'));
+          const usersSnap = await getDocs(usersQ);
+          const today = new Date();
+          const todayDate = today.getDate();
+          const todayMonth = today.getMonth() + 1;
 
-           usersSnap.forEach(d => {
-             const u = d.data();
-             if (u.uid !== user.id && (u.batchId === matchedBatch.id || u.batchIds?.includes(matchedBatch.id))) {
-               if (u.dob) {
-                 let dobDate, dobMonth;
-                 if (typeof u.dob === 'string') {
-                    const parts = u.dob.split('/');
-                    if (parts.length >= 2) {
-                       dobDate = parseInt(parts[0], 10);
-                       dobMonth = parseInt(parts[1], 10);
-                    }
-                 } else if (u.dob.toDate) {
-                    const dobObj = u.dob.toDate();
-                    dobDate = dobObj.getDate();
-                    dobMonth = dobObj.getMonth() + 1;
-                 }
+          usersSnap.forEach(d => {
+            const u = d.data();
+            if (u.uid !== user.id && (u.batchId === matchedBatch.id || u.batchIds?.includes(matchedBatch.id))) {
+              if (u.dob) {
+                let dobDate, dobMonth;
+                if (typeof u.dob === 'string') {
+                  const parts = u.dob.split('/');
+                  if (parts.length >= 2) {
+                    dobDate = parseInt(parts[0], 10);
+                    dobMonth = parseInt(parts[1], 10);
+                  }
+                } else if (u.dob.toDate) {
+                  const dobObj = u.dob.toDate();
+                  dobDate = dobObj.getDate();
+                  dobMonth = dobObj.getMonth() + 1;
+                }
 
-                 if (dobDate === todayDate && dobMonth === todayMonth) {
-                    fetchedNotifications.push({ id: `bday_${d.id}`, title: 'Classmate Birthday!', description: `It is ${u.name}'s birthday today! Wish them well.`, type: 'birthday', date: today });
-                 }
-               }
-             }
-           });
-        } catch(e) {}
+                if (dobDate === todayDate && dobMonth === todayMonth) {
+                  fetchedNotifications.push({ id: `bday_${d.id}`, title: 'Classmate Birthday!', description: `It is ${u.name}'s birthday today! Wish them well.`, type: 'birthday', date: today });
+                }
+              }
+            }
+          });
+        } catch (e) { }
       }
 
-      fetchedNotifications.sort((a,b) => b.date.getTime() - a.date.getTime());
+      fetchedNotifications.sort((a, b) => b.date.getTime() - a.date.getTime());
       setNotifications(fetchedNotifications);
 
     } catch (e) {
       console.error("Error fetching dashboard data:", e);
     } finally {
-      setLoading(false);
+      hideLoader();
     }
   };
 
@@ -430,354 +431,379 @@ export default function DashboardScreen() {
     }
   };
 
-  const filteredCourses = availableCourses.filter(c => 
+  const filteredCourses = availableCourses.filter(c =>
     c.courseName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      {/* Header with Notification Icon */}
+      <Tabs.Screen 
+        options={{
+          headerRight: () => (
+            <TouchableOpacity 
+              style={{ marginRight: 16, padding: 4 }} 
+              onPress={() => setShowNotificationsModal(true)}
+            >
+              <MaterialIcons name="notifications" size={26} color={COLORS.textDark} />
+              {notifications.length > 0 && (
+                <View style={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  backgroundColor: '#ef4444',
+                  borderRadius: 10,
+                  width: 18,
+                  height: 18,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderWidth: 1.5,
+                  borderColor: COLORS.surface
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                    {notifications.length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )
+        }}
+      />
+      
+      {/* Header */}
       <View style={styles.headerArea}>
         <View>
           <Text style={styles.headerGreeting}>Hi, {user?.name?.split(' ')[0] || 'Student'} 👋</Text>
           <Text style={styles.headerSubtitle}>Welcome to Speak Hub Dashboard</Text>
         </View>
-        <TouchableOpacity style={styles.notificationIconBtn} onPress={() => setShowNotificationsModal(true)}>
-          <MaterialIcons name="notifications" size={26} color={COLORS.textDark} />
-          {notifications.length > 0 && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>{notifications.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
 
-      <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-        {activeBatch ? (
-          /* SECTION FOR ENROLLED STUDENTS WITH ASSIGNED BATCH */
-          <>
-            {/* Next Class Banner for Enrolled Batch Students */}
-            <View style={[styles.bannerCardContainer, { marginTop: 10, marginBottom: 20 }]}>
-              <View style={styles.bannerCard}>
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <Text style={styles.bannerTitle}>Next Class</Text>
-                  <Text style={styles.bannerSubtitle} numberOfLines={1}>
-                    {`${activeBatch.batchName}${courseName ? ` (${courseName})` : ''}`}
-                  </Text>
-                  {activeBatch?.status && (
-                    <Text style={{ fontSize: 11, color: COLORS.primary, marginTop: 2, fontWeight: '500' }}>
-                      Status: {activeBatch.status.toUpperCase()}
+        <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+          {activeBatch ? (
+            /* SECTION FOR ENROLLED STUDENTS WITH ASSIGNED BATCH */
+            <>
+              {/* Next Class Banner for Enrolled Batch Students */}
+              <View style={[styles.bannerCardContainer, { marginTop: 10, marginBottom: 20 }]}>
+                <View style={styles.bannerCard}>
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={styles.bannerTitle}>Next Class</Text>
+                    <Text style={styles.bannerSubtitle} numberOfLines={1}>
+                      {`${activeBatch.batchName}${courseName ? ` (${courseName})` : ''}`}
                     </Text>
-                  )}
+                    {activeBatch?.status && (
+                      <Text style={{ fontSize: 11, color: COLORS.primary, marginTop: 2, fontWeight: '500' }}>
+                        Status: {activeBatch.status.toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity style={styles.bannerButton} onPress={() => handleJoinClass()}>
+                    <Text style={styles.bannerButtonText}>Join</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.bannerButton} onPress={() => handleJoinClass()}>
-                  <Text style={styles.bannerButtonText}>Join</Text>
-                </TouchableOpacity>
+
+                {/* Explicit Meeting Link Row */}
+                {activeBatch?.meetingLink ? (
+                  <TouchableOpacity
+                    style={styles.meetingLinkRow}
+                    onPress={() => handleJoinClass(activeBatch.meetingLink)}
+                  >
+                    <MaterialIcons name="videocam" size={18} color={COLORS.primary} />
+                    <Text style={styles.meetingLinkText} numberOfLines={1}>
+                      {activeBatch.meetingLink}
+                    </Text>
+                    <MaterialIcons name="open-in-new" size={14} color={COLORS.primary} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.noMeetingLinkRow}>
+                    <MaterialIcons name="videocam-off" size={16} color={COLORS.textLight} />
+                    <Text style={styles.noMeetingLinkText}>
+                      No meeting link added yet
+                    </Text>
+                  </View>
+                )}
               </View>
 
-              {/* Explicit Meeting Link Row */}
-              {activeBatch?.meetingLink ? (
-                <TouchableOpacity 
-                  style={styles.meetingLinkRow} 
-                  onPress={() => handleJoinClass(activeBatch.meetingLink)}
-                >
-                  <MaterialIcons name="videocam" size={18} color={COLORS.primary} />
-                  <Text style={styles.meetingLinkText} numberOfLines={1}>
-                    {activeBatch.meetingLink}
-                  </Text>
-                  <MaterialIcons name="open-in-new" size={14} color={COLORS.primary} />
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.noMeetingLinkRow}>
-                  <MaterialIcons name="videocam-off" size={16} color={COLORS.textLight} />
-                  <Text style={styles.noMeetingLinkText}>
-                    No meeting link added yet
+              {/* Fee Due Date Banner */}
+              {feeDueDate ? (
+                <View style={styles.feeDueBanner}>
+                  <MaterialIcons name="warning" size={20} color="#b45309" />
+                  <Text style={styles.feeDueText}>
+                    Fee Due Date: <Text style={{ fontWeight: 'bold' }}>{new Date(feeDueDate).toLocaleDateString()}</Text>
                   </Text>
                 </View>
-              )}
-            </View>
+              ) : null}
 
-            {/* Fee Due Date Banner */}
-            {feeDueDate ? (
-              <View style={styles.feeDueBanner}>
-                <MaterialIcons name="warning" size={20} color="#b45309" />
-                <Text style={styles.feeDueText}>
-                  Fee Due Date: <Text style={{ fontWeight: 'bold' }}>{new Date(feeDueDate).toLocaleDateString()}</Text>
+              {/* Action Grid for Enrolled Batch Students */}
+              <View style={[styles.grid, { marginBottom: 30 }]}>
+                <TouchableOpacity
+                  style={styles.gridItem}
+                  onPress={() => router.push("/(app)/attendance")}
+                >
+                  <MaterialIcons
+                    name="event-available"
+                    size={26}
+                    color={COLORS.primary}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <Text style={styles.gridText}>Attendance</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.gridItem}
+                  onPress={() => router.push("/(app)/exams")}
+                >
+                  <MaterialIcons
+                    name="edit-document"
+                    size={26}
+                    color={COLORS.primary}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <Text style={styles.gridText}>Exams</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.gridItem}
+                  onPress={() => router.push("/(app)/homework")}
+                >
+                  <MaterialIcons
+                    name="menu-book"
+                    size={26}
+                    color={COLORS.primary}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <Text style={styles.gridText}>Homework</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.gridItem}
+                  onPress={() => router.push("/(app)/fees")}
+                >
+                  <MaterialIcons
+                    name="payment"
+                    size={26}
+                    color={COLORS.primary}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <Text style={styles.gridText}>Fees</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            /* SECTION FOR NEW JOINERS / UNASSIGNED STUDENTS */
+            <>
+              {/* Search Bar */}
+              <View style={styles.searchBarContainer}>
+                <MaterialIcons name="search" size={22} color={COLORS.textMedium} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search for courses..."
+                  placeholderTextColor={COLORS.textLight}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              {/* All Courses Section Title */}
+              <View style={styles.allCoursesHeader}>
+                <Text style={styles.allCoursesTitle}>All Courses</Text>
+                <Text style={styles.allCoursesCount}>
+                  {filteredCourses.length} {filteredCourses.length === 1 ? 'course' : 'courses'} available
                 </Text>
               </View>
-            ) : null}
 
-            {/* Action Grid for Enrolled Batch Students */}
-            <View style={[styles.grid, { marginBottom: 30 }]}>
-              <TouchableOpacity
-                style={styles.gridItem}
-                onPress={() => router.push("/(app)/attendance")}
-              >
-                <MaterialIcons
-                  name="event-available"
-                  size={26}
-                  color={COLORS.primary}
-                  style={{ marginBottom: 8 }}
-                />
-                <Text style={styles.gridText}>Attendance</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.gridItem}
-                onPress={() => router.push("/(app)/exams")}
-              >
-                <MaterialIcons
-                  name="edit-document"
-                  size={26}
-                  color={COLORS.primary}
-                  style={{ marginBottom: 8 }}
-                />
-                <Text style={styles.gridText}>Exams</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.gridItem}
-                onPress={() => router.push("/(app)/homework")}
-              >
-                <MaterialIcons
-                  name="menu-book"
-                  size={26}
-                  color={COLORS.primary}
-                  style={{ marginBottom: 8 }}
-                />
-                <Text style={styles.gridText}>Homework</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.gridItem}
-                onPress={() => router.push("/(app)/fees")}
-              >
-                <MaterialIcons
-                  name="payment"
-                  size={26}
-                  color={COLORS.primary}
-                  style={{ marginBottom: 8 }}
-                />
-                <Text style={styles.gridText}>Fees</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          /* SECTION FOR NEW JOINERS / UNASSIGNED STUDENTS */
-          <>
-            {/* Search Bar */}
-            <View style={styles.searchBarContainer}>
-              <MaterialIcons name="search" size={22} color={COLORS.textMedium} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search for courses..."
-                placeholderTextColor={COLORS.textLight}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
-
-            {/* All Courses Section Title */}
-            <View style={styles.allCoursesHeader}>
-              <Text style={styles.allCoursesTitle}>All Courses</Text>
-              <Text style={styles.allCoursesCount}>
-                {filteredCourses.length} {filteredCourses.length === 1 ? 'course' : 'courses'} available
-              </Text>
-            </View>
-
-            {/* Available Courses Cards List */}
-            {filteredCourses.length > 0 ? (
-              filteredCourses.map((course: any, index: number) => (
-                <View key={course.id || index} style={styles.courseCard}>
-                  {/* Top Banner Graphic Header */}
-                  <View style={[styles.courseCardBanner, { backgroundColor: COLORS.primary }]}>
-                    <View style={styles.badgeCapsule}>
-                      <MaterialIcons name="verified" size={12} color="#fff" />
-                      <Text style={styles.badgeCapsuleText}>{course.modeBadge || 'ONLINE / OFFLINE'}</Text>
-                    </View>
-                    <Text style={styles.bannerCourseTitle} numberOfLines={2}>
-                      {course.courseName ? course.courseName.toUpperCase() : 'SPEAK HUB COURSE'}
-                    </Text>
-                    <Text style={styles.bannerCourseTag}>SPEAK HUB ACADEMY</Text>
-                  </View>
-
-                  {/* Course Card Body */}
-                  <View style={styles.courseCardBody}>
-                    <View style={styles.courseCategoryRow}>
-                      <Text style={styles.courseCategoryText}>Spoken English & Communication</Text>
-                      <Text style={styles.courseLangText}>ENGLISH</Text>
+              {/* Available Courses Cards List */}
+              {filteredCourses.length > 0 ? (
+                filteredCourses.map((course: any, index: number) => (
+                  <View key={course.id || index} style={styles.courseCard}>
+                    {/* Top Banner Graphic Header */}
+                    <View style={[styles.courseCardBanner, { backgroundColor: COLORS.primary }]}>
+                      <View style={styles.badgeCapsule}>
+                        <MaterialIcons name="verified" size={12} color="#fff" />
+                        <Text style={styles.badgeCapsuleText}>{course.modeBadge || 'ONLINE / OFFLINE'}</Text>
+                      </View>
+                      <Text style={styles.bannerCourseTitle} numberOfLines={2}>
+                        {course.courseName ? course.courseName.toUpperCase() : 'SPEAK HUB COURSE'}
+                      </Text>
+                      <Text style={styles.bannerCourseTag}>SPEAK HUB ACADEMY</Text>
                     </View>
 
-                    <Text style={styles.courseCardName}>{course.courseName}</Text>
-                    <Text style={styles.courseCardDesc} numberOfLines={2}>
-                      {course.description || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
-                    </Text>
-
-                    {/* Footer Price & Buttons Row */}
-                    <View style={styles.courseCardFooter}>
-                      <View>
-                        <Text style={styles.coursePrice}>
-                          ₹{course.monthlyFee || '199'} <Text style={styles.coursePriceSub}>/ month</Text>
-                        </Text>
-                        <Text style={styles.courseDuration}>Duration: {course.duration || '3 Months'}</Text>
+                    {/* Course Card Body */}
+                    <View style={styles.courseCardBody}>
+                      <View style={styles.courseCategoryRow}>
+                        <Text style={styles.courseCategoryText}>Spoken English & Communication</Text>
+                        <Text style={styles.courseLangText}>ENGLISH</Text>
                       </View>
 
-                      <View style={styles.courseActionButtonsGroup}>
-                        {/* Watch Demo Button */}
-                        <TouchableOpacity 
-                          style={styles.watchDemoBtn} 
-                          onPress={() => handleWatchCourseDemo(course)}
-                        >
-                          <MaterialIcons name="play-circle-fill" size={16} color={COLORS.primary} />
-                          <Text style={styles.watchDemoBtnText}>Demo</Text>
-                        </TouchableOpacity>
+                      <Text style={styles.courseCardName}>{course.courseName}</Text>
+                      <Text style={styles.courseCardDesc} numberOfLines={2}>
+                        {course.description || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
+                      </Text>
 
-                        {/* Book A Seat Button */}
-                        <TouchableOpacity 
-                          style={styles.bookSeatBtn} 
-                          onPress={() => handleOpenBookingModal(course)}
-                        >
-                          <Text style={styles.bookSeatBtnText}>Book A Seat</Text>
-                        </TouchableOpacity>
+                      {/* Footer Price & Buttons Row */}
+                      <View style={styles.courseCardFooter}>
+                        <View>
+                          <Text style={styles.coursePrice}>
+                            ₹{course.monthlyFee || '199'} <Text style={styles.coursePriceSub}>/ month</Text>
+                          </Text>
+                          <Text style={styles.courseDuration}>Duration: {course.duration || '3 Months'}</Text>
+                        </View>
+
+                        <View style={styles.courseActionButtonsGroup}>
+                          {/* Watch Demo Button */}
+                          <TouchableOpacity
+                            style={styles.watchDemoBtn}
+                            onPress={() => handleWatchCourseDemo(course)}
+                          >
+                            <MaterialIcons name="play-circle-fill" size={16} color={COLORS.primary} />
+                            <Text style={styles.watchDemoBtnText}>Demo</Text>
+                          </TouchableOpacity>
+
+                          {/* Book A Seat Button */}
+                          <TouchableOpacity
+                            style={styles.bookSeatBtn}
+                            onPress={() => handleOpenBookingModal(course)}
+                          >
+                            <Text style={styles.bookSeatBtnText}>Book A Seat</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
                   </View>
-                </View>
-              ))
-            ) : (
-              <View style={styles.emptyCoursesBox}>
-                <MaterialIcons name="auto-stories" size={40} color={COLORS.textLight} />
-                <Text style={styles.emptyCoursesText}>No courses available right now</Text>
-              </View>
-            )}
-          </>
-        )}
-      </View>
-
-      {/* Book A Seat Modal */}
-      <Modal
-        visible={isBookingModalOpen}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setIsBookingModalOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Book A Seat</Text>
-              <TouchableOpacity onPress={() => setIsBookingModalOpen(false)}>
-                <MaterialIcons name="close" size={24} color={COLORS.textDark} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalCourseName}>
-              Course: {selectedCourseForBooking?.courseName}
-            </Text>
-
-            <Text style={styles.inputLabel}>Your Name *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter your name"
-              value={bookingName}
-              onChangeText={setBookingName}
-            />
-
-            <Text style={styles.inputLabel}>Parent / Guardian Name</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter parent / guardian name"
-              value={bookingParentName}
-              onChangeText={setBookingParentName}
-            />
-
-            <Text style={styles.inputLabel}>Phone Number *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Enter 10-digit phone number"
-              keyboardType="phone-pad"
-              value={bookingPhone}
-              onChangeText={setBookingPhone}
-            />
-
-            <Text style={styles.inputLabel}>Notes / Preferred Demo Time (Optional)</Text>
-            <TextInput
-              style={[styles.modalInput, { height: 70, textAlignVertical: 'top' }]}
-              placeholder="e.g. Prefer evening 6 PM batch..."
-              multiline={true}
-              value={bookingNotes}
-              onChangeText={setBookingNotes}
-            />
-
-            <TouchableOpacity 
-              style={styles.confirmBookingBtn}
-              onPress={handleSubmitSeatBooking}
-              disabled={isSubmittingBooking}
-            >
-              {isSubmittingBooking ? (
-                <ActivityIndicator color="#fff" />
+                ))
               ) : (
-                <Text style={styles.confirmBookingBtnText}>Confirm Seat Booking</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-      </Modal>
-
-      {/* Notifications Modal */}
-      <Modal
-        visible={showNotificationsModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowNotificationsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.notificationsModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Notifications</Text>
-              <TouchableOpacity onPress={() => setShowNotificationsModal(false)}>
-                <MaterialIcons name="close" size={24} color={COLORS.textDark} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ marginTop: 10 }} showsVerticalScrollIndicator={false}>
-              {notifications.length > 0 ? (
-                notifications.map((notif, index) => {
-                  let iconName = "notifications";
-                  let iconColor = COLORS.primary;
-                  if (notif.type === 'fee') { iconName = "payment"; iconColor = "#eab308"; }
-                  if (notif.type === 'note') { iconName = "menu-book"; iconColor = "#3b82f6"; }
-                  if (notif.type === 'exam') { iconName = "edit-document"; iconColor = "#ef4444"; }
-                  if (notif.type === 'birthday') { iconName = "cake"; iconColor = "#ec4899"; }
-
-                  return (
-                    <View key={notif.id || index} style={styles.notificationItem}>
-                      <View style={[styles.notificationIconBg, { backgroundColor: iconColor + '20' }]}>
-                        <MaterialIcons name={iconName as any} size={20} color={iconColor} />
-                      </View>
-                      <View style={styles.notificationTextContainer}>
-                        <Text style={styles.notificationTitle}>{notif.title}</Text>
-                        <Text style={styles.notificationDesc}>{notif.description}</Text>
-                        <Text style={styles.notificationTime}>
-                          {notif.date ? notif.date.toLocaleDateString() : ''}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <View style={styles.emptyNotifications}>
-                  <MaterialIcons name="notifications-none" size={40} color={COLORS.textLight} />
-                  <Text style={styles.emptyNotificationsText}>No new notifications</Text>
+                <View style={styles.emptyCoursesBox}>
+                  <MaterialIcons name="auto-stories" size={40} color={COLORS.textLight} />
+                  <Text style={styles.emptyCoursesText}>No courses available right now</Text>
                 </View>
               )}
-            </ScrollView>
-          </View>
+            </>
+          )}
         </View>
-      </Modal>
 
-    </ScrollView>
+        {/* Book A Seat Modal */}
+        <Modal
+          visible={isBookingModalOpen}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setIsBookingModalOpen(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Book A Seat</Text>
+                <TouchableOpacity onPress={() => setIsBookingModalOpen(false)}>
+                  <MaterialIcons name="close" size={24} color={COLORS.textDark} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalCourseName}>
+                Course: {selectedCourseForBooking?.courseName}
+              </Text>
+
+              <Text style={styles.inputLabel}>Your Name *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Enter your name"
+                value={bookingName}
+                onChangeText={setBookingName}
+              />
+
+              <Text style={styles.inputLabel}>Parent / Guardian Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Enter parent / guardian name"
+                value={bookingParentName}
+                onChangeText={setBookingParentName}
+              />
+
+              <Text style={styles.inputLabel}>Phone Number *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Enter 10-digit phone number"
+                keyboardType="phone-pad"
+                value={bookingPhone}
+                onChangeText={setBookingPhone}
+              />
+
+              <Text style={styles.inputLabel}>Notes / Preferred Demo Time (Optional)</Text>
+              <TextInput
+                style={[styles.modalInput, { height: 70, textAlignVertical: 'top' }]}
+                placeholder="e.g. Prefer evening 6 PM batch..."
+                multiline={true}
+                value={bookingNotes}
+                onChangeText={setBookingNotes}
+              />
+
+              <TouchableOpacity
+                style={styles.confirmBookingBtn}
+                onPress={handleSubmitSeatBooking}
+                disabled={isSubmittingBooking}
+              >
+                {isSubmittingBooking ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmBookingBtnText}>Confirm Seat Booking</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Notifications Modal */}
+        <Modal
+          visible={showNotificationsModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowNotificationsModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.notificationsModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Notifications</Text>
+                <TouchableOpacity onPress={() => setShowNotificationsModal(false)}>
+                  <MaterialIcons name="close" size={24} color={COLORS.textDark} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ marginTop: 10 }} showsVerticalScrollIndicator={false}>
+                {notifications.length > 0 ? (
+                  notifications.map((notif, index) => {
+                    let iconName = "notifications";
+                    let iconColor = COLORS.primary;
+                    if (notif.type === 'fee') { iconName = "payment"; iconColor = "#eab308"; }
+                    if (notif.type === 'note') { iconName = "menu-book"; iconColor = "#3b82f6"; }
+                    if (notif.type === 'exam') { iconName = "edit-document"; iconColor = "#ef4444"; }
+                    if (notif.type === 'birthday') { iconName = "cake"; iconColor = "#ec4899"; }
+
+                    return (
+                      <View key={notif.id || index} style={styles.notificationItem}>
+                        <View style={[styles.notificationIconBg, { backgroundColor: iconColor + '20' }]}>
+                          <MaterialIcons name={iconName as any} size={20} color={iconColor} />
+                        </View>
+                        <View style={styles.notificationTextContainer}>
+                          <Text style={styles.notificationTitle}>{notif.title}</Text>
+                          <Text style={styles.notificationDesc}>{notif.description}</Text>
+                          <Text style={styles.notificationTime}>
+                            {notif.date ? notif.date.toLocaleDateString() : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <View style={styles.emptyNotifications}>
+                    <MaterialIcons name="notifications-none" size={40} color={COLORS.textLight} />
+                    <Text style={styles.emptyNotificationsText}>No new notifications</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+      </ScrollView>
     </View>
   );
 }

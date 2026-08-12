@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -11,7 +12,7 @@ export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { showLoader, hideLoader } = useLoader();
   const [error, setError] = useState('');
 
   const { loginWithEmail } = useAuth();
@@ -29,11 +30,11 @@ export default function LoginScreen() {
       return;
     }
     
-    setLoading(true);
+    showLoader();
     setError('');
     
     const result = await loginWithEmail(mobile.trim(), password);
-    setLoading(false);
+    hideLoader();
     
     if (result.success) {
       if (result.forcePasswordChange) {
@@ -105,13 +106,8 @@ export default function LoginScreen() {
         <TouchableOpacity 
           style={styles.button} 
           onPress={handleLogin}
-          disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
+          <Text style={styles.buttonText}>Login</Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push('/(auth)/register')} style={styles.backButton}>

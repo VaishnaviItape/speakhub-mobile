@@ -11,6 +11,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { db } from '../../config/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 
@@ -26,7 +27,7 @@ interface AttendanceRecord {
 export default function AttendanceScreen() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<AttendanceRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { showLoader, hideLoader } = useLoader();
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [activeFilter, setActiveFilter] = useState<'All' | 'Present' | 'Absent'>('All');
 
@@ -40,7 +41,7 @@ export default function AttendanceScreen() {
     const userId = user.id || (user as any).uid;
     if (!userId) return;
 
-    setIsLoading(true);
+    showLoader();
 
     // REAL-TIME FIRESTORE LISTENER
     const q = query(collection(db, 'attendance'), where('studentId', '==', userId));
@@ -76,11 +77,11 @@ export default function AttendanceScreen() {
 
         list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setLogs(list);
-        setIsLoading(false);
+        hideLoader();
       },
       (error) => {
         console.error("Realtime attendance snapshot error:", error);
-        setIsLoading(false);
+        hideLoader();
       }
     );
 
@@ -251,12 +252,7 @@ export default function AttendanceScreen() {
         </TouchableOpacity>
       </View>
 
-      {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Syncing attendance live...</Text>
-        </View>
-      ) : viewMode === 'calendar' ? (
+      {viewMode === 'calendar' ? (
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           {/* Monthly Calendar Header */}
           <View style={styles.calendarCard}>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '../../config/firebase';
@@ -20,7 +21,7 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [address, setAddress] = useState('');
   const [dob, setDob] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { showLoader, hideLoader } = useLoader();
   const [error, setError] = useState('');
 
   const router = useRouter();
@@ -57,7 +58,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    setLoading(true);
+    showLoader();
     let createdUser: FirebaseAuthUser | null = null;
     try {
       // Best-effort check if mobile number is already registered in Firestore
@@ -65,7 +66,7 @@ export default function RegisterScreen() {
         const phoneQuery = query(collection(db, 'users'), where('phone', '==', cleanMobile));
         const phoneSnap = await getDocs(phoneQuery);
         if (!phoneSnap.empty) {
-          setLoading(false);
+          hideLoader();
           setError("This mobile number is already registered to another user. Each mobile number must be unique.");
           return;
         }
@@ -73,7 +74,7 @@ export default function RegisterScreen() {
         const mobileQuery = query(collection(db, 'users'), where('mobile', '==', cleanMobile));
         const mobileSnap = await getDocs(mobileQuery);
         if (!mobileSnap.empty) {
-          setLoading(false);
+          hideLoader();
           setError("This mobile number is already registered to another user. Each mobile number must be unique.");
           return;
         }
@@ -133,7 +134,7 @@ export default function RegisterScreen() {
         status: 'active'
       });
 
-      setLoading(false);
+      hideLoader();
       alert("Registration Successful! You now have 7 days demo access to watch courses.");
       router.replace('/(app)/dashboard');
     } catch (err: any) {
@@ -147,7 +148,7 @@ export default function RegisterScreen() {
         }
       }
 
-      setLoading(false);
+      hideLoader();
       if (err.code === 'auth/email-already-in-use') {
         setError('This mobile number is already registered to another user. Each mobile number must be unique.');
       } else {
@@ -268,13 +269,8 @@ export default function RegisterScreen() {
           <TouchableOpacity 
             style={styles.button} 
             onPress={handleRegister}
-            disabled={loading}
           >
-            {loading ? (
-              <ActivityIndicator color={COLORS.textInverse} />
-            ) : (
-              <Text style={styles.buttonText}>Register & Watch Courses</Text>
-            )}
+            <Text style={styles.buttonText}>Register & Watch Courses</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.backButton}>

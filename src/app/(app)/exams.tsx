@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert, AppState, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert, AppState, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, where, addDoc } from 'firebase/firestore';
 
@@ -12,8 +13,8 @@ export default function ExamsScreen() {
   const [exams, setExams] = useState<any[]>([]);
   const [attempts, setAttempts] = useState<any[]>([]);
   const [questions, setQuestions] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Live' | 'Completed' | 'Missed'>('Live');
+  const { showLoader, hideLoader } = useLoader();
 
   // Exam State
   const [examStarted, setExamStarted] = useState(false);
@@ -43,7 +44,7 @@ export default function ExamsScreen() {
 
     const setupListeners = async () => {
       if (!user) return;
-      setIsLoading(true);
+      showLoader();
       try {
         const { doc, getDoc, getDocs, onSnapshot } = await import('firebase/firestore');
         let studentBatchIdOrName = user.batchIds?.[0];
@@ -66,7 +67,7 @@ export default function ExamsScreen() {
         if (currentStatus !== 'active' && !isDemoActive) {
           setExams([]);
           setAttempts([]);
-          setIsLoading(false);
+          hideLoader();
           return;
         }
 
@@ -110,7 +111,7 @@ export default function ExamsScreen() {
       } catch (error) {
         console.error("Error setting up exam listeners:", error);
       } finally {
-        setIsLoading(false);
+        hideLoader();
       }
     };
 
@@ -391,9 +392,6 @@ export default function ExamsScreen() {
         ))}
       </View>
 
-      {isLoading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 50}} />
-      ) : (
         <FlatList 
           data={currentList}
           renderItem={renderExamCard}
@@ -401,7 +399,6 @@ export default function ExamsScreen() {
           contentContainerStyle={{ padding: 20 }}
           ListEmptyComponent={<Text style={styles.emptyText}>No exams found.</Text>}
         />
-      )}
 
       {/* Pre-Exam Consent Modal */}
       <Modal visible={showConsent} animationType="fade" transparent={true}>

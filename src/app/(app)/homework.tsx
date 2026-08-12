@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { db, storage } from '../../config/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -14,8 +15,8 @@ export default function HomeworkScreen() {
   const { user } = useAuth();
   const [homeworks, setHomeworks] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'Pending' | 'Submitted' | 'Reviewed' | 'Overdue'>('Pending');
+  const { showLoader, hideLoader } = useLoader();
 
   // Submission State
   const [selectedHw, setSelectedHw] = useState<any>(null);
@@ -38,10 +39,10 @@ export default function HomeworkScreen() {
 
   const fetchData = async () => {
     if (!user) {
-      setIsLoading(false);
+      hideLoader();
       return;
     }
-    setIsLoading(true);
+    showLoader();
     try {
       // 1. Get latest student record
       const { doc, getDoc } = await import('firebase/firestore');
@@ -65,7 +66,7 @@ export default function HomeworkScreen() {
 
       if (currentStatus !== 'active' && !isDemoActive) {
         setHomeworks([]);
-        setIsLoading(false);
+        hideLoader();
         return;
       }
 
@@ -143,7 +144,7 @@ export default function HomeworkScreen() {
     } catch (e) {
       console.error(e);
     } finally {
-      setIsLoading(false);
+      hideLoader();
     }
   };
 
@@ -362,9 +363,6 @@ export default function HomeworkScreen() {
         ))}
       </View>
 
-      {isLoading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 50}} />
-      ) : (
         <FlatList 
           data={currentList}
           renderItem={renderHomeworkCard}
@@ -372,7 +370,6 @@ export default function HomeworkScreen() {
           contentContainerStyle={{ padding: 20 }}
           ListEmptyComponent={<Text style={styles.emptyText}>No homework found in this category.</Text>}
         />
-      )}
 
       {/* Submission & Feedback Modal */}
       <Modal visible={isSubmitModalOpen} animationType="slide">

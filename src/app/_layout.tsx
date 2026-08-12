@@ -72,10 +72,14 @@ function RootLayoutNav() {
   );
 }
 
+import { LoaderProvider } from '../contexts/LoaderContext';
+
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <LoaderProvider>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </LoaderProvider>
   );
 }

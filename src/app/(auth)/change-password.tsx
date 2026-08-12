@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { auth, db } from '../../config/firebase';
 import { updatePassword } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -12,7 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 export default function ChangePasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { showLoader, hideLoader } = useLoader();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -27,7 +28,7 @@ export default function ChangePasswordScreen() {
       return;
     }
 
-    setLoading(true);
+    showLoader();
     try {
       // Update Auth Password
       await updatePassword(auth.currentUser, newPassword);
@@ -36,12 +37,12 @@ export default function ChangePasswordScreen() {
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, { forcePasswordChange: false });
 
-      setLoading(false);
+      hideLoader();
       alert("Password updated successfully!");
       router.replace('/(app)/dashboard');
     } catch (error: any) {
       console.error(error);
-      setLoading(false);
+      hideLoader();
       alert("Failed to update password. You may need to log out and log back in to verify your credentials.");
     }
   };
@@ -86,13 +87,9 @@ export default function ChangePasswordScreen() {
         <TouchableOpacity 
           style={styles.button} 
           onPress={handleChangePassword}
-          disabled={loading || newPassword.length < 6}
+          disabled={newPassword.length < 6}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Update Password</Text>
-          )}
+          <Text style={styles.buttonText}>Update Password</Text>
         </TouchableOpacity>
         </View>
       </ScrollView>

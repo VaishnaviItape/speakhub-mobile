@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLoader } from '../../contexts/LoaderContext';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, getDoc, doc, onSnapshot } from 'firebase/firestore';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -12,7 +13,7 @@ import * as Sharing from 'expo-sharing';
 export default function FeesScreen() {
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { showLoader, hideLoader } = useLoader();
   const [courseInfo, setCourseInfo] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [latestNextDueDate, setLatestNextDueDate] = useState<string>('');
@@ -20,14 +21,14 @@ export default function FeesScreen() {
 
   useEffect(() => {
     if (!user) {
-      setIsLoading(false);
+      hideLoader();
       return;
     }
 
     let unsubscribeFees: () => void = () => {};
 
     const setupRealtimeFees = async () => {
-      setIsLoading(true);
+      showLoader();
       try {
         // 1. Collect all student identifier keys
         const studentIds: string[] = [];
@@ -86,15 +87,15 @@ export default function FeesScreen() {
               setLatestNextDueDate(d.toISOString().split('T')[0]);
             }
           }
-          setIsLoading(false);
+          hideLoader();
         }, (err) => {
           console.error("Realtime fee transactions listener error:", err);
-          setIsLoading(false);
+          hideLoader();
         });
 
       } catch (e) {
         console.error("Error setting up fees listener:", e);
-        setIsLoading(false);
+        hideLoader();
       }
     };
 
@@ -564,9 +565,7 @@ export default function FeesScreen() {
         <Text style={styles.sectionTitle}>Fee Payment History & Receipts</Text>
       </View>
 
-      {isLoading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 30 }} />
-      ) : transactions.length === 0 ? (
+      {transactions.length === 0 ? (
         <View style={styles.emptyCard}>
           <MaterialIcons name="receipt" size={40} color={COLORS.textLight} />
           <Text style={styles.emptyTitle}>No Fee Receipts Found</Text>
