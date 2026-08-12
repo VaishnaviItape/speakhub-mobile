@@ -1052,7 +1052,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginTop: 25,
+    marginTop: 0,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
