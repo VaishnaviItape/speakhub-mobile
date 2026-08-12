@@ -438,11 +438,11 @@ export default function DashboardScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
-      <Tabs.Screen 
+      <Tabs.Screen
         options={{
           headerRight: () => (
-            <TouchableOpacity 
-              style={{ marginRight: 16, padding: 4 }} 
+            <TouchableOpacity
+              style={{ marginRight: 16, padding: 4 }}
               onPress={() => setShowNotificationsModal(true)}
             >
               <MaterialIcons name="notifications" size={26} color={COLORS.textDark} />
@@ -469,7 +469,7 @@ export default function DashboardScreen() {
           )
         }}
       />
-      
+
       {/* Header */}
       <View style={styles.headerArea}>
         <View>
@@ -811,7 +811,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   headerArea: {
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 20,
     paddingBottom: 15,
     backgroundColor: '#fff',
     flexDirection: 'row',

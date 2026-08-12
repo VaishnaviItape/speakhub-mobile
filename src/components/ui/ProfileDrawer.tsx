@@ -10,7 +10,8 @@ import {
   Dimensions, 
   Share, 
   Alert, 
-  Linking 
+  Linking,
+  PanResponder
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -38,6 +39,21 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Claim gesture if horizontal swipe distance is greater than 20 and greater than vertical movement
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If swiped left by at least 50 pixels
+        if (gestureState.dx < -50) {
+          onClose();
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     if (isOpen) {
@@ -123,7 +139,10 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
         <TouchableOpacity style={styles.background} activeOpacity={1} onPress={onClose} />
         
         {/* Sliding Drawer */}
-        <Animated.View style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}>
+        <Animated.View 
+          style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}
+          {...panResponder.panHandlers}
+        >
           <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
             <View style={styles.menuWrapper}>
               {/* Top User Info Header */}
