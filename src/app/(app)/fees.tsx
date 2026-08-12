@@ -553,11 +553,6 @@ export default function FeesScreen() {
         </View>
       ) : null}
 
-      {/* Pay Online Button */}
-      <TouchableOpacity style={styles.payButton} onPress={openPaymentInstructions} activeOpacity={0.8}>
-        <MaterialIcons name="payment" size={20} color="#ffffff" />
-        <Text style={styles.payButtonText}>Payment Info & Bank Details</Text>
-      </TouchableOpacity>
 
       {/* Fee Payment Transactions List */}
       <View style={styles.sectionHeaderRow}>

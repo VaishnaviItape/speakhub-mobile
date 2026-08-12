@@ -1,22 +1,41 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity, 
+  Linking, 
+  LayoutAnimation, 
+  Platform, 
+  UIManager
+} from 'react-native';
+import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
-import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function SupportScreen() {
-  const router = useRouter();
+  const [expandedFaqIndex, setExpandedFaqIndex] = useState<number | null>(null);
 
   const handleCall = () => {
-    Linking.openURL("tel:+919876543210");
+    Linking.openURL("tel:+919307829005");
   };
 
   const handleWhatsApp = () => {
-    Linking.openURL("https://wa.me/919876543210");
+    Linking.openURL("https://wa.me/919307829005");
   };
 
   const handleEmail = () => {
     Linking.openURL("mailto:support@speakhubacademy.com");
+  };
+
+  const toggleFaq = (index: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedFaqIndex(expandedFaqIndex === index ? null : index);
   };
 
   const faqs = [
@@ -39,98 +58,155 @@ export default function SupportScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header Banner */}
-      <View style={styles.headerBanner}>
-        <MaterialIcons name="support-agent" size={64} color={COLORS.primary} style={styles.headerIcon} />
-        <Text style={styles.headerTitle}>How can we help?</Text>
-        <Text style={styles.headerSubtitle}>Connect directly with our support team or browse our FAQs.</Text>
-      </View>
-
-      {/* Quick Contacts */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Contact Options</Text>
+    <View style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         
-        <View style={styles.contactGrid}>
-          <TouchableOpacity style={[styles.contactCard, { backgroundColor: '#eef2ff', borderColor: '#c7d2fe' }]} onPress={handleCall}>
-            <MaterialIcons name="phone" size={32} color="#4f46e5" />
-            <Text style={[styles.contactCardTitle, { color: '#312e81' }]}>Call Us</Text>
-            <Text style={[styles.contactCardSub, { color: '#4f46e5' }]}>+91 98765 43210</Text>
-          </TouchableOpacity>
+        {/* Modern Gradient Header */}
+        <LinearGradient
+          colors={[COLORS.primary, '#9f1239']}
+          style={styles.headerGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons name="support-agent" size={54} color="#ffffff" />
+          </View>
+          <Text style={styles.headerTitle}>How can we help?</Text>
+          <Text style={styles.headerSubtitle}>
+            Our team is here to support your learning journey. Choose an option below to connect with us.
+          </Text>
+        </LinearGradient>
 
-          <TouchableOpacity style={[styles.contactCard, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]} onPress={handleWhatsApp}>
-            <MaterialIcons name="chat" size={32} color="#059669" />
-            <Text style={[styles.contactCardTitle, { color: '#064e3b' }]}>WhatsApp</Text>
-            <Text style={[styles.contactCardSub, { color: '#059669' }]}>Chat Now</Text>
+        {/* Quick Contacts */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Get in Touch</Text>
+          
+          <View style={styles.contactGrid}>
+            <TouchableOpacity 
+              style={[styles.contactCard, { backgroundColor: '#ffffff' }]} 
+              onPress={handleCall}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: '#eef2ff' }]}>
+                <MaterialIcons name="phone-in-talk" size={26} color="#4f46e5" />
+              </View>
+              <Text style={styles.contactCardTitle}>Call Support</Text>
+              <Text style={styles.contactCardSub}>+91 93078 29005</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.contactCard, { backgroundColor: '#ffffff' }]} 
+              onPress={handleWhatsApp}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: '#ecfdf5' }]}>
+                <FontAwesome5 name="whatsapp" size={26} color="#059669" />
+              </View>
+              <Text style={styles.contactCardTitle}>WhatsApp</Text>
+              <Text style={styles.contactCardSub}>Chat with us</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.emailCard} onPress={handleEmail} activeOpacity={0.8}>
+            <View style={[styles.iconWrapper, { backgroundColor: COLORS.primaryLightest || '#ffe4e6', marginRight: 16 }]}>
+              <MaterialIcons name="mail-outline" size={26} color={COLORS.primary} />
+            </View>
+            <View style={styles.emailCardText}>
+              <Text style={styles.emailCardTitle}>Send an Email</Text>
+              <Text style={styles.emailCardSub}>support@speakhubacademy.com</Text>
+            </View>
+            <MaterialIcons name="arrow-forward-ios" size={16} color={COLORS.textLight} />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.emailCard} onPress={handleEmail}>
-          <MaterialIcons name="email" size={24} color={COLORS.primary} />
-          <View style={styles.emailCardText}>
-            <Text style={styles.emailCardTitle}>Email Support</Text>
-            <Text style={styles.emailCardSub}>support@speakhubacademy.com</Text>
+        {/* FAQs */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+          
+          <View style={styles.faqContainer}>
+            {faqs.map((faq, index) => {
+              const isExpanded = expandedFaqIndex === index;
+              return (
+                <TouchableOpacity 
+                  key={index} 
+                  style={[styles.faqCard, isExpanded && styles.faqCardExpanded]} 
+                  onPress={() => toggleFaq(index)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.faqHeader}>
+                    <Text style={[styles.faqQuestion, isExpanded && { color: COLORS.primary }]}>
+                      {faq.q}
+                    </Text>
+                    <MaterialIcons 
+                      name={isExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+                      size={24} 
+                      color={isExpanded ? COLORS.primary : COLORS.textLight} 
+                    />
+                  </View>
+                  {isExpanded && (
+                    <Text style={styles.faqAnswer}>{faq.a}</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          <MaterialIcons name="chevron-right" size={24} color={COLORS.textLight} />
-        </TouchableOpacity>
-      </View>
-
-      {/* FAQs */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+        </View>
         
-        {faqs.map((faq, index) => (
-          <View key={index} style={styles.faqCard}>
-            <Text style={styles.faqQuestion}>{faq.q}</Text>
-            <Text style={styles.faqAnswer}>{faq.a}</Text>
-          </View>
-        ))}
-      </View>
-      
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#f8fafc',
   },
-  headerBanner: {
-    backgroundColor: '#fff',
-    padding: 30,
+  headerGradient: {
+    paddingTop: 50,
+    paddingBottom: 40,
+    paddingHorizontal: 30,
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    marginBottom: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    marginBottom: 25,
   },
-  headerIcon: {
+  headerIconContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
-    opacity: 0.9,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    color: COLORS.textDark,
+    color: '#ffffff',
     marginBottom: 8,
   },
   headerSubtitle: {
     fontSize: 15,
-    color: COLORS.textLight,
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 20,
   },
   section: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 35,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#1e293b',
     marginBottom: 16,
+    letterSpacing: 0.3,
   },
   contactGrid: {
     flexDirection: 'row',
@@ -139,62 +215,102 @@ const styles = StyleSheet.create({
   },
   contactCard: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  iconWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   contactCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 12,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1e293b',
     marginBottom: 4,
   },
   contactCardSub: {
     fontSize: 13,
     fontWeight: '600',
+    color: '#64748b',
   },
   emailCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     borderWidth: 1,
     borderColor: '#f1f5f9',
   },
   emailCardText: {
     flex: 1,
-    marginLeft: 16,
   },
   emailCardTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
+    fontWeight: '700',
+    color: '#1e293b',
   },
   emailCardSub: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    marginTop: 2,
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 3,
+    fontWeight: '500',
   },
-  faqCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+  faqContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     borderWidth: 1,
     borderColor: '#f1f5f9',
   },
+  faqCard: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  faqCardExpanded: {
+    backgroundColor: '#fafaf9',
+    borderRadius: 12,
+  },
+  faqHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   faqQuestion: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-    marginBottom: 8,
+    fontWeight: '700',
+    color: '#334155',
+    flex: 1,
+    paddingRight: 10,
+    lineHeight: 22,
   },
   faqAnswer: {
     fontSize: 14,
-    color: COLORS.textLight,
+    color: '#64748b',
     lineHeight: 22,
+    marginTop: 12,
   }
 });
