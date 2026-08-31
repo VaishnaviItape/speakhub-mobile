@@ -63,7 +63,7 @@ export default function SupportScreen() {
         
         {/* Modern Gradient Header */}
         <LinearGradient
-          colors={[COLORS.primary, '#9f1239']}
+          colors={[COLORS.primary, COLORS.primaryDark || '#3730A3']}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}

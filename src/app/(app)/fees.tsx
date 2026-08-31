@@ -175,29 +175,29 @@ export default function FeesScreen() {
                 z-index: 1;
               }
 
-              /* Header Wrapper with Crimson Red Accent Bar */
+              /* Header Wrapper with Indigo Accent Bar */
               .header-wrapper { 
                 display: flex; 
                 justify-content: space-between; 
                 align-items: flex-start; 
                 padding-bottom: 16px; 
-                border-bottom: 3px solid #E31837; 
+                border-bottom: 3px solid #4F46E5; 
                 margin-bottom: 16px; 
               }
 
               .brand-title { 
                 font-size: 24px; 
                 font-weight: 800; 
-                color: #E31837; 
+                color: #4F46E5; 
                 margin: 0; 
-                letter-spacing: -0.02em;
+                letter-spacing: -0.02em; 
               }
 
               .brand-tagline { 
                 font-size: 11px; 
                 color: #64748b; 
                 margin: 3px 0 0 0; 
-                font-weight: 600;
+                font-weight: 600; 
               }
 
               .academy-address-block { 
@@ -214,8 +214,8 @@ export default function FeesScreen() {
                 display: flex; 
                 justify-content: space-between; 
                 align-items: center; 
-                background-color: #fff0f0; 
-                border: 1px solid #fecdd3; 
+                background-color: #eef2ff; 
+                border: 1px solid #c7d2fe; 
                 padding: 10px 16px; 
                 border-radius: 8px; 
                 margin-bottom: 16px; 
@@ -224,9 +224,9 @@ export default function FeesScreen() {
               .main-title { 
                 font-size: 16px; 
                 font-weight: 800; 
-                color: #E31837; 
+                color: #4F46E5; 
                 margin: 0; 
-                letter-spacing: 0.05em;
+                letter-spacing: 0.05em; 
               }
 
               .status-badge { 
@@ -257,13 +257,13 @@ export default function FeesScreen() {
               .meta-value { font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px; }
 
               /* Section Subtitle */
-              .section-subtitle {
-                font-size: 11px;
-                font-weight: 800;
-                color: #991b1b;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                margin: 0 0 8px 0;
+              .section-subtitle { 
+                font-size: 11px; 
+                font-weight: 800; 
+                color: #3730a3; 
+                text-transform: uppercase; 
+                letter-spacing: 0.05em; 
+                margin: 0 0 8px 0; 
               }
 
               /* Details Grid */
@@ -294,27 +294,27 @@ export default function FeesScreen() {
               }
 
               th { 
-                background-color: #fff0f0; 
-                color: #991b1b; 
+                background-color: #eef2ff; 
+                color: #3730a3; 
                 font-weight: 800; 
                 text-transform: uppercase; 
                 font-size: 11px; 
                 padding: 8px 12px; 
-                border-bottom: 2px solid #E31837; 
+                border-bottom: 2px solid #4F46E5; 
                 text-align: left; 
               }
 
               td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
-              tfoot td { background-color: #fff0f0; padding: 10px 12px; border-top: 2px solid #E31837; font-size: 13px; }
-              .total-cell { font-size: 16px; color: #E31837; font-weight: 800; text-align: right; }
+              tfoot td { background-color: #eef2ff; padding: 10px 12px; border-top: 2px solid #4F46E5; font-size: 13px; }
+              .total-cell { font-size: 16px; color: #4F46E5; font-weight: 800; text-align: right; }
 
               /* Next Due Date Banner */
               .due-banner { 
                 display: flex; 
                 justify-content: space-between; 
                 align-items: center; 
-                background-color: #fff0f0; 
-                border: 2px solid #E31837; 
+                background-color: #eef2ff; 
+                border: 2px solid #4F46E5; 
                 border-radius: 10px; 
                 padding: 12px 18px; 
                 margin-bottom: 20px; 
@@ -322,9 +322,9 @@ export default function FeesScreen() {
 
               .due-banner-left { display: flex; align-items: center; gap: 12px; }
               .due-banner-icon { font-size: 22px; }
-              .due-banner-title { font-size: 12px; font-weight: 800; color: #991b1b; display: block; letter-spacing: 0.05em; }
-              .due-banner-sub { font-size: 10px; color: #be123c; display: block; margin-top: 2px; }
-              .due-banner-date { font-size: 16px; font-weight: 800; color: #E31837; background-color: #ffffff; padding: 6px 14px; border-radius: 8px; border: 1px solid #fecdd3; }
+              .due-banner-title { font-size: 12px; font-weight: 800; color: #3730a3; display: block; letter-spacing: 0.05em; }
+              .due-banner-sub { font-size: 10px; color: #4338ca; display: block; margin-top: 2px; }
+              .due-banner-date { font-size: 16px; font-weight: 800; color: #4F46E5; background-color: #ffffff; padding: 6px 14px; border-radius: 8px; border: 1px solid #c7d2fe; }
 
               /* Footer Grid */
               .footer-grid { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 12px; font-size: 12px; }
