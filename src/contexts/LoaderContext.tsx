@@ -1,10 +1,11 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
-import { View, ActivityIndicator, StyleSheet, Modal } from 'react-native';
-import { COLORS } from '../constants/theme';
+import { View, StyleSheet, Modal, SafeAreaView, ScrollView } from 'react-native';
+import { DashboardSkeleton } from '../components/common/SkeletonLoader';
 
 type LoaderContextType = {
   showLoader: () => void;
   hideLoader: () => void;
+  isLoading: boolean;
 };
 
 const LoaderContext = createContext<LoaderContextType | undefined>(undefined);
@@ -16,15 +17,15 @@ export const LoaderProvider = ({ children }: { children: ReactNode }) => {
   const hideLoader = () => setIsLoading(false);
 
   return (
-    <LoaderContext.Provider value={{ showLoader, hideLoader }}>
+    <LoaderContext.Provider value={{ showLoader, hideLoader, isLoading }}>
       {children}
       {isLoading && (
-        <Modal transparent={true} animationType="fade" visible={isLoading} onRequestClose={() => {}}>
-          <View style={styles.overlay}>
-            <View style={styles.loaderContainer}>
-              <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
-          </View>
+        <Modal transparent={false} animationType="fade" visible={isLoading} onRequestClose={() => {}}>
+          <SafeAreaView style={styles.skeletonContainer}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+              <DashboardSkeleton />
+            </ScrollView>
+          </SafeAreaView>
         </Modal>
       )}
     </LoaderContext.Provider>
@@ -40,21 +41,8 @@ export const useLoader = () => {
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  skeletonContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
+    backgroundColor: '#f8fafc',
   },
-  loaderContainer: {
-    backgroundColor: '#ffffff',
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  }
 });

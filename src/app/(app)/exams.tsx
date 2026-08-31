@@ -39,7 +39,7 @@ export default function ExamsScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [timeLeft, setTimeLeft] = useState(0);
   const [appState, setAppState] = useState(AppState.currentState);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
     let unsubExams: (() => void) | undefined;
@@ -55,7 +55,7 @@ export default function ExamsScreen() {
 
       showLoader();
       try {
-        const { doc, getDoc, getDocs, onSnapshot } = await import('firebase/firestore');
+        const { doc, getDoc, onSnapshot } = await import('firebase/firestore');
         
         // 1. Fetch latest user document to verify active status
         let studentData: any = {};
@@ -505,6 +505,134 @@ export default function ExamsScreen() {
             <TouchableOpacity style={styles.startButton} onPress={() => requestStartExam(item)} activeOpacity={0.85}>
               <Text style={styles.startText}>Start Exam</Text>
               <MaterialIcons name="arrow-forward" size={14} color="#ffffff" />
+            </TouchableOpacity>
+          )}
+
+          {isCompleted && (
+            <TouchableOpacity style={styles.viewResultButton} onPress={() => viewLeaderboard(item, item.attempt)} activeOpacity={0.85}>
+              <Text style={styles.viewResultText}>View Result</Text>
+              <MaterialIcons name="visibility" size={14} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+
+          {isUpcoming && (
+            <View style={styles.disabledBadge}>
+              <MaterialIcons name="lock" size={12} color="#64748b" />
+              <Text style={styles.disabledText}>Starts Soon</Text>
+            </View>
+          )}
+
+          {isMissed && (
+            <View style={styles.missedBadge}>
+              <MaterialIcons name="event-busy" size={12} color="#dc2626" />
+              <Text style={styles.missedText}>Expired</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const tabs: ('Live' | 'Upcoming' | 'Completed' | 'Missed')[] = ['Live', 'Upcoming', 'Completed', 'Missed'];
+  const categorized = categorizedExams();
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.tabsWrapper}>
+        <View style={styles.tabsSegment}>
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab;
+            const count = categorized[tab]?.length || 0;
+            return (
+              <TouchableOpacity 
+                key={tab} 
+                style={[styles.tabSegmentBtn, isActive && styles.tabSegmentBtnActive]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tabText, isActive && styles.activeTabText]} numberOfLines={1}>
+                  {tab}
+                </Text>
+                {count > 0 && (
+                  <View style={[styles.tabCountPill, isActive && styles.tabCountPillActive]}>
+                    <Text style={[styles.tabCountText, isActive && styles.tabCountTextActive]}>{count}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {isAccessDenied || user?.status !== 'active' ? (
+        <View style={styles.accessDeniedContainer}>
+          <View style={styles.accessDeniedCard}>
+            <View style={styles.accessDeniedIconWrapper}>
+              <MaterialIcons name="lock-person" size={40} color="#dc2626" />
+            </View>
+            <View style={styles.accessDeniedBadge}>
+              <Text style={styles.accessDeniedBadgeText}>STATUS: INACTIVE</Text>
+            </View>
+            <Text style={styles.accessDeniedTitle}>Exam Access Paused</Text>
+            <Text style={styles.accessDeniedSubtitle}>
+              Your student account is marked inactive due to pending fees or renewal. Live exams, assessments, and test results are paused until fees are cleared.
+            </Text>
+            <TouchableOpacity 
+              style={{
+                backgroundColor: '#dc2626',
+                paddingVertical: 11,
+                paddingHorizontal: 22,
+                borderRadius: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 10
+              }}
+              onPress={() => router.push("/(app)/fees" as any)}
+              activeOpacity={0.85}
+            >
+              <MaterialIcons name="payment" size={16} color="#ffffff" />
+              <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>Pay Fees / View Dues</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <FlatList 
+          data={currentList}
+          renderItem={renderExamCard}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="assignment-late" size={44} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>No {activeTab} Exams</Text>
+              <Text style={styles.emptySubtitle}>There are no {activeTab.toLowerCase()} exams scheduled for your batch.</Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Pre-Exam Consent Modal */}
+      <Modal visible={showConsent} animationType="fade" transparent={true}>
+        <View style={styles.reviewModalOverlay}>
+          <View style={styles.reviewModalContent}>
+            <Text style={styles.resultTitle}>Anti-Cheat Warning</Text>
+            <Text style={styles.resultMessage}>
+              This exam must be taken in Full-Screen Mode. If you exit the app, change tabs, or receive a call, it will be recorded as a violation.
+            </Text>
+            <Text style={{color: COLORS.error, fontWeight: 'bold', marginBottom: 20, textAlign: 'center'}}>
+              Max App Exits Allowed: {currentExam?.maxViolationsAllowed || 3}
+            </Text>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+              <TouchableOpacity style={[styles.finishBtn, {backgroundColor: COLORS.textMedium}]} onPress={() => setShowConsent(false)}>
+                <Text style={styles.finishBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.finishBtn} onPress={confirmStartExam}>
+                <Text style={styles.finishBtnText}>I Agree, Start Exam</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Live Exam Modal */}
@@ -602,11 +730,15 @@ export default function ExamsScreen() {
                 const isAttempted = !!answers[q.id];
                 return (
                   <TouchableOpacity 
-                    key={q.id}
+                    key={q.id} 
                     style={[styles.gridItem, isAttempted ? styles.gridItemAttempted : styles.gridItemUnattempted]}
                     onPress={() => { setCurrentQuestionIndex(index); setShowReview(false); }}
                   >
                     <Text style={isAttempted ? styles.gridTextAttempted : styles.gridText}>{index + 1}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <TouchableOpacity style={styles.closeReviewBtn} onPress={() => setShowReview(false)}>
               <Text style={styles.closeReviewText}>Back to Exam</Text>
             </TouchableOpacity>
@@ -672,53 +804,55 @@ export default function ExamsScreen() {
                 </View>
               </View>
 
-              {/* Main Score Wheel / Card */}
-              {(() => {
-                const pct = scoreData?.percentage !== undefined ? Number(scoreData.percentage) : (Number(scoreData?.score || 0) / Number(currentExam?.totalMarks || 50)) * 100;
-                return (
-                  <View style={styles.scoreHeroSection}>
-                    <View style={styles.scoreCircle}>
-                      <Text style={styles.scoreHeroValue}>{scoreData?.score ?? 0}</Text>
-                      <Text style={styles.scoreHeroTotal}>/ {currentExam?.totalMarks || 50}</Text>
-                      <View style={styles.percentagePill}>
-                        <Text style={styles.percentagePillText}>{pct.toFixed(0)}% Marks</Text>
-                      </View>
-                    </View>
+              {/* Score Hero with Bouquet Accent */}
+              <View style={styles.scoreHeroSection}>
+                <View style={styles.scoreCircle}>
+                  <Text style={styles.scoreHeroValue}>{scoreData?.score ?? 0}</Text>
+                  <Text style={styles.scoreHeroTotal}>/ {currentExam?.totalMarks || 50} Marks</Text>
+                  <View style={styles.percentagePill}>
+                    <Text style={styles.percentagePillText}>
+                      {scoreData?.percentage !== undefined ? Math.round(Number(scoreData.percentage)) : Math.round(((scoreData?.score || 0) / (currentExam?.totalMarks || 50)) * 100)}%
+                    </Text>
                   </View>
-                );
-              })()}
+                </View>
+              </View>
 
-              {/* Analytics Metric Cards Grid */}
-              {(() => {
-                const pct = scoreData?.percentage !== undefined ? Number(scoreData.percentage) : (Number(scoreData?.score || 0) / Number(currentExam?.totalMarks || 50)) * 100;
-                const grade = scoreData?.grade || (pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'Pass');
-                return (
-                  <View style={styles.metricsGrid}>
-                    <View style={styles.metricItem}>
-                      <MaterialIcons name="military-tech" size={20} color="#f59e0b" />
-                      <Text style={styles.metricItemValue}>{scoreData?.rank ? `#${scoreData.rank}` : '#1'}</Text>
-                      <Text style={styles.metricItemLabel}>Rank</Text>
-                    </View>
-                    <View style={styles.metricItem}>
-                      <MaterialIcons name="grade" size={20} color="#6366f1" />
-                      <Text style={styles.metricItemValue}>{grade}</Text>
-                      <Text style={styles.metricItemLabel}>Grade</Text>
-                    </View>
-                    <View style={styles.metricItem}>
-                      <MaterialIcons name="check-circle" size={20} color="#10b981" />
-                      <Text style={styles.metricItemValue}>{scoreData?.correctCount ?? scoreData?.score ?? 0}</Text>
-                      <Text style={styles.metricItemLabel}>Correct Qs</Text>
-                    </View>
-                    <View style={styles.metricItem}>
-                      <MaterialIcons name="timer" size={20} color="#ec4899" />
-                      <Text style={styles.metricItemValue}>{Math.floor((scoreData?.timeUsed || 0) / 60)}m {(scoreData?.timeUsed || 0) % 60}s</Text>
-                      <Text style={styles.metricItemLabel}>Time Taken</Text>
-                    </View>
-                  </View>
-                );
-              })()}
+              {/* Analytics Breakdown Grid */}
+              <View style={styles.metricsGrid}>
+                <View style={styles.metricItem}>
+                  <MaterialIcons name="military-tech" size={20} color="#eab308" />
+                  <Text style={styles.metricItemValue}>
+                    {scoreData?.rank ? `#${scoreData.rank}` : '#1'}
+                  </Text>
+                  <Text style={styles.metricItemLabel}>Batch Rank</Text>
+                </View>
 
-              {/* Suspicious warning if flagged */}
+                <View style={styles.metricItem}>
+                  <MaterialIcons name="grade" size={20} color={COLORS.primary} />
+                  <Text style={styles.metricItemValue}>
+                    {scoreData?.grade || (() => {
+                      const pct = scoreData?.percentage !== undefined ? Number(scoreData.percentage) : ((scoreData?.score || 0) / (currentExam?.totalMarks || 50)) * 100;
+                      return pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'Pass';
+                    })()}
+                  </Text>
+                  <Text style={styles.metricItemLabel}>Grade</Text>
+                </View>
+
+                <View style={styles.metricItem}>
+                  <MaterialIcons name="check-circle" size={20} color="#16a34a" />
+                  <Text style={styles.metricItemValue}>{scoreData?.correctCount ?? '-'}</Text>
+                  <Text style={styles.metricItemLabel}>Correct Qs</Text>
+                </View>
+
+                <View style={styles.metricItem}>
+                  <MaterialIcons name="timer" size={20} color="#6366f1" />
+                  <Text style={styles.metricItemValue}>
+                    {scoreData?.timeUsed ? `${Math.round(scoreData.timeUsed / 60)}m` : `${currentExam?.duration || 30}m`}
+                  </Text>
+                  <Text style={styles.metricItemLabel}>Time Taken</Text>
+                </View>
+              </View>
+
               {scoreData?.isSuspicious && (
                 <View style={styles.suspiciousNotice}>
                   <MaterialIcons name="warning" size={16} color="#dc2626" />
@@ -777,92 +911,98 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 2,
   },
   tabText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#64748b',
   },
   activeTabText: {
     color: COLORS.primary,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   tabCountPill: {
     backgroundColor: '#e2e8f0',
-    borderRadius: 10,
     paddingHorizontal: 5,
     paddingVertical: 1,
+    borderRadius: 8,
+    minWidth: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabCountPillActive: {
-    backgroundColor: COLORS.primaryLightest,
+    backgroundColor: COLORS.primary,
   },
   tabCountText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#64748b',
   },
   tabCountTextActive: {
-    color: COLORS.primary,
+    color: '#ffffff',
   },
 
   listContent: {
     padding: 16,
-    paddingBottom: 40,
+    gap: 12,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
 
-  /* Exam Card */
+  /* Card */
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#f1f5f9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
+    gap: 10,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 8,
-    marginBottom: 10,
   },
   title: {
-    flex: 1,
     fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.textDark,
-    lineHeight: 20,
-  },
-  scorePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primaryLightest,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  scorePillText: {
-    fontSize: 11,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: '#1e293b',
+    flex: 1,
   },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: '#fef2f2',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   liveDot: {
     width: 6,
@@ -872,48 +1012,62 @@ const styles = StyleSheet.create({
   },
   livePillText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#ef4444',
     letterSpacing: 0.5,
+  },
+  scorePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  scorePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primary,
   },
 
   cardMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
   },
   metaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: '#f8fafc',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
+    gap: 4,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
   },
   metaBadgeText: {
     fontSize: 11,
-    color: COLORS.textMedium,
     fontWeight: '600',
+    color: '#475569',
   },
 
   cardFooterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    gap: 8,
+    borderTopColor: '#f8fafc',
+    paddingTop: 10,
   },
   dateInfoWrapper: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flex: 1,
   },
   dateText: {
     fontSize: 11,
@@ -924,202 +1078,308 @@ const styles = StyleSheet.create({
   startButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: COLORS.primary,
+    paddingVertical: 7,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 10,
+    gap: 4,
   },
   startText: {
     color: '#ffffff',
-    fontWeight: '700',
     fontSize: 12,
+    fontWeight: '800',
   },
   viewResultButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: COLORS.primaryLightest,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
   },
   viewResultText: {
     color: COLORS.primary,
-    fontWeight: '700',
     fontSize: 12,
+    fontWeight: '800',
   },
   disabledBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: '#f1f5f9',
+    paddingVertical: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
+    gap: 4,
   },
   disabledText: {
-    color: '#64748b',
     fontSize: 11,
+    color: '#64748b',
     fontWeight: '600',
   },
   missedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: '#fef2f2',
+    paddingVertical: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
+    gap: 4,
   },
   missedText: {
-    color: '#dc2626',
     fontSize: 11,
-    fontWeight: '600',
-  },
-
-  /* Empty state */
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 20,
-  },
-  emptyTitle: {
-    fontSize: 16,
+    color: '#dc2626',
     fontWeight: '700',
-    color: COLORS.textDark,
-    marginTop: 12,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: COLORS.textMedium,
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 18,
   },
 
-  /* Exam Modal & Proctoring */
-  examContainer: { flex: 1, backgroundColor: '#ffffff' },
+  /* Live Exam Screen */
+  examContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    paddingTop: 44,
+  },
   examHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 45,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: '#f1f5f9',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#f1f5f9',
   },
-  examTitleText: { flex: 1, fontSize: 16, fontWeight: '700', color: COLORS.textDark },
-  timerText: { fontSize: 16, fontWeight: '800', color: '#dc2626', marginHorizontal: 12 },
+  examTitleText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1e293b',
+    flex: 1,
+    marginRight: 10,
+  },
+  timerText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#dc2626',
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginRight: 8,
+  },
   reviewBtnHeader: {
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: COLORS.primaryLightest,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
   },
-  reviewBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
-  
+  reviewBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
   proctorCameraContainer: {
-    width: 90,
-    height: 110,
-    position: 'absolute',
-    top: 90,
-    right: 16,
-    borderRadius: 10,
+    height: 90,
+    width: 120,
+    borderRadius: 12,
     overflow: 'hidden',
+    alignSelf: 'flex-end',
+    marginRight: 16,
+    marginTop: 8,
     borderWidth: 2,
-    borderColor: COLORS.primary,
-    zIndex: 10,
-    backgroundColor: '#000',
+    borderColor: '#dc2626',
   },
-  camera: { flex: 1 },
-  
-  questionContainer: { padding: 18, flex: 1 },
-  questionNumber: { fontSize: 12, color: COLORS.primary, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
-  questionText: { fontSize: 17, fontWeight: '700', color: COLORS.textDark, marginBottom: 24, paddingRight: 95, lineHeight: 24 },
-  
+  camera: {
+    flex: 1,
+  },
+  questionContainer: {
+    flex: 1,
+    padding: 18,
+  },
+  questionNumber: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  questionText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    lineHeight: 24,
+    marginBottom: 20,
+  },
   optionButton: {
+    backgroundColor: '#f8fafc',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 10,
     borderWidth: 1.5,
     borderColor: '#e2e8f0',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: '#ffffff',
   },
-  optionButtonSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLightest },
-  optionText: { fontSize: 14, color: COLORS.textDark, lineHeight: 20 },
-  optionTextSelected: { color: COLORS.primary, fontWeight: '700' },
-  
+  optionButtonSelected: {
+    backgroundColor: COLORS.primaryLightest,
+    borderColor: COLORS.primary,
+  },
+  optionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  optionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '800',
+  },
   navigationFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 16,
     borderTopWidth: 1,
-    borderColor: '#f1f5f9',
+    borderTopColor: '#f1f5f9',
     backgroundColor: '#ffffff',
+    gap: 12,
   },
   navBtn: {
-    paddingHorizontal: 22,
+    flex: 1,
+    backgroundColor: '#f1f5f9',
     paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    minWidth: 100,
+    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
   },
-  navBtnDisabled: { opacity: 0.4 },
-  navBtnText: { fontWeight: '700', fontSize: 14, color: COLORS.textDark },
-  submitBtn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  submitBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
+  navBtnDisabled: {
+    opacity: 0.4,
+  },
+  navBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  submitBtn: {
+    backgroundColor: '#16a34a',
+  },
+  submitBtnText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 14,
+  },
 
-  reviewModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  reviewModalContent: { backgroundColor: '#ffffff', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360 },
-  reviewTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16, color: COLORS.textDark },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  gridItem: { width: 42, height: 42, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-  gridItemAttempted: { backgroundColor: COLORS.primaryLightest, borderColor: COLORS.primary },
-  gridItemUnattempted: { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
-  gridText: { fontSize: 14, fontWeight: '600', color: COLORS.textMedium },
-  gridTextAttempted: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  closeReviewBtn: { marginTop: 20, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, alignItems: 'center' },
-  closeReviewText: { fontWeight: '700', color: COLORS.textDark },
+  /* Modals */
+  reviewModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  reviewModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  resultTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0f172a',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  resultMessage: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  finishBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    marginHorizontal: 4,
+  },
+  finishBtnText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 13,
+  },
 
-  /* Result Scorecard Certificate Template Styles */
+  reviewTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  gridItem: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  gridItemAttempted: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  gridItemUnattempted: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#cbd5e1',
+  },
+  gridText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  gridTextAttempted: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  closeReviewBtn: {
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeReviewText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+  },
+
+  /* Certificate / Result Modal */
   resultModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
-    alignItems: 'center',
     padding: 16,
   },
   resultModalScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     paddingVertical: 20,
-    width: '100%',
   },
   certificateCard: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    width: '100%',
-    maxWidth: 380,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 8,
     borderWidth: 1.5,
-    borderColor: '#e0e7ff',
+    borderColor: '#e2e8f0',
   },
   certTopRibbon: {
     height: 6,
@@ -1434,6 +1694,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
+    marginBottom: 12,
   },
   accessDeniedBadgeText: {
     color: '#dc2626',

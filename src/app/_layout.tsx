@@ -1,10 +1,11 @@
 import { ThemeProvider, DarkTheme, DefaultTheme, Slot, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { useColorScheme, View, ActivityIndicator } from 'react-native';
+import { useColorScheme, View, SafeAreaView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../constants/theme';
+import { DashboardSkeleton } from '../components/common/SkeletonLoader';
 import '../global.css';
 
 SplashScreen.preventAutoHideAsync();
@@ -59,9 +60,9 @@ function RootLayoutNav() {
 
   if (!isReady || loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
+        <DashboardSkeleton />
+      </SafeAreaView>
     );
   }
 

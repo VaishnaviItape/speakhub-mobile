@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter, Tabs } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
@@ -33,10 +34,74 @@ export default function DashboardScreen() {
   const { showLoader, hideLoader } = useLoader();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Notifications & Fee State
+  // Notifications & Fee State (Amazon / Flipkart Style Rich Notifications)
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [readNotifIds, setReadNotifIds] = useState<string[]>([]);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [feeDueDate, setFeeDueDate] = useState<string>('');
+
+  useEffect(() => {
+    const loadReadNotifications = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('@speakhub_read_notifications');
+        if (stored) {
+          setReadNotifIds(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.warn("Error loading read notifications:", e);
+      }
+    };
+    loadReadNotifications();
+  }, []);
+
+  const handleMarkAsRead = async (notifId: string, route?: string) => {
+    try {
+      const updated = Array.from(new Set([...readNotifIds, notifId]));
+      setReadNotifIds(updated);
+      await AsyncStorage.setItem('@speakhub_read_notifications', JSON.stringify(updated));
+    } catch (e) {
+      console.warn("Error marking notification as read:", e);
+    }
+
+    if (route) {
+      setShowNotificationsModal(false);
+      router.push(route as any);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const allIds = notifications.map(n => n.id);
+      const updated = Array.from(new Set([...readNotifIds, ...allIds]));
+      setReadNotifIds(updated);
+      await AsyncStorage.setItem('@speakhub_read_notifications', JSON.stringify(updated));
+    } catch (e) {
+      console.warn("Error marking all as read:", e);
+    }
+  };
+
+  const formatRelativeTime = (dateVal: any) => {
+    if (!dateVal) return '';
+    const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    const now = new Date();
+    const diffSecs = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diffSecs < 60) return 'Just now';
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) {
+      const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `Yesterday, ${timeStr}`;
+    }
+    const dateStr = d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${dateStr}, ${timeStr}`;
+  };
+
+  const unreadCount = notifications.filter(n => !readNotifIds.includes(n.id)).length;
 
   // Available Courses & Booking State
   const [availableCourses, setAvailableCourses] = useState<any[]>([]);
@@ -241,39 +306,90 @@ export default function DashboardScreen() {
         } catch (e) { }
       }
 
-      // Notifications Generation
+      // Notifications Generation (Amazon / Flipkart Rich Style)
       let fetchedNotifications: any[] = [];
 
-      if (studentData && user.id) {
+      if (studentData && (user.id || user.documentId || user.uid)) {
         try {
-          const feeQ = query(collection(db, 'transactions'), where('studentId', '==', user.id));
+          const studentIds = [user.id, user.documentId, user.uid].filter(Boolean);
+          
+          // Check fee_transactions collection
+          const feeQ = query(collection(db, 'fee_transactions'));
           const fSnap = await getDocs(feeQ);
-          const studentTransactions = fSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const studentTransactions: any[] = [];
+          
+          fSnap.forEach(d => {
+            const data = d.data();
+            if (studentIds.includes(data.studentId)) {
+              studentTransactions.push({ id: d.id, ...data });
+            }
+          });
+
+          // Fallback to transactions collection if empty
+          if (studentTransactions.length === 0) {
+            const altSnap = await getDocs(collection(db, 'transactions'));
+            altSnap.forEach(d => {
+              const data = d.data();
+              if (studentIds.includes(data.studentId)) {
+                studentTransactions.push({ id: d.id, ...data });
+              }
+            });
+          }
+
           studentTransactions.sort((a: any, b: any) => {
-            const dateA = a.transactionDate?.toDate ? a.transactionDate.toDate().getTime() : 0;
-            const dateB = b.transactionDate?.toDate ? b.transactionDate.toDate().getTime() : 0;
+            const dateA = a.paymentDate?.toDate ? a.paymentDate.toDate().getTime() : (a.paymentDate?.seconds ? a.paymentDate.seconds * 1000 : (a.transactionDate?.toDate ? a.transactionDate.toDate().getTime() : 0));
+            const dateB = b.paymentDate?.toDate ? b.paymentDate.toDate().getTime() : (b.paymentDate?.seconds ? b.paymentDate.seconds * 1000 : (b.transactionDate?.toDate ? b.transactionDate.toDate().getTime() : 0));
             return dateB - dateA;
           });
 
           let latestNextDueDate = '';
-          if (studentTransactions.length > 0 && studentTransactions[0].nextDueDate) {
-            const dueVal = studentTransactions[0].nextDueDate;
+          let feeAmt = 800;
+          if (studentTransactions.length > 0) {
+            const latestTx = studentTransactions[0];
+            feeAmt = latestTx.amountPaid || 800;
+            const dueVal = latestTx.nextDueDate;
             if (typeof dueVal === 'string') latestNextDueDate = dueVal;
             else if (dueVal && dueVal.toDate) latestNextDueDate = dueVal.toDate().toISOString().split('T')[0];
+            else if (dueVal && dueVal.seconds) latestNextDueDate = new Date(dueVal.seconds * 1000).toISOString().split('T')[0];
           }
           setFeeDueDate(latestNextDueDate);
 
           if (latestNextDueDate) {
-            const dueDateTime = new Date(latestNextDueDate).getTime();
+            const dueDateObj = new Date(latestNextDueDate);
+            const dueDateTime = dueDateObj.getTime();
             const nowTime = new Date().getTime();
             const diffDays = Math.ceil((dueDateTime - nowTime) / (1000 * 3600 * 24));
-            if (diffDays <= 7 && diffDays >= 0) {
-              fetchedNotifications.push({ id: 'fee1', title: 'Fee Due Soon', description: `Your next fee installment is due on ${latestNextDueDate}.`, type: 'fee', date: new Date(latestNextDueDate) });
+            const formattedDueDateStr = isNaN(dueDateObj.getTime()) ? latestNextDueDate : dueDateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+            // Notify if due date is within 3 days (e.g. diffDays <= 3)
+            if (diffDays <= 3 && diffDays >= 0) {
+              const daysText = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : `in ${diffDays} days`;
+              fetchedNotifications.push({
+                id: `fee_due_${latestNextDueDate}`,
+                title: `Course Fee Due ${daysText} (₹${feeAmt})`,
+                description: `Hello ${user.name || 'Student'}, your course fee of ₹${feeAmt} is due on ${formattedDueDateStr}. Please complete payment using PhonePe / Google Pay or Bank Transfer to avoid interruption.`,
+                type: 'fee',
+                categoryTag: 'FEE DUE (3 DAYS)',
+                date: new Date(latestNextDueDate),
+                route: '/(app)/fees',
+                actionLabel: 'Pay Fees / View QR Code →'
+              });
             } else if (diffDays < 0) {
-              fetchedNotifications.push({ id: 'fee2', title: 'Fee Overdue', description: `Your fee was due on ${latestNextDueDate}. Please pay immediately.`, type: 'fee', date: new Date(latestNextDueDate) });
+              fetchedNotifications.push({
+                id: `fee_overdue_${latestNextDueDate}`,
+                title: `Fee Overdue Alert (₹${feeAmt})`,
+                description: `Your course fee of ₹${feeAmt} was due on ${formattedDueDateStr}. Please clear pending dues via PhonePe / GPay or Bank Transfer to keep full access.`,
+                type: 'fee',
+                categoryTag: 'FEE OVERDUE',
+                date: new Date(latestNextDueDate),
+                route: '/(app)/fees',
+                actionLabel: 'Pay Now →'
+              });
             }
           }
-        } catch (e) { }
+        } catch (e) {
+          console.warn("Fee notification query error:", e);
+        }
       }
 
       if (matchedBatch) {
@@ -287,7 +403,16 @@ export default function DashboardScreen() {
             if (n.batchId === matchedBatch.id || n.batchIds?.includes(matchedBatch.id) || n.batchName === matchedBatch.batchName) {
               const nDate = n.createdAt?.toDate ? n.createdAt.toDate() : new Date(n.createdAt || Date.now());
               if (nDate.getTime() > sevenDaysAgo) {
-                fetchedNotifications.push({ id: d.id, title: 'New Note Added', description: n.title, type: 'note', date: nDate });
+                fetchedNotifications.push({
+                  id: `note_${d.id}`,
+                  title: `New Study Note: ${n.title}`,
+                  description: n.description || 'New study notes and reference material uploaded for your batch.',
+                  type: 'note',
+                  categoryTag: 'STUDY NOTES',
+                  date: nDate,
+                  route: '/(app)/notes',
+                  actionLabel: 'Open Notes →'
+                });
               }
             }
           });
@@ -304,7 +429,41 @@ export default function DashboardScreen() {
             const ex = d.data();
             const exDate = ex.createdAt?.toDate ? ex.createdAt.toDate() : new Date(ex.createdAt || Date.now());
             if (exDate.getTime() > sevenDaysAgo) {
-              fetchedNotifications.push({ id: d.id, title: 'New Exam Published', description: ex.examTitle, type: 'exam', date: exDate });
+              fetchedNotifications.push({
+                id: `exam_${d.id}`,
+                title: `New Exam Published: ${ex.title || ex.examTitle}`,
+                description: ex.description || 'A new assessment test has been assigned to your batch. Take the test on time.',
+                type: 'exam',
+                categoryTag: 'EXAM ALERT',
+                date: exDate,
+                route: '/(app)/exams',
+                actionLabel: 'Start Exam →'
+              });
+            }
+          });
+        } catch (e) { }
+
+        // Fetch new homework
+        try {
+          const targetBatchIdentifiers = [matchedBatch.id];
+          if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
+          const hwQ = query(collection(db, 'homeworks'), where('batchId', 'in', targetBatchIdentifiers));
+          const hwSnap = await getDocs(hwQ);
+          const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
+          hwSnap.forEach(d => {
+            const hw = d.data();
+            const hwDate = hw.createdAt?.toDate ? hw.createdAt.toDate() : new Date(hw.createdAt || Date.now());
+            if (hwDate.getTime() > sevenDaysAgo) {
+              fetchedNotifications.push({
+                id: `hw_${d.id}`,
+                title: `New Homework: ${hw.title || 'Assignment Posted'}`,
+                description: hw.description || 'New homework assignment posted. Complete and submit your work.',
+                type: 'homework',
+                categoryTag: 'HOMEWORK',
+                date: hwDate,
+                route: '/(app)/homework',
+                actionLabel: 'View Homework →'
+              });
             }
           });
         } catch (e) { }
@@ -335,7 +494,15 @@ export default function DashboardScreen() {
                 }
 
                 if (dobDate === todayDate && dobMonth === todayMonth) {
-                  fetchedNotifications.push({ id: `bday_${d.id}`, title: 'Classmate Birthday!', description: `It is ${u.name}'s birthday today! Wish them well.`, type: 'birthday', date: today });
+                  fetchedNotifications.push({
+                    id: `bday_${d.id}_${today.toISOString().split('T')[0]}`,
+                    title: `🎂 Happy Birthday ${u.name}!`,
+                    description: `Celebrate with ${u.name} on their special day today! Wish them a very happy birthday!`,
+                    type: 'birthday',
+                    categoryTag: 'BIRTHDAY',
+                    date: today,
+                    actionLabel: 'Wish Birthday 🎉'
+                  });
                 }
               }
             }
@@ -509,24 +676,26 @@ export default function DashboardScreen() {
             <TouchableOpacity
               style={{ marginRight: 16, padding: 4 }}
               onPress={() => setShowNotificationsModal(true)}
+              activeOpacity={0.8}
             >
-              <MaterialIcons name="notifications" size={26} color={COLORS.textDark} />
-              {notifications.length > 0 && (
+              <MaterialIcons name="notifications-none" size={26} color={COLORS.textDark} />
+              {unreadCount > 0 && (
                 <View style={{
                   position: 'absolute',
-                  top: 0,
-                  right: 0,
+                  top: 2,
+                  right: 2,
                   backgroundColor: '#ef4444',
                   borderRadius: 10,
-                  width: 18,
+                  minWidth: 18,
                   height: 18,
+                  paddingHorizontal: 4,
                   justifyContent: 'center',
                   alignItems: 'center',
                   borderWidth: 1.5,
                   borderColor: COLORS.surface
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
-                    {notifications.length}
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
                   </Text>
                 </View>
               )}
@@ -937,51 +1106,166 @@ export default function DashboardScreen() {
           </View>
         </Modal>
 
-        {/* Notifications Modal */}
+        {/* Notifications Modal (Amazon / Flipkart Style Rich UI) */}
         <Modal
           visible={showNotificationsModal}
           transparent={true}
-          animationType="fade"
+          animationType="slide"
           onRequestClose={() => setShowNotificationsModal(false)}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.notificationsModalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Notifications</Text>
-                <TouchableOpacity onPress={() => setShowNotificationsModal(false)}>
-                  <MaterialIcons name="close" size={24} color={COLORS.textDark} />
-                </TouchableOpacity>
+              {/* Modal Header */}
+              <View style={styles.notifModalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={styles.notifHeaderIconWrapper}>
+                    <MaterialIcons name="notifications-active" size={20} color={COLORS.primary} />
+                  </View>
+                  <View>
+                    <Text style={styles.notifModalTitle}>Notifications</Text>
+                    <Text style={styles.notifModalSubtitle}>
+                      {unreadCount > 0 ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}` : 'All caught up 🎉'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {unreadCount > 0 && (
+                    <TouchableOpacity 
+                      style={styles.markAllReadBtn} 
+                      onPress={handleMarkAllAsRead}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialIcons name="done-all" size={14} color={COLORS.primary} />
+                      <Text style={styles.markAllReadText}>Mark all read</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity 
+                    style={styles.closeNotifBtn} 
+                    onPress={() => setShowNotificationsModal(false)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="close" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <ScrollView style={{ marginTop: 10 }} showsVerticalScrollIndicator={false}>
+              {/* Notifications List */}
+              <ScrollView style={styles.notifScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24, gap: 10 }}>
                 {notifications.length > 0 ? (
                   notifications.map((notif, index) => {
+                    const isRead = readNotifIds.includes(notif.id);
+
                     let iconName = "notifications";
                     let iconColor = COLORS.primary;
-                    if (notif.type === 'fee') { iconName = "payment"; iconColor = "#eab308"; }
-                    if (notif.type === 'note') { iconName = "menu-book"; iconColor = "#3b82f6"; }
-                    if (notif.type === 'exam') { iconName = "edit-document"; iconColor = "#ef4444"; }
-                    if (notif.type === 'birthday') { iconName = "cake"; iconColor = "#ec4899"; }
+                    let iconBg = COLORS.primaryLightest;
+                    let tagBg = '#eff6ff';
+                    let tagColor = '#1d4ed8';
+
+                    if (notif.type === 'fee') {
+                      iconName = "account-balance-wallet";
+                      iconColor = "#d97706";
+                      iconBg = "#fef3c7";
+                      tagBg = "#fffbeb";
+                      tagColor = "#b45309";
+                    } else if (notif.type === 'note') {
+                      iconName = "menu-book";
+                      iconColor = "#2563eb";
+                      iconBg = "#dbeafe";
+                      tagBg = "#eff6ff";
+                      tagColor = "#1d4ed8";
+                    } else if (notif.type === 'exam') {
+                      iconName = "assignment";
+                      iconColor = "#dc2626";
+                      iconBg = "#fee2e2";
+                      tagBg = "#fef2f2";
+                      tagColor = "#b91c1c";
+                    } else if (notif.type === 'homework') {
+                      iconName = "history-edu";
+                      iconColor = "#059669";
+                      iconBg = "#d1fae5";
+                      tagBg = "#ecfdf5";
+                      tagColor = "#047857";
+                    } else if (notif.type === 'birthday') {
+                      iconName = "cake";
+                      iconColor = "#db2777";
+                      iconBg = "#fce7f3";
+                      tagBg = "#fdf2f8";
+                      tagColor = "#be185d";
+                    }
 
                     return (
-                      <View key={notif.id || index} style={styles.notificationItem}>
-                        <View style={[styles.notificationIconBg, { backgroundColor: iconColor + '20' }]}>
-                          <MaterialIcons name={iconName as any} size={20} color={iconColor} />
+                      <TouchableOpacity
+                        key={notif.id || index}
+                        style={[
+                          styles.notifCard,
+                          !isRead && styles.notifCardUnread
+                        ]}
+                        onPress={() => handleMarkAsRead(notif.id, notif.route)}
+                        activeOpacity={0.88}
+                      >
+                        {/* Unread Left Accent Pill Indicator */}
+                        {!isRead && <View style={styles.unreadAccentBar} />}
+
+                        <View style={styles.notifCardInner}>
+                          {/* Category Themed Icon */}
+                          <View style={[styles.notifIconCircle, { backgroundColor: iconBg }]}>
+                            <MaterialIcons name={iconName as any} size={22} color={iconColor} />
+                          </View>
+
+                          {/* Main Content Area */}
+                          <View style={{ flex: 1 }}>
+                            {/* Tag & Time Header */}
+                            <View style={styles.notifMetaRow}>
+                              <View style={[styles.notifTagPill, { backgroundColor: tagBg }]}>
+                                <Text style={[styles.notifTagText, { color: tagColor }]}>
+                                  {notif.categoryTag || 'UPDATE'}
+                                </Text>
+                              </View>
+
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text style={styles.notifTimeText}>
+                                  {formatRelativeTime(notif.date)}
+                                </Text>
+                                {!isRead && (
+                                  <View style={styles.unreadNewBadge}>
+                                    <Text style={styles.unreadNewBadgeText}>NEW</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+
+                            {/* Title */}
+                            <Text style={[styles.notifCardTitle, !isRead && styles.notifCardTitleUnread]} numberOfLines={2}>
+                              {notif.title}
+                            </Text>
+
+                            {/* Description */}
+                            <Text style={styles.notifCardDesc} numberOfLines={3}>
+                              {notif.description}
+                            </Text>
+
+                            {/* Action Link Footer */}
+                            {notif.actionLabel && (
+                              <View style={styles.notifActionRow}>
+                                <Text style={[styles.notifActionText, { color: iconColor }]}>
+                                  {notif.actionLabel}
+                                </Text>
+                                <MaterialIcons name="chevron-right" size={16} color={iconColor} />
+                              </View>
+                            )}
+                          </View>
                         </View>
-                        <View style={styles.notificationTextContainer}>
-                          <Text style={styles.notificationTitle}>{notif.title}</Text>
-                          <Text style={styles.notificationDesc}>{notif.description}</Text>
-                          <Text style={styles.notificationTime}>
-                            {notif.date ? notif.date.toLocaleDateString() : ''}
-                          </Text>
-                        </View>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })
                 ) : (
                   <View style={styles.emptyNotifications}>
-                    <MaterialIcons name="notifications-none" size={40} color={COLORS.textLight} />
-                    <Text style={styles.emptyNotificationsText}>No new notifications</Text>
+                    <View style={styles.emptyNotifIconCircle}>
+                      <MaterialIcons name="done-all" size={36} color={COLORS.primary} />
+                    </View>
+                    <Text style={styles.emptyNotificationsTitle}>You're all caught up!</Text>
+                    <Text style={styles.emptyNotificationsText}>No new notifications right now. Important batch updates, notes, and fee alerts will appear here.</Text>
                   </View>
                 )}
               </ScrollView>
@@ -1312,7 +1596,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
-    width: 'fit-content',
     alignSelf: 'flex-start',
     gap: 5,
     marginBottom: 3,
@@ -1929,55 +2212,197 @@ const styles = StyleSheet.create({
     color: '#92400e',
     fontSize: 13,
   },
+  /* Notifications Modal (Amazon / Flipkart Style Rich UI) */
   notificationsModalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '90%',
-    minHeight: '50%',
+    backgroundColor: '#f8fafc',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '88%',
+    minHeight: '60%',
+    overflow: 'hidden',
   },
-  notificationItem: {
+  notifModalHeader: {
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    alignItems: 'center',
+    borderBottomColor: '#e2e8f0',
   },
-  notificationIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  notifHeaderIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primaryLightest,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
   },
-  notificationTextContainer: {
-    flex: 1,
+  notifModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
   },
-  notificationTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-  },
-  notificationDesc: {
-    fontSize: 13,
-    color: COLORS.textMedium,
-    marginTop: 2,
-  },
-  notificationTime: {
+  notifModalSubtitle: {
     fontSize: 11,
-    color: COLORS.textLight,
-    marginTop: 4,
+    fontWeight: '600',
+    color: '#64748b',
+    marginTop: 1,
+  },
+  markAllReadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  markAllReadText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  closeNotifBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifScroll: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  notifCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+    flexDirection: 'row',
+  },
+  notifCardUnread: {
+    backgroundColor: '#f0f7ff',
+    borderColor: '#bfdbfe',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  unreadAccentBar: {
+    width: 4,
+    backgroundColor: COLORS.primary,
+  },
+  notifCardInner: {
+    flex: 1,
+    flexDirection: 'row',
+    padding: 14,
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  notifIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  notifTagPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  notifTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  notifTimeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  unreadNewBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  unreadNewBadgeText: {
+    color: '#ffffff',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  notifCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+    lineHeight: 18,
+    marginBottom: 3,
+  },
+  notifCardTitleUnread: {
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  notifCardDesc: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#64748b',
+    lineHeight: 17,
+  },
+  notifActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 2,
+  },
+  notifActionText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   emptyNotifications: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 50,
+    paddingVertical: 60,
+    paddingHorizontal: 24,
+  },
+  emptyNotifIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.primaryLightest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyNotificationsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 4,
   },
   emptyNotificationsText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: COLORS.textMedium,
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 18,
   }
 });
