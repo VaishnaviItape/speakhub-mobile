@@ -29,6 +29,7 @@ export default function DashboardScreen() {
 
   const [activeBatch, setActiveBatch] = useState<any>(null);
   const [courseName, setCourseName] = useState<string>('');
+  const [isInactiveAccount, setIsInactiveAccount] = useState<boolean>(false);
   const { showLoader, hideLoader } = useLoader();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -147,7 +148,8 @@ export default function DashboardScreen() {
 
       // Check student active status
       const currentStatus = studentData.status || user.status || 'active';
-      const isActiveStatus = currentStatus === 'active';
+      const isInactive = currentStatus === 'inactive' || currentStatus === 'blocked' || currentStatus === 'suspended';
+      const isActiveStatus = !isInactive && currentStatus === 'active';
 
       // Check demo mode validity
       let isDemoActive = false;
@@ -157,6 +159,9 @@ export default function DashboardScreen() {
           isDemoActive = true;
         }
       }
+
+      const isStudentAllowed = isActiveStatus || isDemoActive;
+      setIsInactiveAccount(!isStudentAllowed);
 
       // Fetch all available courses for Course Showcase & Book A Seat
       try {
@@ -218,8 +223,8 @@ export default function DashboardScreen() {
         );
       }
 
-      // Set activeBatch ONLY if student has an active status or active demo mode
-      if (matchedBatch && (isActiveStatus || isDemoActive)) {
+      // Set activeBatch ONLY if student has an active status/demo AND batch itself is active
+      if (matchedBatch && isStudentAllowed && matchedBatch.status === 'active') {
         setActiveBatch(matchedBatch);
       } else {
         setActiveBatch(null);
@@ -470,6 +475,10 @@ export default function DashboardScreen() {
   };
 
   const handleJoinClass = async (customUrl?: string) => {
+    if (isInactiveAccount) {
+      Alert.alert("Account Inactive", "Your account is currently inactive. Please contact Speak Hub administration to reactivate your account and join live classes.");
+      return;
+    }
     const rawUrl = customUrl || activeBatch?.meetingLink;
     if (rawUrl) {
       try {
@@ -541,7 +550,63 @@ export default function DashboardScreen() {
       >
 
         <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-          {activeBatch ? (
+          {isInactiveAccount ? (
+            /* INACTIVE ACCOUNT CARD - EXPLAINS WHY MEETING LINK IS NOT SHOWING & HOW TO PAY FEES */
+            <View style={styles.inactiveAccountCard}>
+              <View style={styles.inactiveHeaderRow}>
+                <View style={styles.inactiveIconCircle}>
+                  <MaterialIcons name="lock-person" size={26} color="#dc2626" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.inactiveStatusBadge}>
+                    <View style={styles.inactiveStatusDot} />
+                    <Text style={styles.inactiveStatusBadgeText}>STATUS: INACTIVE</Text>
+                  </View>
+                  <Text style={styles.inactiveTitle}>Meeting Link Access Paused</Text>
+                </View>
+              </View>
+
+              <Text style={styles.inactiveDesc}>
+                Your live class meeting link is currently not showing because your student account is inactive. Please pay your pending fees or contact administration to reactivate your live classes and course materials.
+              </Text>
+
+              {feeDueDate ? (
+                <View style={styles.inactiveFeeDueBox}>
+                  <MaterialIcons name="event-busy" size={16} color="#b45309" />
+                  <Text style={styles.inactiveFeeDueText}>
+                    Fee Due Date: <Text style={{ fontWeight: 'bold' }}>{new Date(feeDueDate).toLocaleDateString()}</Text>
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Action Buttons: Pay Fees & WhatsApp Admin */}
+              <View style={styles.inactiveActionsRow}>
+                <TouchableOpacity
+                  style={styles.inactivePayBtn}
+                  onPress={() => router.push("/(app)/fees")}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="payment" size={16} color="#ffffff" />
+                  <Text style={styles.inactivePayBtnText}>Pay Your Fees</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.inactiveHelpBtn}
+                  onPress={() => {
+                    const studentName = user?.name || 'Student';
+                    const msg = `Hello Speak Hub Admin, my student account (${studentName}) is currently inactive. Please assist me with fee payment and account reactivation.`;
+                    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
+                      Alert.alert("Contact Admin", "Please contact Speak Hub Academy administration to reactivate your student account.");
+                    });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="support-agent" size={16} color="#dc2626" />
+                  <Text style={styles.inactiveHelpBtnText}>Contact Admin</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : activeBatch ? (
             /* SECTION FOR ENROLLED STUDENTS WITH ASSIGNED BATCH */
             <>
               {/* Next Class Banner for Enrolled Batch Students */}
@@ -1210,6 +1275,130 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textLight,
     fontStyle: 'italic',
+  },
+  inactiveAccountCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: '#fecaca',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  inactiveHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  inactiveIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  inactiveStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    width: 'fit-content',
+    alignSelf: 'flex-start',
+    gap: 5,
+    marginBottom: 3,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  inactiveStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#dc2626',
+  },
+  inactiveStatusBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#dc2626',
+    letterSpacing: 0.5,
+  },
+  inactiveTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#991b1b',
+  },
+  inactiveDesc: {
+    fontSize: 12.5,
+    color: '#475569',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  inactiveFeeDueBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    gap: 8,
+    marginBottom: 12,
+  },
+  inactiveFeeDueText: {
+    fontSize: 12,
+    color: '#92400e',
+    fontWeight: '600',
+  },
+  inactiveActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  inactivePayBtn: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inactivePayBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  inactiveHelpBtn: {
+    flex: 1,
+    backgroundColor: '#fef2f2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  inactiveHelpBtnText: {
+    color: '#dc2626',
+    fontSize: 13,
+    fontWeight: '800',
   },
   bannerTitle: {
     fontSize: 14,
