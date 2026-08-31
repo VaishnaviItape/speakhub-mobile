@@ -106,34 +106,71 @@ export default function NotesScreen() {
         studentBatchKeys.includes(b.id) || (b.batchName && studentBatchKeys.includes(b.batchName))
       );
 
-      const targetBatchIdentifiers: string[] = [...studentBatchKeys];
+      // Collect all valid target batch/course identifiers including 'all'
+      const targetBatchIdentifiers: string[] = ['all', ...studentBatchKeys];
       if (matchedBatch) {
         targetBatchIdentifiers.push(matchedBatch.id);
         if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
       }
+      if (studentData.courseId) targetBatchIdentifiers.push(studentData.courseId);
+      if (user.courses && Array.isArray(user.courses)) targetBatchIdentifiers.push(...user.courses);
 
-      // Query notes STRICTLY matching assigned batch
+      // Query all notes
       let notesList: NoteItem[] = [];
-      if (targetBatchIdentifiers.length > 0) {
-        const snap = await getDocs(query(collection(db, 'notes'), where('status', '==', 'published')));
-        snap.forEach(doc => {
-          const data = doc.data();
-          if (targetBatchIdentifiers.includes(data.batchId)) {
-            notesList.push({ id: doc.id, ...data } as NoteItem);
-          }
-        });
-      }
+      const snap = await getDocs(collection(db, 'notes'));
+      snap.forEach(doc => {
+        const data = doc.data();
+        // Check batch assignment (all batches, specific batchId, or matching student identifiers)
+        const isAssigned = !data.batchId || 
+          data.batchId === 'all' || 
+          targetBatchIdentifiers.includes(data.batchId) || 
+          (data.courseId && targetBatchIdentifiers.includes(data.courseId));
 
-      // Filter out scheduled notes (publishDate in future)
-      const now = new Date().getTime();
-      const visibleNotes = notesList.filter(n => {
-        if (!n.publishDate) return true;
-        const pDate = n.publishDate.toDate ? n.publishDate.toDate().getTime() : new Date(n.publishDate).getTime();
-        return pDate <= now;
+        if (isAssigned) {
+          notesList.push({ id: doc.id, ...data } as NoteItem);
+        }
       });
 
-      // Sort by latest created
-      visibleNotes.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      // Filter out drafts, inactive notes, and future scheduled notes
+      const now = new Date().getTime();
+      const visibleNotes = notesList.filter(n => {
+        // Exclude drafts or explicitly deactivated notes
+        if (n.status === 'draft' || n.status === 'inactive') return false;
+
+        // Check scheduled publishing date/time
+        let pTime = 0;
+        if (n.publishDate) {
+          if (n.publishDate.toDate) {
+            pTime = n.publishDate.toDate().getTime();
+          } else if (n.publishDate.seconds) {
+            pTime = n.publishDate.seconds * 1000;
+          } else {
+            pTime = new Date(n.publishDate).getTime();
+          }
+        }
+
+        // Apply specific publishTime (e.g. "14:30") if available
+        if (n.publishTime && n.publishDate) {
+          const [hh, mm] = n.publishTime.split(':');
+          const d = n.publishDate.toDate ? n.publishDate.toDate() : new Date(n.publishDate);
+          d.setHours(Number(hh) || 0, Number(mm) || 0, 0, 0);
+          pTime = d.getTime();
+        }
+
+        // If scheduled for a future timestamp, hide from student until that time
+        if (pTime > 0 && pTime > now) {
+          return false;
+        }
+
+        return true;
+      });
+
+      // Sort by latest created / published
+      visibleNotes.sort((a, b) => {
+        const timeB = b.publishDate?.seconds ? b.publishDate.seconds * 1000 : (b.createdAt?.seconds || 0);
+        const timeA = a.publishDate?.seconds ? a.publishDate.seconds * 1000 : (a.createdAt?.seconds || 0);
+        return timeB - timeA;
+      });
 
       setAllNotes(visibleNotes);
 

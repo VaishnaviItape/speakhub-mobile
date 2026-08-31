@@ -136,7 +136,7 @@ export default function ExamsScreen() {
         const examsQ = query(
           collection(db, 'exams'),
           where('batchId', 'in', targetBatchIdentifiers),
-          where('status', 'in', ['published', 'completed'])
+          where('status', 'in', ['published', 'completed', 'scheduled'])
         );
 
         unsubExams = onSnapshot(examsQ, (snapshot) => {
@@ -144,8 +144,8 @@ export default function ExamsScreen() {
           snapshot.forEach(d => {
             const data = d.data();
             const qCount = Number(data.numberOfQuestions) || 0;
-            // STRICT REQUIREMENT: Only show exam if questions are assigned (> 0) and status is published/completed
-            if (qCount > 0 && (data.status === 'published' || data.status === 'completed')) {
+            // Show exam if questions are assigned (> 0) and status is published/completed/scheduled
+            if (qCount > 0 && (data.status === 'published' || data.status === 'completed' || data.status === 'scheduled')) {
               examsList.push({ id: d.id, ...data });
             }
           });
@@ -268,6 +268,21 @@ export default function ExamsScreen() {
   }, [examStarted, appState, timeLeft]);
 
   const requestStartExam = async (exam: any) => {
+    if (exam.startDate) {
+      const sTime = exam.startDate.toDate ? exam.startDate.toDate().getTime() : (exam.startDate.seconds ? exam.startDate.seconds * 1000 : new Date(exam.startDate).getTime());
+      if (sTime > Date.now()) {
+        const dStr = new Date(sTime).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+        Alert.alert("Exam Not Started Yet", `This exam is scheduled to begin on ${dStr}. Please return at that time to take the test.`);
+        return;
+      }
+    }
+    if (exam.endDate) {
+      const eTime = exam.endDate.toDate ? exam.endDate.toDate().getTime() : (exam.endDate.seconds ? exam.endDate.seconds * 1000 : new Date(exam.endDate).getTime());
+      if (eTime < Date.now()) {
+        Alert.alert("Exam Window Closed", "The time window for this exam has already ended.");
+        return;
+      }
+    }
     setCurrentExam(exam);
     setShowConsent(true);
   };

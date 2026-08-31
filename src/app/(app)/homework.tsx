@@ -44,17 +44,16 @@ export default function HomeworkScreen() {
     }
     showLoader();
     try {
-      // 1. Get latest student record
+      // 1. Get latest student record from Firestore
       const { doc, getDoc } = await import('firebase/firestore');
-      let studentBatchIdOrName = user.batchIds?.[0];
-      let studentCourseId = user.courses?.[0];
-
       let studentData: any = {};
       if (user.id) {
-        const uSnap = await getDoc(doc(db, 'users', user.id));
-        if (uSnap.exists()) {
-          studentData = uSnap.data();
-        }
+        try {
+          const uSnap = await getDoc(doc(db, 'users', user.id));
+          if (uSnap.exists()) {
+            studentData = uSnap.data();
+          }
+        } catch (e) {}
       }
 
       const currentStatus = studentData.status || user?.status || 'pending';
@@ -70,25 +69,31 @@ export default function HomeworkScreen() {
         return;
       }
 
-      // Collect all identifiers for student's assigned batch
-      const targetBatchIdentifiers: string[] = ['all'];
-      if (studentBatchIdOrName) {
-        targetBatchIdentifiers.push(studentBatchIdOrName);
-        try {
-          const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
-          if (bSnap.exists() && bSnap.data().batchName) {
-            targetBatchIdentifiers.push(bSnap.data().batchName);
-          }
-        } catch (e) {}
+      // Collect student batch identifiers
+      const studentBatchKeys: string[] = ['all'];
+      if (studentData.batchIds && Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+      if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
+      if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
+      if (user.batchIds && Array.isArray(user.batchIds)) studentBatchKeys.push(...user.batchIds);
+      if (user.batchId) studentBatchKeys.push(user.batchId);
 
-        try {
-          const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
-          const bSnap = await getDocs(bq);
-          if (!bSnap.empty) {
-            targetBatchIdentifiers.push(bSnap.docs[0].id);
-          }
-        } catch (e) {}
-      }
+      // Collect student course identifiers
+      const studentCourseKeys: string[] = [];
+      if (studentData.courseIds && Array.isArray(studentData.courseIds)) studentCourseKeys.push(...studentData.courseIds);
+      if (studentData.courseId) studentCourseKeys.push(studentData.courseId);
+      if (user.courses && Array.isArray(user.courses)) studentCourseKeys.push(...user.courses);
+      if (user.courseId) studentCourseKeys.push(user.courseId);
+
+      // Fetch all batches to resolve names and document IDs
+      const bSnap = await getDocs(collection(db, 'batches'));
+      const targetBatchIdentifiers: string[] = [...studentBatchKeys];
+      bSnap.forEach(d => {
+        const bData = d.data();
+        if (studentBatchKeys.includes(d.id) || (bData.batchName && studentBatchKeys.includes(bData.batchName))) {
+          targetBatchIdentifiers.push(d.id);
+          if (bData.batchName) targetBatchIdentifiers.push(bData.batchName);
+        }
+      });
 
       // Fetch Subjects
       const subQ = query(collection(db, 'subjects'));
@@ -97,13 +102,20 @@ export default function HomeworkScreen() {
       subSnap.forEach(doc => { subMap[doc.id] = doc.data().subjectName; });
       setSubjects(subMap);
 
-      // Fetch Homeworks STRICTLY matching assigned batch
+      // Fetch all Homeworks
       let hwList: any[] = [];
-      if (targetBatchIdentifiers.length > 0) {
-        const q = query(collection(db, 'homeworks'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published', 'closed']));
-        const hwSnap = await getDocs(q);
-        hwSnap.forEach(doc => hwList.push({ id: doc.id, ...doc.data() }));
-      }
+      const hwSnap = await getDocs(collection(db, 'homeworks'));
+      hwSnap.forEach(doc => {
+        const data = doc.data();
+        const isAssigned = !data.batchId || 
+          data.batchId === 'all' || 
+          targetBatchIdentifiers.includes(data.batchId) ||
+          (data.courseId && studentCourseKeys.includes(data.courseId));
+
+        if (isAssigned) {
+          hwList.push({ id: doc.id, ...data });
+        }
+      });
 
       // Fetch Submissions
       const subq = query(collection(db, 'homework_submissions'), where('studentId', '==', user.id));
@@ -116,13 +128,35 @@ export default function HomeworkScreen() {
       const mergedList: any[] = [];
 
       hwList.forEach(hw => {
-        const pDate = hw.publishDate?.toDate ? hw.publishDate.toDate().getTime() : new Date(hw.publishDate).getTime();
-        if (pDate > now) return; // Not published yet
+        // Exclude drafts
+        if (hw.status === 'draft') return;
+
+        // Check scheduled publishing date/time only if status is scheduled
+        if (hw.status === 'scheduled' && hw.publishDate) {
+          let pTime = 0;
+          if (hw.publishDate.toDate) {
+            pTime = hw.publishDate.toDate().getTime();
+          } else if (hw.publishDate.seconds) {
+            pTime = hw.publishDate.seconds * 1000;
+          } else {
+            pTime = new Date(hw.publishDate).getTime();
+          }
+
+          if (hw.publishTime) {
+            const [hh, mm] = hw.publishTime.split(':');
+            const d = hw.publishDate.toDate ? hw.publishDate.toDate() : new Date(hw.publishDate);
+            d.setHours(Number(hh) || 0, Number(mm) || 0, 0, 0);
+            pTime = d.getTime();
+          }
+
+          // If scheduled for a future timestamp, hide from student until that time
+          if (pTime > 0 && pTime > now) return;
+        }
 
         const submission = subMapById[hw.id];
         let status = 'Pending';
 
-        const dDateStr = hw.dueDate.toDate ? hw.dueDate.toDate().toISOString() : hw.dueDate;
+        const dDateStr = hw.dueDate?.toDate ? hw.dueDate.toDate().toISOString() : (hw.dueDate || new Date().toISOString());
         const dTimeStr = hw.dueTime || '23:59';
         const dDateCombined = new Date(`${dDateStr.split('T')[0]}T${dTimeStr}:00`);
         const isLate = dDateCombined.getTime() < now;
@@ -138,7 +172,11 @@ export default function HomeworkScreen() {
         mergedList.push({ ...hw, submission, currentStatus: status, isLate, dDateCombined });
       });
 
-      mergedList.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+      mergedList.sort((a, b) => {
+        const timeB = b.publishDate?.seconds ? b.publishDate.seconds * 1000 : (b.createdAt?.seconds || 0);
+        const timeA = a.publishDate?.seconds ? a.publishDate.seconds * 1000 : (a.createdAt?.seconds || 0);
+        return timeB - timeA;
+      });
       setHomeworks(mergedList);
 
     } catch (e) {
@@ -328,21 +366,37 @@ export default function HomeworkScreen() {
           </Text>
         </View>
       </View>
+      
       <Text style={styles.title}>{item.title}</Text>
-      {item.description ? <Text style={styles.description} numberOfLines={2}>{item.description}</Text> : null}
       
-      <Text style={styles.date}>Due: {item.dDateCombined.toLocaleString()}</Text>
+      {/* Prominent Task Instructions Box */}
+      {(item.instructions || item.description) ? (
+        <View style={styles.taskBox}>
+          <Text style={styles.taskBoxHeader}>📝 Questions &amp; Task:</Text>
+          <Text style={styles.taskBoxText} numberOfLines={4}>
+            {item.instructions || item.description}
+          </Text>
+        </View>
+      ) : null}
       
-      <View style={{flexDirection: 'row', gap: 10, marginTop: 10}}>
-        {item.attachmentUrl && (
-          <TouchableOpacity style={[styles.actionButton, {backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary}]} onPress={() => handleOpenLink(item)}>
-            <Text style={[styles.actionButtonText, {color: COLORS.primary}]}>View Attachment</Text>
-          </TouchableOpacity>
-        )}
+      <Text style={styles.date}>Due Date: {item.dDateCombined.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</Text>
+      
+      <View style={{flexDirection: 'row', gap: 10, marginTop: 12}}>
+        <TouchableOpacity 
+          style={[styles.actionButton, {flex: 1, backgroundColor: COLORS.primary}]} 
+          onPress={() => handleOpenModal(item)}
+        >
+          <Text style={styles.actionButtonText}>
+            {item.currentStatus === 'Reviewed' ? 'View Feedback' : item.currentStatus === 'Submitted' ? 'View Submission' : 'View Task & Submit'}
+          </Text>
+        </TouchableOpacity>
 
-        {item.currentStatus === 'Reviewed' && (
-          <TouchableOpacity style={[styles.actionButton, {flex: 1, backgroundColor: COLORS.successBackground}]} onPress={() => handleOpenModal(item)}>
-            <Text style={[styles.actionButtonText, {color: COLORS.successText}]}>View Feedback</Text>
+        {item.attachmentUrl && (
+          <TouchableOpacity 
+            style={[styles.actionButton, {backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.primary, paddingHorizontal: 15}]} 
+            onPress={() => handleOpenLink(item)}
+          >
+            <Text style={[styles.actionButtonText, {color: COLORS.primary}]}>PDF</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -363,13 +417,13 @@ export default function HomeworkScreen() {
         ))}
       </View>
 
-        <FlatList 
-          data={currentList}
-          renderItem={renderHomeworkCard}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ padding: 20 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>No homework found in this category.</Text>}
-        />
+      <FlatList 
+        data={currentList}
+        renderItem={renderHomeworkCard}
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: 16 }}
+        ListEmptyComponent={<Text style={styles.emptyText}>No homework found in this category.</Text>}
+      />
 
       {/* Submission & Feedback Modal */}
       <Modal visible={isSubmitModalOpen} animationType="slide">
@@ -378,20 +432,40 @@ export default function HomeworkScreen() {
             <TouchableOpacity onPress={() => { setIsSubmitModalOpen(false); resetSubmission(); }}>
               <MaterialIcons name="close" size={24} color={COLORS.textDark} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Teacher Feedback</Text>
+            <Text style={styles.modalTitle}>
+              {selectedHw?.currentStatus === 'Reviewed' ? 'Teacher Feedback' : selectedHw?.currentStatus === 'Submitted' ? 'Your Submission' : 'Submit Homework'}
+            </Text>
             <View style={{width: 24}}/>
           </View>
 
-          <View style={styles.modalBody}>
+          <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={styles.hwTitle}>{selectedHw?.title}</Text>
-            <Text style={styles.hwInstructions}>{selectedHw?.instructions || selectedHw?.description}</Text>
+            
+            <View style={styles.modalTaskContainer}>
+              <Text style={styles.modalTaskHeader}>📝 Task &amp; Instructions:</Text>
+              <Text style={styles.hwInstructions}>
+                {selectedHw?.instructions || selectedHw?.description || 'No detailed instructions provided.'}
+              </Text>
+            </View>
 
+            {selectedHw?.attachmentUrl && (
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#93c5fd', marginBottom: 15 }]}
+                onPress={() => handleOpenLink(selectedHw)}
+              >
+                <Text style={{ color: '#1e40af', fontWeight: 'bold' }}>📄 Open Attached PDF / File</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Reviewed Status */}
             {selectedHw?.currentStatus === 'Reviewed' && (
               <View style={styles.feedbackContainer}>
-                <View style={styles.scoreBox}>
-                  <Text style={styles.scoreText}>{selectedHw.submission?.marks} / {selectedHw.maximumMarks}</Text>
-                  <Text style={{color: COLORS.textMedium}}>Marks</Text>
-                </View>
+                {selectedHw.submission?.marks !== undefined && (
+                  <View style={styles.scoreBox}>
+                    <Text style={styles.scoreText}>{selectedHw.submission?.marks} / {selectedHw.maximumMarks || 100}</Text>
+                    <Text style={{color: COLORS.textMedium, fontWeight: 'bold'}}>Marks Awarded</Text>
+                  </View>
+                )}
                 
                 {selectedHw.submission?.correctionNotes ? (
                   <View style={styles.feedbackBlock}>
@@ -408,7 +482,53 @@ export default function HomeworkScreen() {
                 ) : null}
               </View>
             )}
-          </View>
+
+            {/* Submitted Status */}
+            {selectedHw?.currentStatus === 'Submitted' && (
+              <View style={{ backgroundColor: '#f0fdf4', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#bbf7d0', marginTop: 10 }}>
+                <Text style={{ color: '#166534', fontWeight: 'bold', fontSize: 14, marginBottom: 6 }}>✓ Submitted for Review</Text>
+                {selectedHw.submission?.textAnswer ? (
+                  <Text style={{ color: '#14532d', fontSize: 13, marginTop: 4 }}>Your Answer: {selectedHw.submission.textAnswer}</Text>
+                ) : null}
+              </View>
+            )}
+
+            {/* Pending / Overdue Status -> Submission Form */}
+            {(selectedHw?.currentStatus === 'Pending' || selectedHw?.currentStatus === 'Overdue') && (
+              <View style={styles.submissionContainer}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Your Written Answer / Response:</Text>
+                  <TextInput 
+                    style={styles.textArea}
+                    placeholder="Type your homework answer or response here..."
+                    multiline
+                    value={textAnswer}
+                    onChangeText={setTextAnswer}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Remarks for Teacher (Optional):</Text>
+                  <TextInput 
+                    style={styles.input}
+                    placeholder="e.g. Completed questions 1 to 5"
+                    value={studentRemarks}
+                    onChangeText={setStudentRemarks}
+                  />
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.submitBtn} 
+                  onPress={handleHomeworkSubmit}
+                  disabled={isUploading}
+                >
+                  <Text style={styles.submitBtnText}>
+                    {isUploading ? 'Submitting Homework...' : 'Submit Homework'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
         </View>
       </Modal>
 
@@ -419,20 +539,24 @@ export default function HomeworkScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   tabsContainer: { flexDirection: 'row', backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingTop: 10 },
-  tab: { flex: 1, paddingVertical: 15, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
   activeTab: { borderBottomColor: COLORS.primary },
   tabText: { color: COLORS.textMedium, fontWeight: 'bold', fontSize: 12 },
   activeTabText: { color: COLORS.primary },
-  emptyText: { textAlign: 'center', color: COLORS.textMedium, marginTop: 50 },
+  emptyText: { textAlign: 'center', color: COLORS.textMedium, marginTop: 50, fontSize: 14 },
   
-  card: { backgroundColor: COLORS.surface, padding: 20, borderRadius: 15, marginBottom: 15, elevation: 2, borderLeftWidth: 4, borderLeftColor: COLORS.primary },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  subject: { fontSize: 14, color: COLORS.primary, fontWeight: 'bold' },
-  title: { fontSize: 18, fontWeight: 'bold', color: COLORS.textDark, marginBottom: 5 },
-  description: { fontSize: 14, color: COLORS.textMedium, marginBottom: 10 },
-  date: { fontSize: 12, color: COLORS.textLight, fontWeight: 'bold' },
+  card: { backgroundColor: COLORS.surface, padding: 16, borderRadius: 14, marginBottom: 14, elevation: 2, borderLeftWidth: 4, borderLeftColor: COLORS.primary, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  subject: { fontSize: 13, color: COLORS.primary, fontWeight: 'bold' },
+  title: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark, marginBottom: 6 },
   
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  taskBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#3b82f6', marginBottom: 10 },
+  taskBoxHeader: { fontSize: 12, fontWeight: 'bold', color: '#1e40af', marginBottom: 4 },
+  taskBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
+  
+  date: { fontSize: 12, color: COLORS.textLight, fontWeight: '600' },
+  
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusPending: { backgroundColor: '#fff3cd' },
   statusCompleted: { backgroundColor: '#e0f2fe' },
   statusReviewed: { backgroundColor: COLORS.successBackground },
@@ -443,31 +567,32 @@ const styles = StyleSheet.create({
   statusTextReviewed: { color: COLORS.successText, fontSize: 10, fontWeight: 'bold' },
   statusTextOverdue: { color: '#ef4444', fontSize: 10, fontWeight: 'bold' },
   
-  actionButton: { backgroundColor: COLORS.primary, padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  actionButtonText: { color: COLORS.textInverse, fontWeight: 'bold', fontSize: 14 },
+  actionButton: { padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  actionButtonText: { color: '#ffffff', fontWeight: 'bold', fontSize: 13 },
 
   modalContainer: { flex: 1, backgroundColor: COLORS.background },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 50, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderColor: COLORS.border },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textDark },
-  modalBody: { padding: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 50, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderColor: COLORS.border },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark },
+  modalBody: { flex: 1, padding: 16 },
   
-  hwTitle: { fontSize: 22, fontWeight: 'bold', color: COLORS.primary, marginBottom: 10 },
-  hwInstructions: { fontSize: 16, color: COLORS.textDark, marginBottom: 20, backgroundColor: '#f8fafc', padding: 15, borderRadius: 10 },
+  hwTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary, marginBottom: 10 },
+  modalTaskContainer: { backgroundColor: '#f8fafc', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 15 },
+  modalTaskHeader: { fontSize: 13, fontWeight: 'bold', color: '#334155', marginBottom: 6 },
+  hwInstructions: { fontSize: 14, color: COLORS.textDark, lineHeight: 20 },
   
   submissionContainer: { marginTop: 10 },
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: 'bold', color: COLORS.textMedium, marginBottom: 8 },
-  input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 15, fontSize: 16 },
-  textArea: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 15, fontSize: 16, minHeight: 100, textAlignVertical: 'top' },
-  fileButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primaryLightest, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primary, padding: 20, borderRadius: 10 },
-  fileButtonText: { color: COLORS.primary, fontWeight: 'bold', marginLeft: 10 },
-  submitBtn: { backgroundColor: COLORS.primary, padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  submitBtnText: { color: COLORS.textInverse, fontWeight: 'bold', fontSize: 16 },
+  inputGroup: { marginBottom: 15 },
+  label: { fontSize: 13, fontWeight: 'bold', color: COLORS.textMedium, marginBottom: 6 },
+  input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, fontSize: 14, color: COLORS.textDark },
+  textArea: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, fontSize: 14, minHeight: 120, textAlignVertical: 'top', color: COLORS.textDark },
+  
+  submitBtn: { backgroundColor: COLORS.primary, padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+  submitBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
 
   feedbackContainer: { marginTop: 10 },
-  scoreBox: { backgroundColor: COLORS.successBackground, padding: 20, borderRadius: 15, alignItems: 'center', marginBottom: 20 },
-  scoreText: { fontSize: 32, fontWeight: 'bold', color: COLORS.successText },
-  feedbackBlock: { backgroundColor: COLORS.surface, padding: 15, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, marginBottom: 15 },
-  feedbackLabel: { fontSize: 14, fontWeight: 'bold', color: COLORS.textMedium, marginBottom: 5 },
-  feedbackText: { fontSize: 16, color: COLORS.textDark }
+  scoreBox: { backgroundColor: COLORS.successBackground, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 15 },
+  scoreText: { fontSize: 28, fontWeight: 'bold', color: COLORS.successText },
+  feedbackBlock: { backgroundColor: COLORS.surface, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, marginBottom: 12 },
+  feedbackLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.textMedium, marginBottom: 4 },
+  feedbackText: { fontSize: 14, color: COLORS.textDark }
 });
