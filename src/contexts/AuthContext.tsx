@@ -37,16 +37,60 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const router = useRouter();
 
   useEffect(() => {
+    let unsubUserDoc: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubUserDoc) {
+        unsubUserDoc();
+        unsubUserDoc = null;
+      }
+
       if (firebaseUser) {
-        await fetchAndSetUserData(firebaseUser.uid, firebaseUser.email || '');
+        try {
+          const { doc, onSnapshot } = await import('firebase/firestore');
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+
+          unsubUserDoc = onSnapshot(userDocRef, (snap) => {
+            if (snap.exists()) {
+              const data = snap.data();
+              setUser({
+                id: snap.id,
+                email: data.email,
+                phone: data.phone || data.mobile,
+                address: data.address,
+                name: data.name || data.firstName || 'Student',
+                role: data.role || 'student',
+                status: data.status || 'active',
+                forcePasswordChange: data.forcePasswordChange,
+                isDemoMode: data.isDemoMode,
+                demoStartDate: data.demoStartDate,
+                demoEndDate: data.demoEndDate,
+                courses: data.courseIds || [],
+                batchIds: data.batchIds || []
+              });
+            } else {
+              fetchAndSetUserData(firebaseUser.uid, firebaseUser.email || '');
+            }
+            setLoading(false);
+          }, (err) => {
+            console.warn("User onSnapshot listener error:", err);
+            fetchAndSetUserData(firebaseUser.uid, firebaseUser.email || '');
+            setLoading(false);
+          });
+        } catch (e) {
+          await fetchAndSetUserData(firebaseUser.uid, firebaseUser.email || '');
+          setLoading(false);
+        }
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubUserDoc) unsubUserDoc();
+      unsubscribe();
+    };
   }, []);
 
   const fetchAndSetUserData = async (uid: string, emailOrPhone: string) => {

@@ -14,6 +14,7 @@ export default function ExamsScreen() {
   const [attempts, setAttempts] = useState<any[]>([]);
   const [questions, setQuestions] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Live' | 'Completed' | 'Missed'>('Live');
+  const [isAccessDenied, setIsAccessDenied] = useState(false);
   const { showLoader, hideLoader } = useLoader();
 
   // Exam State
@@ -43,64 +44,105 @@ export default function ExamsScreen() {
     let unsubAttempts: (() => void) | undefined;
 
     const setupListeners = async () => {
-      if (!user) return;
+      if (!user) {
+        setExams([]);
+        setAttempts([]);
+        hideLoader();
+        return;
+      }
+
       showLoader();
       try {
         const { doc, getDoc, getDocs, onSnapshot } = await import('firebase/firestore');
-        let studentBatchIdOrName = user.batchIds?.[0];
-
+        
+        // 1. Fetch latest user document to verify active status
         let studentData: any = {};
         if (user.id) {
-          const uSnap = await getDoc(doc(db, 'users', user.id));
-          if (uSnap.exists()) {
-            studentData = uSnap.data();
-          }
+          try {
+            const uSnap = await getDoc(doc(db, 'users', user.id));
+            if (uSnap.exists()) {
+              studentData = uSnap.data();
+            }
+          } catch (e) {}
         }
 
-        const currentStatus = studentData.status || user?.status || 'pending';
+        const currentStatus = studentData.status || user.status || 'pending';
         let isDemoActive = false;
         if (studentData.isDemoMode && studentData.demoEndDate) {
           const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
           if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
         }
 
+        // STRICT CHECK: If student is inactive or not active/demo, strictly block all exams
         if (currentStatus !== 'active' && !isDemoActive) {
+          setIsAccessDenied(true);
           setExams([]);
           setAttempts([]);
           hideLoader();
           return;
         }
 
-        const targetBatchIdentifiers: string[] = ['all'];
-        if (studentBatchIdOrName) {
-          targetBatchIdentifiers.push(studentBatchIdOrName);
-          try {
-            const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
-            if (bSnap.exists() && bSnap.data().batchName) {
-              targetBatchIdentifiers.push(bSnap.data().batchName);
-            }
-          } catch (e) {}
+        setIsAccessDenied(false);
 
+        // 2. Resolve active student batch identifiers
+        const studentBatchIdOrName = (studentData.batchIds && studentData.batchIds[0]) || user.batchIds?.[0];
+        if (!studentBatchIdOrName) {
+          // No batch assigned to student
+          setExams([]);
+          hideLoader();
+          return;
+        }
+
+        let isBatchActive = false;
+        const targetBatchIdentifiers: string[] = [];
+        try {
+          const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
+          if (bSnap.exists()) {
+            const bData = bSnap.data();
+            if (bData.status === 'active') {
+              isBatchActive = true;
+              targetBatchIdentifiers.push(studentBatchIdOrName);
+              if (bData.batchName) targetBatchIdentifiers.push(bData.batchName);
+            }
+          }
+        } catch (e) {}
+
+        if (!isBatchActive) {
           try {
             const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
             const bSnap = await getDocs(bq);
             if (!bSnap.empty) {
-              targetBatchIdentifiers.push(bSnap.docs[0].id);
+              const bData = bSnap.docs[0].data();
+              if (bData.status === 'active') {
+                isBatchActive = true;
+                targetBatchIdentifiers.push(bSnap.docs[0].id);
+                targetBatchIdentifiers.push(studentBatchIdOrName);
+              }
             }
           } catch (e) {}
         }
 
-        if (targetBatchIdentifiers.length > 0) {
-          const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published', 'completed']));
-          unsubExams = onSnapshot(examsQ, (snapshot) => {
-            const examsList: any[] = [];
-            snapshot.forEach(d => examsList.push({ id: d.id, ...d.data() }));
-            setExams(examsList);
-          });
-        } else {
+        // If batch itself is not active, do not load exams
+        if (!isBatchActive || targetBatchIdentifiers.length === 0) {
           setExams([]);
+          hideLoader();
+          return;
         }
-        
+
+        targetBatchIdentifiers.push('all');
+
+        const examsQ = query(
+          collection(db, 'exams'),
+          where('batchId', 'in', targetBatchIdentifiers),
+          where('status', 'in', ['published', 'completed'])
+        );
+
+        unsubExams = onSnapshot(examsQ, (snapshot) => {
+          const examsList: any[] = [];
+          snapshot.forEach(d => examsList.push({ id: d.id, ...d.data() }));
+          setExams(examsList);
+        });
+
         const attemptsQ = query(collection(db, 'exam_attempts'), where('studentId', '==', user.id));
         unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
           const attemptsList: any[] = [];
@@ -121,7 +163,7 @@ export default function ExamsScreen() {
       if (unsubExams) unsubExams();
       if (unsubAttempts) unsubAttempts();
     };
-  }, [user]);
+  }, [user, user?.status]);
 
   const fetchQuestionsForExam = async (examId: string) => {
     const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
@@ -347,58 +389,148 @@ export default function ExamsScreen() {
 
   const currentList = categorizedExams()[activeTab];
 
-  const renderExamCard = ({ item }: { item: any }) => (
-    <View style={styles.card}>
-      <View style={{flex: 1}}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.subtitle}>{item.duration} mins • {item.numberOfQuestions} Qs</Text>
-        <Text style={styles.dateText}>Ends: {new Date(item.endDate).toLocaleString()}</Text>
+  const renderExamCard = ({ item }: { item: any }) => {
+    const isLive = activeTab === 'Live';
+    const isCompleted = activeTab === 'Completed';
+    const isUpcoming = activeTab === 'Upcoming';
+    const isMissed = activeTab === 'Missed';
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          {isCompleted && item.attempt && (
+            <View style={styles.scorePill}>
+              <MaterialIcons name="emoji-events" size={13} color={COLORS.primary} />
+              <Text style={styles.scorePillText}>Score: {item.attempt.score}</Text>
+            </View>
+          )}
+          {isLive && (
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.livePillText}>LIVE NOW</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.cardMetaRow}>
+          <View style={styles.metaBadge}>
+            <MaterialIcons name="schedule" size={13} color={COLORS.textMedium} />
+            <Text style={styles.metaBadgeText}>{item.duration} mins</Text>
+          </View>
+          <View style={styles.metaBadge}>
+            <MaterialIcons name="format-list-numbered" size={13} color={COLORS.textMedium} />
+            <Text style={styles.metaBadgeText}>{item.numberOfQuestions || '20'} Qs</Text>
+          </View>
+          {item.totalMarks ? (
+            <View style={styles.metaBadge}>
+              <MaterialIcons name="grade" size={13} color={COLORS.textMedium} />
+              <Text style={styles.metaBadgeText}>{item.totalMarks} Marks</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.cardFooterRow}>
+          <View style={styles.dateInfoWrapper}>
+            <MaterialIcons name="event" size={13} color="#94a3b8" />
+            <Text style={styles.dateText} numberOfLines={1}>
+              Ends: {new Date(item.endDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+
+          {isLive && (
+            <TouchableOpacity style={styles.startButton} onPress={() => requestStartExam(item)} activeOpacity={0.85}>
+              <Text style={styles.startText}>Start Exam</Text>
+              <MaterialIcons name="arrow-forward" size={14} color="#ffffff" />
+            </TouchableOpacity>
+          )}
+
+          {isCompleted && (
+            <TouchableOpacity style={styles.viewResultButton} onPress={() => viewLeaderboard(item, item.attempt)} activeOpacity={0.85}>
+              <Text style={styles.viewResultText}>View Result</Text>
+              <MaterialIcons name="visibility" size={14} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+
+          {isUpcoming && (
+            <View style={styles.disabledBadge}>
+              <MaterialIcons name="lock" size={12} color="#64748b" />
+              <Text style={styles.disabledText}>Starts Soon</Text>
+            </View>
+          )}
+
+          {isMissed && (
+            <View style={styles.missedBadge}>
+              <MaterialIcons name="event-busy" size={12} color="#dc2626" />
+              <Text style={styles.missedText}>Expired</Text>
+            </View>
+          )}
+        </View>
       </View>
-      
-      {activeTab === 'Live' && (
-        <TouchableOpacity style={styles.startButton} onPress={() => requestStartExam(item)}>
-          <Text style={styles.startText}>Start</Text>
-        </TouchableOpacity>
-      )}
-      {activeTab === 'Completed' && (
-        <TouchableOpacity style={styles.completedBadge} onPress={() => viewLeaderboard(item, item.attempt)}>
-          <Text style={styles.completedText}>Score: {item.attempt.score} • View</Text>
-        </TouchableOpacity>
-      )}
-      {activeTab === 'Upcoming' && (
-        <View style={styles.disabledBadge}>
-          <Text style={styles.disabledText}>Waiting</Text>
-        </View>
-      )}
-      {activeTab === 'Missed' && (
-        <View style={styles.missedBadge}>
-          <Text style={styles.missedText}>Missed</Text>
-        </View>
-      )}
-    </View>
-  );
+    );
+  };
+
+  const tabs: ('Live' | 'Upcoming' | 'Completed' | 'Missed')[] = ['Live', 'Upcoming', 'Completed', 'Missed'];
+  const categorized = categorizedExams();
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabsContainer}>
-        {['Live', 'Upcoming', 'Completed', 'Missed'].map((tab) => (
-          <TouchableOpacity 
-            key={tab} 
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => setActiveTab(tab as any)}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.tabsWrapper}>
+        <View style={styles.tabsSegment}>
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab;
+            const count = categorized[tab]?.length || 0;
+            return (
+              <TouchableOpacity 
+                key={tab} 
+                style={[styles.tabSegmentBtn, isActive && styles.tabSegmentBtnActive]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tabText, isActive && styles.activeTabText]} numberOfLines={1}>
+                  {tab}
+                </Text>
+                {count > 0 && (
+                  <View style={[styles.tabCountPill, isActive && styles.tabCountPillActive]}>
+                    <Text style={[styles.tabCountText, isActive && styles.tabCountTextActive]}>{count}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
+      {isAccessDenied || user?.status !== 'active' ? (
+        <View style={styles.accessDeniedContainer}>
+          <View style={styles.accessDeniedCard}>
+            <View style={styles.accessDeniedIconWrapper}>
+              <MaterialIcons name="lock-person" size={40} color="#dc2626" />
+            </View>
+            <Text style={styles.accessDeniedTitle}>Account Inactive</Text>
+            <Text style={styles.accessDeniedSubtitle}>
+              Your student account is currently inactive. You cannot view or take exams until your account is approved and activated by the administrator.
+            </Text>
+            <View style={styles.accessDeniedBadge}>
+              <Text style={styles.accessDeniedBadgeText}>Status: INACTIVE</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
         <FlatList 
           data={currentList}
           renderItem={renderExamCard}
           keyExtractor={item => item.id}
-          contentContainerStyle={{ padding: 20 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>No exams found.</Text>}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="assignment-late" size={44} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>No {activeTab} Exams</Text>
+              <Text style={styles.emptySubtitle}>There are no {activeTab.toLowerCase()} exams scheduled for your batch.</Text>
+            </View>
+          }
         />
+      )}
 
       {/* Pre-Exam Consent Modal */}
       <Modal visible={showConsent} animationType="fade" transparent={true}>
@@ -579,77 +711,421 @@ export default function ExamsScreen() {
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  tabsContainer: { flexDirection: 'row', backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingTop: 10 },
-  tab: { flex: 1, paddingVertical: 15, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: COLORS.primary },
-  tabText: { color: COLORS.textMedium, fontWeight: 'bold' },
-  activeTabText: { color: COLORS.primary },
-  emptyText: { textAlign: 'center', marginTop: 50, color: COLORS.textMedium },
+  container: { flex: 1, backgroundColor: '#f8fafc' },
   
-  card: { backgroundColor: COLORS.surface, padding: 20, borderRadius: 15, marginBottom: 15, flexDirection: 'row', alignItems: 'center', elevation: 2 },
-  title: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark },
-  subtitle: { fontSize: 14, color: COLORS.textMedium, marginTop: 5 },
-  dateText: { fontSize: 12, color: COLORS.primary, marginTop: 5 },
-  
-  startButton: { backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  startText: { color: COLORS.textInverse, fontWeight: 'bold' },
-  completedBadge: { backgroundColor: COLORS.primaryLightest, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
-  completedText: { color: COLORS.primary, fontWeight: 'bold' },
-  disabledBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
-  disabledText: { color: '#64748b', fontWeight: 'bold' },
-  missedBadge: { backgroundColor: '#fee2e2', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
-  missedText: { color: '#ef4444', fontWeight: 'bold' },
+  /* Tabs Segmented Bar */
+  tabsWrapper: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  tabsSegment: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    padding: 3,
+  },
+  tabSegmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    gap: 4,
+  },
+  tabSegmentBtnActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  activeTabText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  tabCountPill: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  tabCountPillActive: {
+    backgroundColor: COLORS.primaryLightest,
+  },
+  tabCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  tabCountTextActive: {
+    color: COLORS.primary,
+  },
 
-  examContainer: { flex: 1, backgroundColor: COLORS.surface },
-  examHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 50, borderBottomWidth: 1, borderColor: COLORS.border },
-  examTitleText: { flex: 1, fontSize: 18, fontWeight: 'bold', color: COLORS.textDark },
-  timerText: { fontSize: 18, fontWeight: 'bold', color: COLORS.error, marginHorizontal: 15 },
-  reviewBtnHeader: { padding: 8, borderRadius: 10, borderWidth: 1, borderColor: COLORS.primary },
-  reviewBtnText: { color: COLORS.primary, fontWeight: 'bold', fontSize: 12 },
+  listContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+
+  /* Exam Card */
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 10,
+  },
+  title: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    lineHeight: 20,
+  },
+  scorePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  scorePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  livePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ef4444',
+  },
+  livePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ef4444',
+    letterSpacing: 0.5,
+  },
+
+  cardMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  metaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  metaBadgeText: {
+    fontSize: 11,
+    color: COLORS.textMedium,
+    fontWeight: '600',
+  },
+
+  cardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    gap: 8,
+  },
+  dateInfoWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dateText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+
+  startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  startText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  viewResultButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewResultText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  disabledBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  disabledText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  missedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  missedText: {
+    color: '#dc2626',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  /* Empty state */
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+
+  /* Exam Modal & Proctoring */
+  examContainer: { flex: 1, backgroundColor: '#ffffff' },
+  examHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: 45,
+    borderBottomWidth: 1,
+    borderColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
+  },
+  examTitleText: { flex: 1, fontSize: 16, fontWeight: '700', color: COLORS.textDark },
+  timerText: { fontSize: 16, fontWeight: '800', color: '#dc2626', marginHorizontal: 12 },
+  reviewBtnHeader: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: COLORS.primaryLightest,
+  },
+  reviewBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 12 },
   
-  proctorCameraContainer: { width: 100, height: 120, position: 'absolute', top: 100, right: 20, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: COLORS.primary, zIndex: 10 },
+  proctorCameraContainer: {
+    width: 90,
+    height: 110,
+    position: 'absolute',
+    top: 90,
+    right: 16,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    zIndex: 10,
+    backgroundColor: '#000',
+  },
   camera: { flex: 1 },
   
-  questionContainer: { padding: 20, flex: 1 },
-  questionNumber: { fontSize: 14, color: COLORS.textMedium, fontWeight: 'bold', marginBottom: 10 },
-  questionText: { fontSize: 20, fontWeight: 'bold', color: COLORS.textDark, marginBottom: 30, paddingRight: 110 },
+  questionContainer: { padding: 18, flex: 1 },
+  questionNumber: { fontSize: 12, color: COLORS.primary, fontWeight: '700', textTransform: 'uppercase', marginBottom: 8 },
+  questionText: { fontSize: 17, fontWeight: '700', color: COLORS.textDark, marginBottom: 24, paddingRight: 95, lineHeight: 24 },
   
-  optionButton: { borderWidth: 1, borderColor: COLORS.border, padding: 15, borderRadius: 10, marginBottom: 15, backgroundColor: COLORS.background },
+  optionButton: {
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: '#ffffff',
+  },
   optionButtonSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLightest },
-  optionText: { fontSize: 16, color: COLORS.textDark },
-  optionTextSelected: { color: COLORS.primary, fontWeight: 'bold' },
+  optionText: { fontSize: 14, color: COLORS.textDark, lineHeight: 20 },
+  optionTextSelected: { color: COLORS.primary, fontWeight: '700' },
   
-  navigationFooter: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderTopWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
-  navBtn: { paddingHorizontal: 30, paddingVertical: 15, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, minWidth: 120, alignItems: 'center' },
-  navBtnDisabled: { opacity: 0.5 },
-  navBtnText: { fontWeight: 'bold', fontSize: 16 },
+  navigationFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderTopWidth: 1,
+    borderColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
+  },
+  navBtn: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    minWidth: 100,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  navBtnDisabled: { opacity: 0.4 },
+  navBtnText: { fontWeight: '700', fontSize: 14, color: COLORS.textDark },
   submitBtn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  submitBtnText: { color: COLORS.textInverse, fontWeight: 'bold', fontSize: 16 },
+  submitBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
 
-  reviewModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  reviewModalContent: { backgroundColor: COLORS.surface, padding: 30, borderRadius: 20, width: '90%' },
-  reviewTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
-  gridItem: { width: 45, height: 45, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  reviewModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  reviewModalContent: { backgroundColor: '#ffffff', padding: 24, borderRadius: 20, width: '100%', maxWidth: 360 },
+  reviewTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16, color: COLORS.textDark },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  gridItem: { width: 42, height: 42, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   gridItemAttempted: { backgroundColor: COLORS.primaryLightest, borderColor: COLORS.primary },
-  gridItemUnattempted: { backgroundColor: COLORS.background, borderColor: COLORS.border },
-  gridText: { fontSize: 16, fontWeight: 'bold', color: COLORS.textMedium },
-  gridTextAttempted: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary },
-  closeReviewBtn: { marginTop: 30, padding: 15, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, alignItems: 'center' },
-  closeReviewText: { fontWeight: 'bold' },
+  gridItemUnattempted: { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
+  gridText: { fontSize: 14, fontWeight: '600', color: COLORS.textMedium },
+  gridTextAttempted: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+  closeReviewBtn: { marginTop: 20, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, alignItems: 'center' },
+  closeReviewText: { fontWeight: '700', color: COLORS.textDark },
 
-  resultTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: COLORS.textDark },
-  resultMessage: { textAlign: 'center', fontSize: 16, color: COLORS.textMedium, marginBottom: 20 },
-  scoreContainer: { width: 100, height: 100, borderRadius: 50, borderWidth: 5, borderColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  scoreText: { fontSize: 28, fontWeight: 'bold' },
-  scoreSubtext: { fontSize: 12, color: COLORS.textMedium, fontWeight: 'bold' },
-  finishBtn: { backgroundColor: COLORS.primary, padding: 15, borderRadius: 10, alignItems: 'center', paddingHorizontal: 20 },
-  finishBtnText: { color: COLORS.textInverse, fontWeight: 'bold', fontSize: 16 }
+  resultTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 16, color: COLORS.textDark },
+  resultMessage: { textAlign: 'center', fontSize: 14, color: COLORS.textMedium, marginBottom: 16, lineHeight: 20 },
+  scoreContainer: { width: 90, height: 90, borderRadius: 45, borderWidth: 4, borderColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primaryLightest },
+  scoreText: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
+  scoreSubtext: { fontSize: 11, color: COLORS.textMedium, fontWeight: '700' },
+  finishBtn: { backgroundColor: COLORS.primary, padding: 14, borderRadius: 10, alignItems: 'center' },
+  finishBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
+
+  /* Access Denied Styles for Inactive Students */
+  accessDeniedContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 30,
+  },
+  accessDeniedCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  accessDeniedIconWrapper: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  accessDeniedTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#991b1b',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  accessDeniedSubtitle: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  accessDeniedBadge: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  accessDeniedBadgeText: {
+    color: '#dc2626',
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 0.5,
+  }
 });

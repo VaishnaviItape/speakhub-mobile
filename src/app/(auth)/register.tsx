@@ -135,7 +135,7 @@ export default function RegisterScreen() {
       });
 
       hideLoader();
-      alert("Registration Successful! You now have 7 days demo access to watch courses.");
+      alert("🎉 Registration Successful! Welcome to Speak Hub Academy. You can now explore courses, watch video lessons, and access study materials.");
       router.replace('/(app)/dashboard');
     } catch (err: any) {
       console.error(err);
@@ -171,7 +171,7 @@ export default function RegisterScreen() {
       >
         <View style={styles.card}>
           <Text style={styles.title}>Student Registration</Text>
-          <Text style={styles.subtitle}>Create your account to watch courses</Text>
+          <Text style={styles.subtitle}>Create your free account to access courses & lessons</Text>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -270,7 +270,7 @@ export default function RegisterScreen() {
             style={styles.button} 
             onPress={handleRegister}
           >
-            <Text style={styles.buttonText}>Register & Watch Courses</Text>
+            <Text style={styles.buttonText}>Complete Registration</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.backButton}>

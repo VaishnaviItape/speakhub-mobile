@@ -1,82 +1,106 @@
 import { Tabs } from 'expo-router';
-import { useAuth } from '../../contexts/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProfileDrawer from '../../components/ui/ProfileDrawer';
 
 export default function AppLayout() {
-  const { user } = useAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  
-  const isDemo = user?.isDemoMode;
-  let demoExpired = false;
-  
-  if (isDemo && user?.demoEndDate) {
-    const end = user.demoEndDate?.toDate ? user.demoEndDate.toDate() : new Date(user.demoEndDate);
-    if (new Date() > end) {
-      demoExpired = true;
-    }
-  }
-
-  if (demoExpired) {
-    return (
-      <View style={styles.lockContainer}>
-        <MaterialIcons name="lock" size={64} color={COLORS.primary} />
-        <Text style={styles.lockTitle}>Demo Period Ended</Text>
-        <Text style={styles.lockText}>Your demo period has ended. Please complete your admission by paying the course fee to continue accessing Speak Hub Academy.</Text>
-      </View>
-    );
-  }
+  const insets = useSafeAreaInsets();
 
   // Common Header Left Component for the Hamburger Menu
   const DrawerButton = () => (
     <TouchableOpacity 
       onPress={() => setIsDrawerOpen(true)}
-      style={{ marginLeft: 16, padding: 4 }}
+      style={{ marginLeft: 16, padding: 6 }}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
     >
-      <MaterialIcons name="menu" size={26} color={COLORS.textDark} />
+      <MaterialIcons name="menu" size={24} color={COLORS.textDark} />
     </TouchableOpacity>
   );
+
+  // Dynamic bottom padding to ensure Android 3-button navigation and iOS home indicators never overlap
+  const bottomPadding = insets.bottom > 0 ? insets.bottom : Platform.OS === 'android' ? 10 : 8;
+  const tabHeight = 56 + bottomPadding;
 
   return (
     <>
       <Tabs screenOptions={{ 
         headerShown: true, 
         headerLeft: () => <DrawerButton />,
-        tabBarActiveTintColor: COLORS.textInverse,
-        tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.6)',
-        tabBarStyle: { backgroundColor: COLORS.primary, borderTopWidth: 0, height: 60, paddingBottom: 6 },
-        headerStyle: { backgroundColor: COLORS.surface },
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: '#94a3b8',
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+          marginTop: -2,
+          marginBottom: 2,
+        },
+        tabBarStyle: { 
+          backgroundColor: '#ffffff',
+          borderTopWidth: 1,
+          borderTopColor: '#f1f5f9',
+          height: tabHeight,
+          paddingBottom: bottomPadding,
+          paddingTop: 6,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 6,
+        },
+        headerStyle: { 
+          backgroundColor: '#ffffff',
+          elevation: 1,
+          shadowOpacity: 0.05,
+        },
+        headerTitleStyle: {
+          fontWeight: '700',
+          fontSize: 18,
+          color: COLORS.textDark,
+        },
         headerTintColor: COLORS.textDark
       }}>
         <Tabs.Screen 
           name="dashboard" 
           options={{ 
             title: 'Home',
-            tabBarIcon: ({ color }) => <MaterialIcons name="home" size={24} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "home" : "home"} size={23} color={color} />
+            )
           }} 
         />
         <Tabs.Screen 
           name="notes" 
           options={{ 
-            title: 'Batches & Notes',
-            tabBarIcon: ({ color }) => <MaterialIcons name="menu-book" size={24} color={color} />
+            title: 'Notes',
+            headerTitle: 'Study Notes & Batches',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "menu-book" : "menu-book"} size={23} color={color} />
+            )
           }} 
         />
         <Tabs.Screen 
           name="exams" 
           options={{ 
             title: 'Exams',
-            tabBarIcon: ({ color }) => <MaterialIcons name="assignment" size={24} color={color} />
+            headerTitle: 'Exams & Quizzes',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "assignment" : "assignment"} size={23} color={color} />
+            )
           }} 
         />
         <Tabs.Screen 
           name="profile" 
           options={{ 
-            title: 'Student Hub',
-            tabBarIcon: ({ color }) => <MaterialIcons name="person" size={24} color={color} />
+            title: 'Profile',
+            headerTitle: 'Student Hub',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "person" : "person-outline"} size={23} color={color} />
+            )
           }} 
         />
 
@@ -119,26 +143,3 @@ export default function AppLayout() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  lockContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  lockTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.textDark,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  lockText: {
-    fontSize: 16,
-    color: COLORS.textLight,
-    textAlign: 'center',
-    lineHeight: 24,
-  }
-});

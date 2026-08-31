@@ -314,22 +314,6 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
-
-          {/* Demo */}
-
-          {isDemo && (
-            <View style={styles.demoContainer}>
-              <MaterialIcons
-                name="info-outline"
-                size={15}
-                color="#92400E"
-              />
-
-              <Text style={styles.demoText}>
-                You are currently using the 7-day demo
-              </Text>
-            </View>
-          )}
         </View>
 
         {/* ==========================================
@@ -631,7 +615,7 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: '#FFF1F3',
+    backgroundColor: COLORS.primaryLightest,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

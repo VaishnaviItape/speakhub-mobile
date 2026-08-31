@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Modal,
   RefreshControl,
@@ -19,6 +20,8 @@ import { db } from "../../config/firebase";
 import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLoader } from "../../contexts/LoaderContext";
+import { LinearGradient } from "expo-linear-gradient";
+import { getYouTubeThumbnail, getYouTubeVideoId } from "../../utils/youtube";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -40,6 +43,11 @@ export default function DashboardScreen() {
   const [selectedCourseForBooking, setSelectedCourseForBooking] = useState<any>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+
+  // YouTube Videos State
+  const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
+  const [showAllVideosModal, setShowAllVideosModal] = useState(false);
+  const [videoSearchQuery, setVideoSearchQuery] = useState('');
 
   // Form State
   const [bookingName, setBookingName] = useState(user?.name || '');
@@ -210,8 +218,8 @@ export default function DashboardScreen() {
         );
       }
 
-      // Set activeBatch if student has an assigned batch in Firestore
-      if (matchedBatch && (isActiveStatus || isDemoActive || studentBatchKeys.length > 0)) {
+      // Set activeBatch ONLY if student has an active status or active demo mode
+      if (matchedBatch && (isActiveStatus || isDemoActive)) {
         setActiveBatch(matchedBatch);
       } else {
         setActiveBatch(null);
@@ -330,6 +338,23 @@ export default function DashboardScreen() {
         } catch (e) { }
       }
 
+      // 3. Fetch YouTube Videos from Firestore
+      try {
+        const vSnap = await getDocs(collection(db, 'youtube_videos'));
+        const fetchedVideos: any[] = [];
+        vSnap.forEach(d => {
+          fetchedVideos.push({ id: d.id, ...d.data() });
+        });
+        if (fetchedVideos.length > 0) {
+          setYoutubeVideos(fetchedVideos);
+        } else {
+          setYoutubeVideos(DEFAULT_YOUTUBE_VIDEOS);
+        }
+      } catch (vErr) {
+        console.warn("Could not fetch youtube_videos:", vErr);
+        setYoutubeVideos(DEFAULT_YOUTUBE_VIDEOS);
+      }
+
       fetchedNotifications.sort((a, b) => b.date.getTime() - a.date.getTime());
       setNotifications(fetchedNotifications);
 
@@ -348,24 +373,55 @@ export default function DashboardScreen() {
 
   const YOUTUBE_DEMO_URL = "https://youtube.com/@speakhubacademy?si=ZSnvnh5MzSqXPrpM";
 
-  const handleOpenDemoVideo = async () => {
-    try {
-      await Linking.openURL(YOUTUBE_DEMO_URL);
-    } catch (err: any) {
-      Alert.alert("Error opening link", err.message);
-    }
-  };
+  const DEFAULT_YOUTUBE_VIDEOS = [
+    {
+      id: 'yt-1',
+      title: 'Speak Hub Spoken English & Fluency Masterclass',
+      category: 'New Batch Demo',
+      duration: '15 min',
+      youtubeUrl: 'https://youtu.be/Uhg80b2TJVs?si=38ohmD_0kXfjgDhl',
+      description: 'Learn fundamental spoken English concepts, conversation skills and daily speaking practice.',
+      thumbnailGradient: ['#4F46E5', '#7C3AED'],
+    },
+    {
+      id: 'yt-2',
+      title: 'English Speaking Practice & Pronunciation Guide',
+      category: 'Spoken English',
+      duration: '20 min',
+      youtubeUrl: 'https://youtu.be/nFfnnaJFV_U?si=ckhBwk4sW1mYbZQw',
+      description: 'Clear pronunciation, sentence formation, and practical fluency tips for learners.',
+      thumbnailGradient: ['#2563EB', '#06B6D4'],
+    },
+    {
+      id: 'yt-3',
+      title: 'Public Speaking, Confidence & Grammar Essentials',
+      category: 'Masterclass',
+      duration: '18 min',
+      youtubeUrl: 'https://youtu.be/Rax0DFWQ5qc?si=a6MQlguJSlIIbWol',
+      description: 'Master public speaking confidence and overcome hesitation while speaking in English.',
+      thumbnailGradient: ['#059669', '#10B981'],
+    },
+    {
+      id: 'yt-4',
+      title: 'Grocer & Customer Conversation',
+      category: 'Spoken English',
+      duration: '18 min',
+      youtubeUrl: 'https://youtu.be/dA5qExik1Q4?si=IPRSxQibhLvupI1Q',
+      description: 'Learn a simple English conversation between a grocer and a customer.',
+      thumbnailGradient: ['#059669', '#10B981'],
+    },
+  ];
 
-  const handleWatchCourseDemo = async (course: any) => {
-    const videoUrl = course?.demoVideoUrl || YOUTUBE_DEMO_URL;
+  const handleOpenVideo = async (videoUrl?: string) => {
+    const targetUrl = videoUrl || YOUTUBE_DEMO_URL;
     try {
-      let url = videoUrl.trim();
+      let url = targetUrl.trim();
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url;
       }
       await Linking.openURL(url);
     } catch (err: any) {
-      Alert.alert("Error opening link", err.message);
+      Alert.alert("Error opening video", err.message);
     }
   };
 
@@ -480,6 +536,7 @@ export default function DashboardScreen() {
 
       <ScrollView
         style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
 
@@ -593,6 +650,66 @@ export default function DashboardScreen() {
           ) : (
             /* SECTION FOR NEW JOINERS / UNASSIGNED STUDENTS */
             <>
+              {/* Watch Video Lessons Section */}
+              <View style={styles.videosSectionHeader}>
+                <View>
+                  <Text style={styles.videosSectionTitle}>YouTube Video Lessons</Text>
+                  <Text style={styles.videosSectionSubtitle}>Watch demo lectures & masterclasses</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowAllVideosModal(true)} style={styles.viewAllVideosBtn}>
+                  <Text style={styles.viewAllVideosText}>View All ({youtubeVideos.length || DEFAULT_YOUTUBE_VIDEOS.length})</Text>
+                  <MaterialIcons name="arrow-forward-ios" size={12} color={COLORS.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.videosScrollContent}
+              >
+                {(youtubeVideos.length > 0 ? youtubeVideos : DEFAULT_YOUTUBE_VIDEOS).map((item, idx) => {
+                  const thumb = getYouTubeThumbnail(item.youtubeUrl || item.url);
+                  return (
+                    <TouchableOpacity
+                      key={item.id || idx}
+                      style={styles.videoCard}
+                      activeOpacity={0.85}
+                      onPress={() => handleOpenVideo(item.youtubeUrl || item.url)}
+                    >
+                      <View style={styles.videoThumbnail}>
+                        {thumb ? (
+                          <Image source={{ uri: thumb }} style={styles.videoThumbnailImg} resizeMode="cover" />
+                        ) : (
+                          <LinearGradient
+                            colors={['#4F46E5', '#7C3AED']}
+                            style={styles.videoThumbnailImg}
+                          />
+                        )}
+                        <View style={styles.videoBadge}>
+                          <Text style={styles.videoBadgeText}>{item.category || 'MASTERCLASS'}</Text>
+                        </View>
+                        <View style={styles.playIconCircle}>
+                          <MaterialIcons name="play-arrow" size={24} color="#ffffff" />
+                        </View>
+                        {item.duration ? (
+                          <View style={styles.videoDurationBadge}>
+                            <MaterialIcons name="schedule" size={11} color="#ffffff" />
+                            <Text style={styles.videoDurationText}>{item.duration}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={styles.videoInfo}>
+                        <Text style={styles.videoCardTitle} numberOfLines={2}>{item.title}</Text>
+                        <View style={styles.videoWatchRow}>
+                          <Text style={styles.videoWatchText}>Watch on YouTube</Text>
+                          <MaterialIcons name="open-in-new" size={13} color={COLORS.primary} />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
               {/* Search Bar */}
               <View style={styles.searchBarContainer}>
                 <MaterialIcons name="search" size={22} color={COLORS.textMedium} />
@@ -641,6 +758,19 @@ export default function DashboardScreen() {
                         {course.description || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
                       </Text>
 
+                      {/* Course Video Lesson Pill (if available) */}
+                      {course.demoVideoUrl || course.videoUrl ? (
+                        <TouchableOpacity
+                          style={styles.courseVideoPreviewPill}
+                          onPress={() => handleOpenVideo(course.demoVideoUrl || course.videoUrl)}
+                          activeOpacity={0.8}
+                        >
+                          <MaterialIcons name="play-circle-fill" size={18} color={COLORS.primary} />
+                          <Text style={styles.courseVideoPreviewText}>Watch Course Video Lesson</Text>
+                          <MaterialIcons name="open-in-new" size={13} color={COLORS.primary} />
+                        </TouchableOpacity>
+                      ) : null}
+
                       {/* Footer Price & Buttons Row */}
                       <View style={styles.courseCardFooter}>
                         <View>
@@ -650,24 +780,15 @@ export default function DashboardScreen() {
                           <Text style={styles.courseDuration}>Duration: {course.duration || '3 Months'}</Text>
                         </View>
 
-                        <View style={styles.courseActionButtonsGroup}>
-                          {/* Watch Demo Button */}
-                          <TouchableOpacity
-                            style={styles.watchDemoBtn}
-                            onPress={() => handleWatchCourseDemo(course)}
-                          >
-                            <MaterialIcons name="play-circle-fill" size={16} color={COLORS.primary} />
-                            <Text style={styles.watchDemoBtnText}>Demo</Text>
-                          </TouchableOpacity>
-
-                          {/* Book A Seat Button */}
-                          <TouchableOpacity
-                            style={styles.bookSeatBtn}
-                            onPress={() => handleOpenBookingModal(course)}
-                          >
-                            <Text style={styles.bookSeatBtnText}>Book A Seat</Text>
-                          </TouchableOpacity>
-                        </View>
+                        {/* Book A Seat Button */}
+                        <TouchableOpacity
+                          style={styles.bookSeatBtn}
+                          onPress={() => handleOpenBookingModal(course)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.bookSeatBtnText}>Book A Seat</Text>
+                          <MaterialIcons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 4 }} />
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </View>
@@ -798,6 +919,100 @@ export default function DashboardScreen() {
                     <Text style={styles.emptyNotificationsText}>No new notifications</Text>
                   </View>
                 )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* All YouTube Videos Modal */}
+        <Modal
+          visible={showAllVideosModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowAllVideosModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>YouTube Video Lectures</Text>
+                  <Text style={{ fontSize: 12, color: COLORS.textMedium, marginTop: 2 }}>
+                    Free demo lectures & masterclasses shared by Speak Hub
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowAllVideosModal(false)}>
+                  <MaterialIcons name="close" size={24} color={COLORS.textDark} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Search Videos */}
+              <View style={[styles.searchBarContainer, { marginVertical: 12 }]}>
+                <MaterialIcons name="search" size={20} color={COLORS.textMedium} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search video lectures..."
+                  placeholderTextColor={COLORS.textLight}
+                  value={videoSearchQuery}
+                  onChangeText={setVideoSearchQuery}
+                />
+                {videoSearchQuery ? (
+                  <TouchableOpacity onPress={() => setVideoSearchQuery('')}>
+                    <MaterialIcons name="cancel" size={18} color={COLORS.textMedium} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                {(youtubeVideos.length > 0 ? youtubeVideos : DEFAULT_YOUTUBE_VIDEOS)
+                  .filter(v => {
+                    if (!videoSearchQuery.trim()) return true;
+                    const q = videoSearchQuery.toLowerCase();
+                    return (
+                      (v.title && v.title.toLowerCase().includes(q)) ||
+                      (v.category && v.category.toLowerCase().includes(q)) ||
+                      (v.batchName && v.batchName.toLowerCase().includes(q)) ||
+                      (v.description && v.description.toLowerCase().includes(q))
+                    );
+                  })
+                  .map((item, idx) => {
+                    const thumb = getYouTubeThumbnail(item.youtubeUrl || item.url);
+                    return (
+                      <TouchableOpacity
+                        key={item.id || idx}
+                        style={styles.allVideosCardItem}
+                        onPress={() => handleOpenVideo(item.youtubeUrl || item.url)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.allVideosThumbWrapper}>
+                          {thumb ? (
+                            <Image source={{ uri: thumb }} style={styles.allVideosThumbImg} resizeMode="cover" />
+                          ) : (
+                            <LinearGradient colors={['#4F46E5', '#7C3AED']} style={styles.allVideosThumbImg} />
+                          )}
+                          <View style={styles.allVideosPlayBadge}>
+                            <MaterialIcons name="play-arrow" size={22} color="#ffffff" />
+                          </View>
+                        </View>
+
+                        <View style={styles.allVideosItemInfo}>
+                          <View style={styles.allVideosCategoryRow}>
+                            <Text style={styles.allVideosCategoryPill}>{item.category || 'VIDEO'}</Text>
+                            {item.batchName ? (
+                              <Text style={styles.allVideosBatchPill} numberOfLines={1}>Batch: {item.batchName}</Text>
+                            ) : null}
+                          </View>
+                          <Text style={styles.allVideosItemTitle} numberOfLines={2}>{item.title}</Text>
+                          {item.description ? (
+                            <Text style={styles.allVideosItemDesc} numberOfLines={2}>{item.description}</Text>
+                          ) : null}
+                          <View style={styles.allVideosActionRow}>
+                            <Text style={styles.allVideosWatchText}>Watch on YouTube</Text>
+                            <MaterialIcons name="open-in-new" size={14} color={COLORS.primary} />
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
               </ScrollView>
             </View>
           </View>
@@ -1180,32 +1395,253 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     marginTop: 2,
   },
-  courseActionButtonsGroup: {
+  /* Video Section Styles */
+  videosSectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 12,
+    marginTop: 4,
   },
-  watchDemoBtn: {
+  videosSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+  },
+  videosSectionSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMedium,
+    marginTop: 2,
+  },
+  viewAllVideosBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  viewAllVideosText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  videosScrollContent: {
+    paddingRight: 10,
+    paddingBottom: 20,
+    gap: 14,
+  },
+  videoCard: {
+    width: 220,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  videoThumbnail: {
+    height: 110,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    backgroundColor: '#0f172a',
+  },
+  videoThumbnailImg: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  videoBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 2,
+  },
+  videoBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  playIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(227, 24, 55, 0.9)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  videoDurationBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    zIndex: 2,
+  },
+  videoDurationText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  videoInfo: {
+    padding: 12,
+  },
+  videoCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    lineHeight: 17,
+    marginBottom: 8,
+    minHeight: 34,
+  },
+  videoWatchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 8,
+  },
+  videoWatchText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  /* All Videos Modal Styles */
+  allVideosCardItem: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  allVideosThumbWrapper: {
+    width: 120,
+    height: 85,
+    position: 'relative',
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allVideosThumbImg: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  allVideosPlayBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(227, 24, 55, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allVideosItemInfo: {
+    flex: 1,
+    padding: 10,
+    justifyContent: 'space-between',
+  },
+  allVideosCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  allVideosCategoryPill: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.primary,
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  allVideosBatchPill: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#64748b',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 120,
+  },
+  allVideosItemTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    lineHeight: 16,
+  },
+  allVideosItemDesc: {
+    fontSize: 10,
+    color: COLORS.textMedium,
+    marginTop: 2,
+  },
+  allVideosActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  allVideosWatchText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  courseVideoPreviewPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: COLORS.primaryLightest,
     borderWidth: 1,
     borderColor: COLORS.primaryLight,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    gap: 4,
+    marginBottom: 12,
   },
-  watchDemoBtnText: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
+  courseVideoPreviewText: {
     fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    flex: 1,
   },
   bookSeatBtn: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
   },
   bookSeatBtnText: {
     color: '#fff',
