@@ -204,30 +204,35 @@ export default function DashboardScreen() {
     if (!user) return;
     try {
       // 1. Fetch latest student record from Firestore (by ID, phone, or mobile)
-      let studentData: any = liveUserData || {};
-      if (!liveUserData && user.id) {
+      let studentData: any = {};
+      if (user.id || user.uid) {
         try {
-          const uSnap = await getDoc(doc(db, 'users', user.id));
+          const uSnap = await getDoc(doc(db, 'users', user.id || user.uid!));
           if (uSnap.exists()) {
             studentData = uSnap.data();
           }
         } catch (e) { }
       }
 
-      const userPhone = user.phone || studentData.phone || studentData.mobile;
+      if (liveUserData) {
+        studentData = { ...studentData, ...liveUserData };
+      }
+
+      const userPhone = user.phone || user.mobile || studentData.phone || studentData.mobile;
       if (userPhone) {
         const cleanPhone = String(userPhone).replace(/[^0-9]/g, '');
-        if (cleanPhone) {
+        if (cleanPhone.length >= 10) {
+          const last10 = cleanPhone.slice(-10);
           try {
-            const qPhone = query(collection(db, 'users'), where('phone', '==', cleanPhone));
+            const qPhone = query(collection(db, 'users'), where('phone', '==', last10));
             const pSnap = await getDocs(qPhone);
             if (!pSnap.empty) {
-              studentData = { ...pSnap.docs[0].data(), ...studentData };
+              studentData = { ...studentData, ...pSnap.docs[0].data() };
             } else {
-              const qMobile = query(collection(db, 'users'), where('mobile', '==', cleanPhone));
+              const qMobile = query(collection(db, 'users'), where('mobile', '==', last10));
               const mSnap = await getDocs(qMobile);
               if (!mSnap.empty) {
-                studentData = { ...mSnap.docs[0].data(), ...studentData };
+                studentData = { ...studentData, ...mSnap.docs[0].data() };
               }
             }
           } catch (e) { }
@@ -235,17 +240,21 @@ export default function DashboardScreen() {
       }
 
       // Check student active status
-      const currentStatus = studentData.status || user.status || 'active';
+      const currentStatus = String(studentData.status || user?.status || 'active').toLowerCase().trim();
       const isInactive = currentStatus === 'inactive' || currentStatus === 'blocked' || currentStatus === 'suspended';
-      const isActiveStatus = !isInactive && currentStatus === 'active';
+      const isActiveStatus = !isInactive;
 
       // Check demo mode validity
       let isDemoActive = false;
-      if (studentData.isDemoMode && studentData.demoEndDate) {
-        const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
-        if (endDate.getTime() >= new Date().getTime()) {
+      const isDemo = Boolean(studentData.isDemoMode ?? user?.isDemoMode);
+      const demoEnd = studentData.demoEndDate || user?.demoEndDate;
+      if (isDemo && demoEnd) {
+        const endDate = demoEnd.toDate ? demoEnd.toDate() : new Date(demoEnd);
+        if (!isNaN(endDate.getTime()) && endDate.getTime() >= Date.now()) {
           isDemoActive = true;
         }
+      } else if (isDemo) {
+        isDemoActive = true;
       }
 
       const isStudentAllowed = isActiveStatus || isDemoActive;
@@ -257,7 +266,8 @@ export default function DashboardScreen() {
         const fetchedCourses: any[] = [];
         cSnap.forEach(d => {
           const data = d.data();
-          if (data.status !== 'inactive') {
+          const cStatus = String(data.status || 'active').toLowerCase().trim();
+          if (cStatus !== 'inactive' && cStatus !== 'archived') {
             fetchedCourses.push({
               id: d.id,
               courseName: data.courseName || data.name || data.title || 'Course',
@@ -283,23 +293,24 @@ export default function DashboardScreen() {
       const studentBatchKeys: string[] = [];
       const studentCourseKeys: string[] = [];
 
-      if (studentData.batchIds && Array.isArray(studentData.batchIds)) {
-        studentBatchKeys.push(...studentData.batchIds);
-      }
+      // Extract batch keys
+      if (Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+      if (Array.isArray(studentData.batches)) studentBatchKeys.push(...studentData.batches);
       if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
       if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
-      if (user.batchIds && Array.isArray(user.batchIds)) {
-        studentBatchKeys.push(...user.batchIds);
-      }
+      if (Array.isArray(user?.batchIds)) studentBatchKeys.push(...user.batchIds);
+      if (user?.batchId) studentBatchKeys.push(user.batchId);
+      if (user?.batchName) studentBatchKeys.push(user.batchName);
 
-      if (studentData.courseIds && Array.isArray(studentData.courseIds)) {
-        studentCourseKeys.push(...studentData.courseIds);
-      }
+      // Extract course keys
+      if (Array.isArray(studentData.courseIds)) studentCourseKeys.push(...studentData.courseIds);
+      if (Array.isArray(studentData.courses)) studentCourseKeys.push(...studentData.courses);
       if (studentData.courseId) studentCourseKeys.push(studentData.courseId);
       if (studentData.courseName) studentCourseKeys.push(studentData.courseName);
-      if (user.courses && Array.isArray(user.courses)) {
-        studentCourseKeys.push(...user.courses);
-      }
+      if (Array.isArray(user?.courses)) studentCourseKeys.push(...user.courses);
+      if (Array.isArray(user?.courseIds)) studentCourseKeys.push(...user.courseIds);
+      if (user?.courseId) studentCourseKeys.push(user.courseId);
+      if (user?.courseName) studentCourseKeys.push(user.courseName);
 
       // 2. Fetch all batches from Firestore
       const bSnap = await getDocs(collection(db, 'batches'));
@@ -326,8 +337,14 @@ export default function DashboardScreen() {
         );
       }
 
-      // Set activeBatch ONLY if student has an active status/demo AND batch itself is active
-      if (matchedBatch && isStudentAllowed && matchedBatch.status === 'active') {
+      const isBatchStatusValid = (b: any) => {
+        if (!b) return false;
+        const s = String(b.status || 'active').toLowerCase().trim();
+        return s !== 'inactive' && s !== 'archived' && s !== 'deleted';
+      };
+
+      // Set activeBatch
+      if (matchedBatch && isBatchStatusValid(matchedBatch)) {
         setActiveBatch(matchedBatch);
       } else {
         setActiveBatch(null);
@@ -340,8 +357,18 @@ export default function DashboardScreen() {
           const cSnap = await getDoc(doc(db, 'courses', targetCourseId));
           if (cSnap.exists()) {
             setCourseName(cSnap.data().courseName || '');
+          } else {
+            const cq = query(collection(db, 'courses'), where('courseName', '==', targetCourseId));
+            const cSnap2 = await getDocs(cq);
+            if (!cSnap2.empty) {
+              setCourseName(cSnap2.docs[0].data().courseName || targetCourseId);
+            } else {
+              setCourseName(targetCourseId);
+            }
           }
-        } catch (e) { }
+        } catch (e) {
+          setCourseName(targetCourseId);
+        }
       }
 
       // Notifications Generation (Amazon / Flipkart Rich Style)
@@ -430,47 +457,74 @@ export default function DashboardScreen() {
         }
       }
 
-      if (matchedBatch) {
-        // Fetch new notes
-        try {
-          const notesQ = query(collection(db, 'notes'), where('status', '==', 'published'));
-          const notesSnap = await getDocs(notesQ);
-          const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
-          notesSnap.forEach(d => {
-            const n = d.data();
-            if (n.batchId === matchedBatch.id || n.batchIds?.includes(matchedBatch.id) || n.batchName === matchedBatch.batchName) {
-              const nDate = n.createdAt?.toDate ? n.createdAt.toDate() : new Date(n.createdAt || Date.now());
-              if (nDate.getTime() > sevenDaysAgo) {
-                fetchedNotifications.push({
-                  id: `note_${d.id}`,
-                  title: `New Study Note: ${n.title}`,
-                  description: n.description || 'New study notes and reference material uploaded for your batch.',
-                  type: 'note',
-                  categoryTag: 'STUDY NOTES',
-                  date: nDate,
-                  route: '/(app)/notes',
-                  actionLabel: 'Open Notes →'
-                });
-              }
-            }
-          });
-        } catch (e) { }
+      // 2. Fetch Notes Notifications (Guaranteed matching for all assigned batches/courses)
+      try {
+        const notesSnap = await getDocs(collection(db, 'notes'));
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 3600 * 1000;
+        notesSnap.forEach(d => {
+          const n = d.data();
+          const nStatus = String(n.status || 'published').toLowerCase().trim();
+          if (nStatus === 'draft' || nStatus === 'inactive') return;
 
-        // Fetch new exams
-        try {
-          const targetBatchIdentifiers = [matchedBatch.id];
-          if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
-          const examsQ = query(collection(db, 'exams'), where('batchId', 'in', targetBatchIdentifiers), where('status', 'in', ['published']));
-          const examsSnap = await getDocs(examsQ);
-          const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
-          examsSnap.forEach(d => {
-            const ex = d.data();
-            const exDate = ex.createdAt?.toDate ? ex.createdAt.toDate() : new Date(ex.createdAt || Date.now());
-            if (exDate.getTime() > sevenDaysAgo) {
+          const isAssigned =
+            !n.batchId ||
+            n.batchId === 'all' ||
+            studentBatchKeys.includes(n.batchId) ||
+            (n.batchName && studentBatchKeys.includes(n.batchName)) ||
+            (n.courseId && studentCourseKeys.includes(n.courseId)) ||
+            studentBatchKeys.some(k => n.batchName && n.batchName.toLowerCase().trim() === String(k).toLowerCase().trim());
+
+          if (isAssigned) {
+            let nDate = new Date();
+            if (n.publishDate) nDate = n.publishDate.toDate ? n.publishDate.toDate() : new Date(n.publishDate);
+            else if (n.createdAt) nDate = n.createdAt.toDate ? n.createdAt.toDate() : new Date(n.createdAt);
+
+            if (nDate.getTime() > thirtyDaysAgo) {
+              fetchedNotifications.push({
+                id: `note_${d.id}`,
+                title: `📚 New Note: ${n.title || n.topic || 'Study Material'}`,
+                description: n.description || n.topic || 'New study notes and reference material uploaded for your batch.',
+                type: 'note',
+                categoryTag: 'STUDY NOTES',
+                date: nDate,
+                route: '/(app)/notes',
+                actionLabel: 'Open Notes →'
+              });
+            }
+          }
+        });
+      } catch (e) {
+        console.warn("Notes notification error:", e);
+      }
+
+      // 3. Fetch Exams Notifications (Guaranteed matching for all assigned batches/courses)
+      try {
+        const examsSnap = await getDocs(collection(db, 'exams'));
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 3600 * 1000;
+        examsSnap.forEach(d => {
+          const ex = d.data();
+          const exStatus = String(ex.status || 'published').toLowerCase().trim();
+          if (exStatus === 'draft' || exStatus === 'inactive') return;
+
+          const isAssigned =
+            !ex.batchId ||
+            ex.batchId === 'all' ||
+            studentBatchKeys.includes(ex.batchId) ||
+            (ex.batchName && studentBatchKeys.includes(ex.batchName)) ||
+            (ex.courseId && studentCourseKeys.includes(ex.courseId)) ||
+            studentBatchKeys.some(k => ex.batchName && ex.batchName.toLowerCase().trim() === String(k).toLowerCase().trim());
+
+          if (isAssigned) {
+            let exDate = new Date();
+            if (ex.examDate) exDate = ex.examDate.toDate ? ex.examDate.toDate() : new Date(ex.examDate);
+            else if (ex.publishDate) exDate = ex.publishDate.toDate ? ex.publishDate.toDate() : new Date(ex.publishDate);
+            else if (ex.createdAt) exDate = ex.createdAt.toDate ? ex.createdAt.toDate() : new Date(ex.createdAt);
+
+            if (exDate.getTime() > thirtyDaysAgo) {
               fetchedNotifications.push({
                 id: `exam_${d.id}`,
-                title: `New Exam Published: ${ex.title || ex.examTitle}`,
-                description: ex.description || 'A new assessment test has been assigned to your batch. Take the test on time.',
+                title: `📝 Exam Alert: ${ex.title || ex.examTitle || 'Assessment Test'}`,
+                description: ex.description || `Assessment test (${ex.totalMarks ? `${ex.totalMarks} marks` : 'Online Test'}) scheduled for your batch.`,
                 type: 'exam',
                 categoryTag: 'EXAM ALERT',
                 date: exDate,
@@ -478,24 +532,39 @@ export default function DashboardScreen() {
                 actionLabel: 'Start Exam →'
               });
             }
-          });
-        } catch (e) { }
+          }
+        });
+      } catch (e) {
+        console.warn("Exams notification error:", e);
+      }
 
-        // Fetch new homework
-        try {
-          const targetBatchIdentifiers = [matchedBatch.id];
-          if (matchedBatch.batchName) targetBatchIdentifiers.push(matchedBatch.batchName);
-          const hwQ = query(collection(db, 'homeworks'), where('batchId', 'in', targetBatchIdentifiers));
-          const hwSnap = await getDocs(hwQ);
-          const sevenDaysAgo = new Date().getTime() - 7 * 24 * 3600 * 1000;
-          hwSnap.forEach(d => {
-            const hw = d.data();
-            const hwDate = hw.createdAt?.toDate ? hw.createdAt.toDate() : new Date(hw.createdAt || Date.now());
-            if (hwDate.getTime() > sevenDaysAgo) {
+      // 4. Fetch Homework Notifications (Guaranteed matching for all assigned batches/courses)
+      try {
+        const hwSnap = await getDocs(collection(db, 'homeworks'));
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 3600 * 1000;
+        hwSnap.forEach(d => {
+          const hw = d.data();
+          const hwStatus = String(hw.status || 'published').toLowerCase().trim();
+          if (hwStatus === 'draft') return;
+
+          const isAssigned =
+            !hw.batchId ||
+            hw.batchId === 'all' ||
+            studentBatchKeys.includes(hw.batchId) ||
+            (hw.batchName && studentBatchKeys.includes(hw.batchName)) ||
+            (hw.courseId && studentCourseKeys.includes(hw.courseId)) ||
+            studentBatchKeys.some(k => hw.batchName && hw.batchName.toLowerCase().trim() === String(k).toLowerCase().trim());
+
+          if (isAssigned) {
+            let hwDate = new Date();
+            if (hw.publishDate) hwDate = hw.publishDate.toDate ? hw.publishDate.toDate() : new Date(hw.publishDate);
+            else if (hw.createdAt) hwDate = hw.createdAt.toDate ? hw.createdAt.toDate() : new Date(hw.createdAt);
+
+            if (hwDate.getTime() > thirtyDaysAgo) {
               fetchedNotifications.push({
                 id: `hw_${d.id}`,
-                title: `New Homework: ${hw.title || 'Assignment Posted'}`,
-                description: hw.description || 'New homework assignment posted. Complete and submit your work.',
+                title: `✍️ Homework: ${hw.title || 'Daily Task'}`,
+                description: hw.instructions || hw.description || 'New daily homework task assigned. Complete and submit on WhatsApp.',
                 type: 'homework',
                 categoryTag: 'HOMEWORK',
                 date: hwDate,
@@ -503,50 +572,61 @@ export default function DashboardScreen() {
                 actionLabel: 'View Homework →'
               });
             }
-          });
-        } catch (e) { }
+          }
+        });
+      } catch (e) {
+        console.warn("Homework notification error:", e);
+      }
 
-        // Fetch Classmate Birthdays
-        try {
-          const usersQ = query(collection(db, 'users'), where('role', '==', 'student'));
-          const usersSnap = await getDocs(usersQ);
-          const today = new Date();
-          const todayDate = today.getDate();
-          const todayMonth = today.getMonth() + 1;
+      // 5. Fetch Classmate Birthdays
+      try {
+        const usersQ = query(collection(db, 'users'), where('role', '==', 'student'));
+        const usersSnap = await getDocs(usersQ);
+        const today = new Date();
+        const todayDate = today.getDate();
+        const todayMonth = today.getMonth() + 1;
 
-          usersSnap.forEach(d => {
-            const u = d.data();
-            if (u.uid !== user.id && (u.batchId === matchedBatch.id || u.batchIds?.includes(matchedBatch.id))) {
-              if (u.dob) {
-                let dobDate, dobMonth;
-                if (typeof u.dob === 'string') {
-                  const parts = u.dob.split('/');
+        usersSnap.forEach(d => {
+          const u = d.data();
+          if (u.uid !== user.id && (studentBatchKeys.includes(u.batchId) || (u.batchIds && u.batchIds.some((bid: string) => studentBatchKeys.includes(bid))))) {
+            if (u.dob || u.dateOfBirth) {
+              const rawDob = u.dob || u.dateOfBirth;
+              let dobDate, dobMonth;
+              if (typeof rawDob === 'string') {
+                if (rawDob.includes('-')) {
+                  const parts = rawDob.split('-');
+                  if (parts.length >= 3) {
+                    dobMonth = parseInt(parts[1], 10);
+                    dobDate = parseInt(parts[2], 10);
+                  }
+                } else if (rawDob.includes('/')) {
+                  const parts = rawDob.split('/');
                   if (parts.length >= 2) {
                     dobDate = parseInt(parts[0], 10);
                     dobMonth = parseInt(parts[1], 10);
                   }
-                } else if (u.dob.toDate) {
-                  const dobObj = u.dob.toDate();
-                  dobDate = dobObj.getDate();
-                  dobMonth = dobObj.getMonth() + 1;
                 }
+              } else if (rawDob.toDate) {
+                const dobObj = rawDob.toDate();
+                dobDate = dobObj.getDate();
+                dobMonth = dobObj.getMonth() + 1;
+              }
 
-                if (dobDate === todayDate && dobMonth === todayMonth) {
-                  fetchedNotifications.push({
-                    id: `bday_${d.id}_${today.toISOString().split('T')[0]}`,
-                    title: `🎂 Happy Birthday ${u.name}!`,
-                    description: `Celebrate with ${u.name} on their special day today! Wish them a very happy birthday!`,
-                    type: 'birthday',
-                    categoryTag: 'BIRTHDAY',
-                    date: today,
-                    actionLabel: 'Wish Birthday 🎉'
-                  });
-                }
+              if (dobDate === todayDate && dobMonth === todayMonth) {
+                fetchedNotifications.push({
+                  id: `bday_${d.id}_${today.toISOString().split('T')[0]}`,
+                  title: `🎂 Happy Birthday ${u.name}!`,
+                  description: `Celebrate with ${u.name} on their special day today! Wish them a very happy birthday!`,
+                  type: 'birthday',
+                  categoryTag: 'BIRTHDAY',
+                  date: today,
+                  actionLabel: 'Wish Birthday 🎉'
+                });
               }
             }
-          });
-        } catch (e) { }
-      }
+          }
+        });
+      } catch (e) { }
 
       // 3. Fetch YouTube Videos from Firestore
       try {
@@ -748,39 +828,28 @@ export default function DashboardScreen() {
         options={{
           headerRight: () => (
             <TouchableOpacity
-              style={{ marginRight: 16, padding: 4 }}
+              style={styles.topBarNotificationBtn}
               onPress={() => setShowNotificationsModal(true)}
               activeOpacity={0.8}
             >
-              <MaterialIcons name="notifications-none" size={26} color={COLORS.textDark} />
-              {unreadCount > 0 && (
-                <View style={{
-                  position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  backgroundColor: '#ef4444',
-                  borderRadius: 10,
-                  minWidth: 18,
-                  height: 18,
-                  paddingHorizontal: 4,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  borderWidth: 1.5,
-                  borderColor: COLORS.surface
-                }}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </Text>
-                </View>
-              )}
+              <View style={styles.topBarBellCircle}>
+                <MaterialIcons name="notifications" size={21} color={COLORS.primary} />
+                {unreadCount > 0 && (
+                  <View style={styles.topBarRedBadge}>
+                    <Text style={styles.topBarRedBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           )
         }}
       />
 
-      {/* Header */}
+      {/* Header Greeting */}
       <View style={styles.headerArea}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerGreeting}>Hi, {user?.name?.split(' ')[0] || 'Student'} 👋</Text>
           <Text style={styles.headerSubtitle}>Welcome to Speak Hub Dashboard</Text>
         </View>
@@ -906,239 +975,255 @@ export default function DashboardScreen() {
               ) : null}
 
               {/* Action Grid for Enrolled Batch Students */}
-              <View style={[styles.grid, { marginBottom: 30 }]}>
+              <View style={[styles.grid, { marginBottom: 24 }]}>
                 <TouchableOpacity
                   style={styles.gridItem}
                   onPress={() => router.push("/(app)/attendance")}
+                  activeOpacity={0.8}
                 >
-                  <MaterialIcons
-                    name="event-available"
-                    size={26}
-                    color={COLORS.primary}
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Text style={styles.gridText}>Attendance</Text>
+                  <View style={styles.gridIconCircle}>
+                    <MaterialIcons
+                      name="event-available"
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <Text style={styles.gridText} numberOfLines={1} adjustsFontSizeToFit>
+                    Attendance
+                  </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.gridItem}
                   onPress={() => router.push("/(app)/exams")}
+                  activeOpacity={0.8}
                 >
-                  <MaterialIcons
-                    name="edit-document"
-                    size={26}
-                    color={COLORS.primary}
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Text style={styles.gridText}>Exams</Text>
+                  <View style={styles.gridIconCircle}>
+                    <MaterialIcons
+                      name="edit-document"
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <Text style={styles.gridText} numberOfLines={1} adjustsFontSizeToFit>
+                    Exams
+                  </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.gridItem}
                   onPress={() => router.push("/(app)/homework")}
+                  activeOpacity={0.8}
                 >
-                  <MaterialIcons
-                    name="menu-book"
-                    size={26}
-                    color={COLORS.primary}
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Text style={styles.gridText}>Homework</Text>
+                  <View style={styles.gridIconCircle}>
+                    <MaterialIcons
+                      name="menu-book"
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <Text style={styles.gridText} numberOfLines={1} adjustsFontSizeToFit>
+                    Homework
+                  </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.gridItem}
                   onPress={() => router.push("/(app)/fees")}
+                  activeOpacity={0.8}
                 >
-                  <MaterialIcons
-                    name="payment"
-                    size={26}
-                    color={COLORS.primary}
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Text style={styles.gridText}>Fees</Text>
+                  <View style={styles.gridIconCircle}>
+                    <MaterialIcons
+                      name="payment"
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <Text style={styles.gridText} numberOfLines={1} adjustsFontSizeToFit>
+                    Fees
+                  </Text>
                 </TouchableOpacity>
               </View>
             </>
           ) : (
             /* SECTION FOR NEW JOINERS / UNASSIGNED STUDENTS */
-            <>
-              {/* Batch Not Assigned Notice */}
-              <View style={styles.unassignedNoticeCard}>
-                <View style={styles.unassignedNoticeHeader}>
-                  <View style={styles.unassignedNoticeIconCircle}>
-                    <MaterialIcons name="school" size={24} color={COLORS.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.unassignedNoticeTitle}>No Batch Assigned Yet</Text>
-                    <Text style={styles.unassignedNoticeSubtitle}>
-                      Explore our available courses below, watch video lectures, and book a seat or contact admin for batch assignment.
-                    </Text>
-                  </View>
+            <View style={styles.unassignedNoticeCard}>
+              <View style={styles.unassignedNoticeHeader}>
+                <View style={styles.unassignedNoticeIconCircle}>
+                  <MaterialIcons name="school" size={24} color={COLORS.primary} />
                 </View>
-                <TouchableOpacity
-                  style={styles.unassignedContactBtn}
-                  onPress={() => {
-                    const studentName = user?.name || 'Student';
-                    const msg = `Hello Speak Hub Admin, I (${studentName}) am registered on Speak Hub. Please assign me to a batch.`;
-                    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
-                      Alert.alert("Speak Hub Academy", "Please contact admin via phone or WhatsApp to get assigned to a batch.");
-                    });
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <MaterialIcons name="chat" size={16} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.unassignedContactBtnText}>Contact Admin for Batch Assignment</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Watch Video Lessons Section */}
-              <View style={styles.videosSectionHeader}>
-                <View>
-                  <Text style={styles.videosSectionTitle}>YouTube Video Lessons</Text>
-                  <Text style={styles.videosSectionSubtitle}>Watch demo lectures & masterclasses</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.unassignedNoticeTitle}>No Batch Assigned Yet</Text>
+                  <Text style={styles.unassignedNoticeSubtitle}>
+                    Explore our available courses below, watch video lectures, and book a seat or contact admin for batch assignment.
+                  </Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowAllVideosModal(true)} style={styles.viewAllVideosBtn}>
-                  <Text style={styles.viewAllVideosText}>View All ({youtubeVideos.length || DEFAULT_YOUTUBE_VIDEOS.length})</Text>
-                  <MaterialIcons name="arrow-forward-ios" size={12} color={COLORS.primary} />
-                </TouchableOpacity>
               </View>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.videosScrollContent}
+              <TouchableOpacity
+                style={styles.unassignedContactBtn}
+                onPress={() => {
+                  const studentName = user?.name || 'Student';
+                  const msg = `Hello Speak Hub Admin, I (${studentName}) am registered on Speak Hub. Please assign me to a batch.`;
+                  Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
+                    Alert.alert("Speak Hub Academy", "Please contact admin via phone or WhatsApp to get assigned to a batch.");
+                  });
+                }}
+                activeOpacity={0.85}
               >
-                {(youtubeVideos.length > 0 ? youtubeVideos : DEFAULT_YOUTUBE_VIDEOS).map((item, idx) => {
-                  const thumb = getYouTubeThumbnail(item.youtubeUrl || item.url);
-                  return (
-                    <TouchableOpacity
-                      key={item.id || idx}
-                      style={styles.videoCard}
-                      activeOpacity={0.85}
-                      onPress={() => handleOpenVideo(item.youtubeUrl || item.url)}
-                    >
-                      <View style={styles.videoThumbnail}>
-                        {thumb ? (
-                          <Image source={{ uri: thumb }} style={styles.videoThumbnailImg} resizeMode="cover" />
-                        ) : (
-                          <LinearGradient
-                            colors={['#4F46E5', '#7C3AED']}
-                            style={styles.videoThumbnailImg}
-                          />
-                        )}
-                        <View style={styles.videoBadge}>
-                          <Text style={styles.videoBadgeText}>{item.category || 'MASTERCLASS'}</Text>
-                        </View>
-                        <View style={styles.playIconCircle}>
-                          <MaterialIcons name="play-arrow" size={24} color="#ffffff" />
-                        </View>
-                        {item.duration ? (
-                          <View style={styles.videoDurationBadge}>
-                            <MaterialIcons name="schedule" size={11} color="#ffffff" />
-                            <Text style={styles.videoDurationText}>{item.duration}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={styles.videoInfo}>
-                        <Text style={styles.videoCardTitle} numberOfLines={2}>{item.title}</Text>
-                        <View style={styles.videoWatchRow}>
-                          <Text style={styles.videoWatchText}>Watch on YouTube</Text>
-                          <MaterialIcons name="open-in-new" size={13} color={COLORS.primary} />
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                <MaterialIcons name="chat" size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.unassignedContactBtnText}>Contact Admin for Batch Assignment</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-              {/* Search Bar */}
-              <View style={styles.searchBarContainer}>
-                <MaterialIcons name="search" size={22} color={COLORS.textMedium} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search for courses..."
-                  placeholderTextColor={COLORS.textLight}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-              </View>
+          {/* Watch Video Lessons Section (Available for Both Assigned and Unassigned Students) */}
+          <View style={styles.videosSectionHeader}>
+            <View>
+              <Text style={styles.videosSectionTitle}>YouTube Video Lessons</Text>
+              <Text style={styles.videosSectionSubtitle}>Watch demo lectures & masterclasses</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowAllVideosModal(true)} style={styles.viewAllVideosBtn}>
+              <Text style={styles.viewAllVideosText}>View All ({youtubeVideos.length || DEFAULT_YOUTUBE_VIDEOS.length})</Text>
+              <MaterialIcons name="arrow-forward-ios" size={12} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
 
-              {/* All Courses Section Title */}
-              <View style={styles.allCoursesHeader}>
-                <Text style={styles.allCoursesTitle}>All Courses</Text>
-                <Text style={styles.allCoursesCount}>
-                  {filteredCourses.length} {filteredCourses.length === 1 ? 'course' : 'courses'} available
-                </Text>
-              </View>
-
-              {/* Available Courses Cards List */}
-              {filteredCourses.length > 0 ? (
-                filteredCourses.map((course: any, index: number) => (
-                  <View key={course.id || index} style={styles.courseCard}>
-                    {/* Top Banner Graphic Header */}
-                    <View style={[styles.courseCardBanner, { backgroundColor: COLORS.primary }]}>
-                      <View style={styles.badgeCapsule}>
-                        <MaterialIcons name="verified" size={12} color="#fff" />
-                        <Text style={styles.badgeCapsuleText}>{course.modeBadge || 'ONLINE / OFFLINE'}</Text>
-                      </View>
-                      <Text style={styles.bannerCourseTitle} numberOfLines={2}>
-                        {(course.courseName || course.name || course.title || 'SPEAK HUB COURSE').toUpperCase()}
-                      </Text>
-                      <Text style={styles.bannerCourseTag}>SPEAK HUB ACADEMY</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.videosScrollContent}
+          >
+            {(youtubeVideos.length > 0 ? youtubeVideos : DEFAULT_YOUTUBE_VIDEOS).map((item, idx) => {
+              const thumb = getYouTubeThumbnail(item.youtubeUrl || item.url);
+              return (
+                <TouchableOpacity
+                  key={item.id || idx}
+                  style={styles.videoCard}
+                  activeOpacity={0.85}
+                  onPress={() => handleOpenVideo(item.youtubeUrl || item.url)}
+                >
+                  <View style={styles.videoThumbnail}>
+                    {thumb ? (
+                      <Image source={{ uri: thumb }} style={styles.videoThumbnailImg} resizeMode="cover" />
+                    ) : (
+                      <LinearGradient
+                        colors={['#4F46E5', '#7C3AED']}
+                        style={styles.videoThumbnailImg}
+                      />
+                    )}
+                    <View style={styles.videoBadge}>
+                      <Text style={styles.videoBadgeText}>{item.category || 'MASTERCLASS'}</Text>
                     </View>
-
-                    {/* Course Card Body */}
-                    <View style={styles.courseCardBody}>
-                      <View style={styles.courseCategoryRow}>
-                        <Text style={styles.courseCategoryText}>Spoken English & Communication</Text>
-                        <Text style={styles.courseLangText}>ENGLISH</Text>
+                    <View style={styles.playIconCircle}>
+                      <MaterialIcons name="play-arrow" size={24} color="#ffffff" />
+                    </View>
+                    {item.duration ? (
+                      <View style={styles.videoDurationBadge}>
+                        <MaterialIcons name="schedule" size={11} color="#ffffff" />
+                        <Text style={styles.videoDurationText}>{item.duration}</Text>
                       </View>
-
-                      <Text style={styles.courseCardName}>{course.courseName || course.name || course.title || 'Course'}</Text>
-                      <Text style={styles.courseCardDesc} numberOfLines={2}>
-                        {course.description || course.desc || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
-                      </Text>
-
-                      {/* Course Video Lesson Pill (if available) */}
-                      {course.demoVideoUrl || course.videoUrl ? (
-                        <TouchableOpacity
-                          style={styles.courseVideoPreviewPill}
-                          onPress={() => handleOpenVideo(course.demoVideoUrl || course.videoUrl)}
-                          activeOpacity={0.8}
-                        >
-                          <MaterialIcons name="play-circle-fill" size={18} color={COLORS.primary} />
-                          <Text style={styles.courseVideoPreviewText}>Watch Course Video Lesson</Text>
-                          <MaterialIcons name="open-in-new" size={13} color={COLORS.primary} />
-                        </TouchableOpacity>
-                      ) : null}
-
-                      {/* Footer Price & Buttons Row */}
-                      <View style={styles.courseCardFooter}>
-                        <View>
-                          <Text style={styles.coursePrice}>
-                            ₹{course.monthlyFee || course.fee || course.price || '800'} <Text style={styles.coursePriceSub}>/ month</Text>
-                          </Text>
-                          <Text style={styles.courseDuration}>Duration: {course.duration || '3 Months'}</Text>
-                        </View>
-
-                        {/* Book A Seat Button */}
-                        <TouchableOpacity
-                          style={styles.bookSeatBtn}
-                          onPress={() => handleOpenBookingModal(course)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.bookSeatBtnText}>Book A Seat</Text>
-                          <MaterialIcons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 4 }} />
-                        </TouchableOpacity>
-                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.videoInfo}>
+                    <Text style={styles.videoCardTitle} numberOfLines={2}>{item.title}</Text>
+                    <View style={styles.videoWatchRow}>
+                      <Text style={styles.videoWatchText}>Watch on YouTube</Text>
+                      <MaterialIcons name="open-in-new" size={13} color={COLORS.primary} />
                     </View>
                   </View>
-                ))
-              ) : (
-                <View style={styles.emptyCoursesBox}>
-                  <MaterialIcons name="auto-stories" size={40} color={COLORS.textLight} />
-                  <Text style={styles.emptyCoursesText}>No courses available right now</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Search Bar */}
+          <View style={styles.searchBarContainer}>
+            <MaterialIcons name="search" size={22} color={COLORS.textMedium} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for courses..."
+              placeholderTextColor={COLORS.textLight}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+
+          {/* All Courses Section Title */}
+          <View style={styles.allCoursesHeader}>
+            <Text style={styles.allCoursesTitle}>All Courses</Text>
+            <Text style={styles.allCoursesCount}>
+              {filteredCourses.length} {filteredCourses.length === 1 ? 'course' : 'courses'} available
+            </Text>
+          </View>
+
+          {/* Available Courses Cards List */}
+          {filteredCourses.length > 0 ? (
+            filteredCourses.map((course: any, index: number) => (
+              <View key={course.id || index} style={styles.courseCard}>
+                {/* Top Banner Graphic Header */}
+                <View style={[styles.courseCardBanner, { backgroundColor: COLORS.primary }]}>
+                  <View style={styles.badgeCapsule}>
+                    <MaterialIcons name="verified" size={12} color="#fff" />
+                    <Text style={styles.badgeCapsuleText}>{course.modeBadge || 'ONLINE / OFFLINE'}</Text>
+                  </View>
+                  <Text style={styles.bannerCourseTitle} numberOfLines={2}>
+                    {(course.courseName || course.name || course.title || 'SPEAK HUB COURSE').toUpperCase()}
+                  </Text>
+                  <Text style={styles.bannerCourseTag}>SPEAK HUB ACADEMY</Text>
                 </View>
-              )}
-            </>
+
+                {/* Course Card Body */}
+                <View style={styles.courseCardBody}>
+                  <View style={styles.courseCategoryRow}>
+                    <Text style={styles.courseCategoryText}>Spoken English & Communication</Text>
+                    <Text style={styles.courseLangText}>ENGLISH</Text>
+                  </View>
+
+                  <Text style={styles.courseCardName}>{course.courseName || course.name || course.title || 'Course'}</Text>
+                  <Text style={styles.courseCardDesc} numberOfLines={2}>
+                    {course.description || course.desc || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
+                  </Text>
+
+                  {/* Course Video Lesson Pill (if available) */}
+                  {course.demoVideoUrl || course.videoUrl ? (
+                    <TouchableOpacity
+                      style={styles.courseVideoPreviewPill}
+                      onPress={() => handleOpenVideo(course.demoVideoUrl || course.videoUrl)}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialIcons name="play-circle-fill" size={18} color={COLORS.primary} />
+                      <Text style={styles.courseVideoPreviewText}>Watch Course Video Lesson</Text>
+                      <MaterialIcons name="open-in-new" size={13} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {/* Footer Price & Buttons Row */}
+                  <View style={styles.courseCardFooter}>
+                    <View>
+                      <Text style={styles.coursePrice}>
+                        ₹{course.monthlyFee || course.fee || course.price || '800'} <Text style={styles.coursePriceSub}>/ month</Text>
+                      </Text>
+                      <Text style={styles.courseDuration}>Duration: {course.duration || '3 Months'}</Text>
+                    </View>
+
+                    {/* Book A Seat Button */}
+                    <TouchableOpacity
+                      style={styles.bookSeatBtn}
+                      onPress={() => handleOpenBookingModal(course)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.bookSeatBtnText}>Book A Seat</Text>
+                      <MaterialIcons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyCoursesBox}>
+              <MaterialIcons name="auto-stories" size={40} color={COLORS.textLight} />
+              <Text style={styles.emptyCoursesText}>No courses available right now</Text>
+            </View>
           )}
         </View>
 
@@ -1480,14 +1565,13 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   headerArea: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 15,
+    paddingTop: 16,
+    paddingBottom: 14,
     backgroundColor: '#fff',
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: '#f1f5f9',
   },
   headerGreeting: {
     fontSize: 20,
@@ -1495,13 +1579,48 @@ const styles = StyleSheet.create({
     color: COLORS.textDark,
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: COLORS.textMedium,
     marginTop: 2,
   },
-  notificationIconBtn: {
-    padding: 8,
+  topBarNotificationBtn: {
+    marginRight: 16,
+    padding: 2,
+  },
+  topBarBellCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF1F2',
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
+    borderWidth: 1.5,
+    borderColor: '#FECDD3',
+  },
+  topBarRedBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#E11D48',
+    borderRadius: 10,
+    minWidth: 19,
+    height: 19,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    shadowColor: '#E11D48',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  topBarRedBadgeText: {
+    color: '#ffffff',
+    fontSize: 9.5,
+    fontWeight: '900',
   },
   notificationBadge: {
     position: 'absolute',
@@ -1622,13 +1741,18 @@ const styles = StyleSheet.create({
   },
   bannerCardContainer: {
     borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 14,
+    borderColor: '#fecdd3',
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: COLORS.primaryLightest,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   bannerCard: {
-    padding: 15,
+    padding: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1637,15 +1761,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#e0e7ff',
+    borderTopColor: '#fecdd3',
     gap: 8,
   },
   meetingLinkText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12.5,
     color: COLORS.primary,
     fontWeight: '600',
     textDecorationLine: 'underline',
@@ -1812,22 +1936,39 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 8,
+    width: "100%",
   },
   gridItem: {
     backgroundColor: COLORS.surface,
-    width: "23%",
-    padding: 10,
-    borderRadius: 12,
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 2,
+    borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: COLORS.border,
-    elevation: 0,
-    shadowOpacity: 0,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  gridIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.primaryLightest,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
   },
   gridText: {
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "700",
     color: COLORS.textDark,
+    textAlign: "center",
   },
   avatarPlaceholder: {
     width: 45,

@@ -21,6 +21,8 @@ interface NoteItem {
   externalVideoLink?: string;
   referenceLink?: string;
   publishDate?: any;
+  publishTime?: string;
+  status?: string;
   createdAt?: any;
   batchId?: string;
   downloadedAt?: string;
@@ -33,7 +35,7 @@ interface TopicGroup {
 
 export default function NotesScreen() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'all' | 'recent' | 'saved'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'recent' | 'saved' | 'offline'>('all');
   const { showLoader, hideLoader } = useLoader();
   const [allNotes, setAllNotes] = useState<NoteItem[]>([]);
   const [downloadedNotes, setDownloadedNotes] = useState<NoteItem[]>([]);

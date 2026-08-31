@@ -1,88 +1,113 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  RefreshControl,
+  Linking,
+  Alert,
+  Dimensions,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
-import { db, storage } from '../../config/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import { db } from '../../config/firebase';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+
+const { width } = Dimensions.get('window');
+const DONE_HOMEWORK_KEY = '@speakhub_done_homework_ids';
 
 export default function HomeworkScreen() {
   const { user } = useAuth();
-  const [homeworks, setHomeworks] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'Pending' | 'Submitted' | 'Reviewed' | 'Overdue'>('Pending');
   const { showLoader, hideLoader } = useLoader();
 
-  // Submission State
-  const [selectedHw, setSelectedHw] = useState<any>(null);
-  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [textAnswer, setTextAnswer] = useState('');
-  const [selectedFileUrl, setSelectedFileUrl] = useState('');
-  const [studentRemarks, setStudentRemarks] = useState('');
+  const [homeworks, setHomeworks] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Date filter: 'all' | 'today' | 'yesterday' | 'week' | 'specific'
+  const [selectedDateFilter, setSelectedDateFilter] = useState<'all' | 'today' | 'yesterday' | 'week' | 'specific'>('all');
+  const [specificDateString, setSpecificDateString] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [showDatePickerInput, setShowDatePickerInput] = useState(false);
 
-  // Audio State
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
-  const [audioUri, setAudioUri] = useState<string | null>(null);
-  const player = useAudioPlayer();
-  const playerStatus = useAudioPlayerStatus(player);
+  // Student marked completed/sent IDs
+  const [completedHwIds, setCompletedHwIds] = useState<string[]>([]);
+  const [batchName, setBatchName] = useState<string>('My Batch');
 
   useEffect(() => {
-    fetchData();
+    loadCompletedIds();
+    fetchHomeworks();
   }, [user]);
 
-  const fetchData = async () => {
+  const loadCompletedIds = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(DONE_HOMEWORK_KEY);
+      if (stored) {
+        setCompletedHwIds(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.warn('Error loading completed homework IDs:', e);
+    }
+  };
+
+  const toggleHomeworkDone = async (hwId: string) => {
+    try {
+      let updated: string[] = [];
+      if (completedHwIds.includes(hwId)) {
+        updated = completedHwIds.filter(id => id !== hwId);
+      } else {
+        updated = [...completedHwIds, hwId];
+      }
+      setCompletedHwIds(updated);
+      await AsyncStorage.setItem(DONE_HOMEWORK_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Error saving completed homework ID:', e);
+    }
+  };
+
+  const fetchHomeworks = async () => {
     if (!user) {
       hideLoader();
       return;
     }
     showLoader();
     try {
-      // 1. Get latest student record from Firestore
-      const { doc, getDoc } = await import('firebase/firestore');
       let studentData: any = {};
-      if (user.id) {
+      if (user.id || user.uid) {
         try {
-          const uSnap = await getDoc(doc(db, 'users', user.id));
+          const uSnap = await getDoc(doc(db, 'users', user.id || user.uid!));
           if (uSnap.exists()) {
             studentData = uSnap.data();
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
-      const currentStatus = studentData.status || user?.status || 'pending';
-      let isDemoActive = false;
-      if (studentData.isDemoMode && studentData.demoEndDate) {
-        const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
-        if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
-      }
-
-      if (currentStatus !== 'active' && !isDemoActive) {
-        setHomeworks([]);
-        hideLoader();
-        return;
-      }
-
-      // Collect student batch identifiers
+      // Collect all student batch identifiers
       const studentBatchKeys: string[] = ['all'];
-      if (studentData.batchIds && Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+      if (Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+      if (Array.isArray(studentData.batches)) studentBatchKeys.push(...studentData.batches);
       if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
       if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
-      if (user.batchIds && Array.isArray(user.batchIds)) studentBatchKeys.push(...user.batchIds);
+      if (Array.isArray(user.batchIds)) studentBatchKeys.push(...user.batchIds);
       if (user.batchId) studentBatchKeys.push(user.batchId);
+      if (user.batchName) studentBatchKeys.push(user.batchName);
 
-      // Collect student course identifiers
+      // Collect all student course identifiers
       const studentCourseKeys: string[] = [];
-      if (studentData.courseIds && Array.isArray(studentData.courseIds)) studentCourseKeys.push(...studentData.courseIds);
+      if (Array.isArray(studentData.courseIds)) studentCourseKeys.push(...studentData.courseIds);
+      if (Array.isArray(studentData.courses)) studentCourseKeys.push(...studentData.courses);
       if (studentData.courseId) studentCourseKeys.push(studentData.courseId);
-      if (user.courses && Array.isArray(user.courses)) studentCourseKeys.push(...user.courses);
+      if (studentData.courseName) studentCourseKeys.push(studentData.courseName);
+      if (Array.isArray(user.courses)) studentCourseKeys.push(...user.courses);
+      if (Array.isArray(user.courseIds)) studentCourseKeys.push(...user.courseIds);
       if (user.courseId) studentCourseKeys.push(user.courseId);
+      if (user.courseName) studentCourseKeys.push(user.courseName);
 
       // Fetch all batches to resolve names and document IDs
       const bSnap = await getDocs(collection(db, 'batches'));
@@ -91,508 +116,816 @@ export default function HomeworkScreen() {
         const bData = d.data();
         if (studentBatchKeys.includes(d.id) || (bData.batchName && studentBatchKeys.includes(bData.batchName))) {
           targetBatchIdentifiers.push(d.id);
-          if (bData.batchName) targetBatchIdentifiers.push(bData.batchName);
+          if (bData.batchName) {
+            targetBatchIdentifiers.push(bData.batchName);
+            setBatchName(bData.batchName);
+          }
         }
       });
 
-      // Fetch Subjects
-      const subQ = query(collection(db, 'subjects'));
-      const subSnap = await getDocs(subQ);
-      const subMap: any = {};
-      subSnap.forEach(doc => { subMap[doc.id] = doc.data().subjectName; });
-      setSubjects(subMap);
-
       // Fetch all Homeworks
-      let hwList: any[] = [];
       const hwSnap = await getDocs(collection(db, 'homeworks'));
-      hwSnap.forEach(doc => {
-        const data = doc.data();
-        const isAssigned = !data.batchId || 
-          data.batchId === 'all' || 
+      const fetchedList: any[] = [];
+
+      hwSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        // Exclude drafts
+        if (data.status === 'draft') return;
+
+        const isAssigned =
+          !data.batchId ||
+          data.batchId === 'all' ||
           targetBatchIdentifiers.includes(data.batchId) ||
+          (data.batchName && targetBatchIdentifiers.includes(data.batchName)) ||
           (data.courseId && studentCourseKeys.includes(data.courseId));
 
         if (isAssigned) {
-          hwList.push({ id: doc.id, ...data });
-        }
-      });
-
-      // Fetch Submissions
-      const subq = query(collection(db, 'homework_submissions'), where('studentId', '==', user.id));
-      const mySubSnap = await getDocs(subq);
-      const subMapById: any = {};
-      mySubSnap.forEach(doc => { subMapById[doc.data().homeworkId] = { id: doc.id, ...doc.data() }; });
-
-      // Merge & Categorize
-      const now = new Date().getTime();
-      const mergedList: any[] = [];
-
-      hwList.forEach(hw => {
-        // Exclude drafts
-        if (hw.status === 'draft') return;
-
-        // Check scheduled publishing date/time only if status is scheduled
-        if (hw.status === 'scheduled' && hw.publishDate) {
-          let pTime = 0;
-          if (hw.publishDate.toDate) {
-            pTime = hw.publishDate.toDate().getTime();
-          } else if (hw.publishDate.seconds) {
-            pTime = hw.publishDate.seconds * 1000;
-          } else {
-            pTime = new Date(hw.publishDate).getTime();
+          // Normalize publishDate
+          let pDate: Date = new Date();
+          if (data.publishDate) {
+            pDate = data.publishDate.toDate ? data.publishDate.toDate() : new Date(data.publishDate);
+          } else if (data.createdAt) {
+            pDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
           }
 
-          if (hw.publishTime) {
-            const [hh, mm] = hw.publishTime.split(':');
-            const d = hw.publishDate.toDate ? hw.publishDate.toDate() : new Date(hw.publishDate);
-            d.setHours(Number(hh) || 0, Number(mm) || 0, 0, 0);
-            pTime = d.getTime();
+          // Normalize dueDate
+          let dDate: Date = new Date();
+          if (data.dueDate) {
+            dDate = data.dueDate.toDate ? data.dueDate.toDate() : new Date(data.dueDate);
           }
 
-          // If scheduled for a future timestamp, hide from student until that time
-          if (pTime > 0 && pTime > now) return;
+          fetchedList.push({
+            id: docSnap.id,
+            title: data.title || 'Daily Speaking & Grammar Practice',
+            topic: data.topic || data.partChapter || 'Daily Assignment',
+            description: data.description || data.instructions || 'Practice the assigned daily homework task and send your voice note or photo on WhatsApp.',
+            instructions: data.instructions || data.description || '',
+            attachmentUrl: data.attachmentUrl || data.pdfLink || data.fileUrl || '',
+            videoUrl: data.youtubeLink || data.externalVideoLink || data.videoUrl || '',
+            publishDate: pDate,
+            publishDateString: !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '',
+            dueDate: dDate,
+            dueDateString: !isNaN(dDate.getTime()) ? dDate.toISOString().split('T')[0] : '',
+            dueTime: data.dueTime || '11:59 PM',
+            courseName: data.courseName || 'Spoken English',
+            batchName: data.batchName || 'General Batch',
+            ...data
+          });
         }
-
-        const submission = subMapById[hw.id];
-        let status = 'Pending';
-
-        const dDateStr = hw.dueDate?.toDate ? hw.dueDate.toDate().toISOString() : (hw.dueDate || new Date().toISOString());
-        const dTimeStr = hw.dueTime || '23:59';
-        const dDateCombined = new Date(`${dDateStr.split('T')[0]}T${dTimeStr}:00`);
-        const isLate = dDateCombined.getTime() < now;
-
-        if (submission) {
-          if (submission.submissionStatus === 'reviewed') status = 'Reviewed';
-          else status = 'Submitted';
-        } else {
-          if (isLate) status = 'Overdue';
-          else status = 'Pending';
-        }
-
-        mergedList.push({ ...hw, submission, currentStatus: status, isLate, dDateCombined });
       });
 
-      mergedList.sort((a, b) => {
-        const timeB = b.publishDate?.seconds ? b.publishDate.seconds * 1000 : (b.createdAt?.seconds || 0);
-        const timeA = a.publishDate?.seconds ? a.publishDate.seconds * 1000 : (a.createdAt?.seconds || 0);
-        return timeB - timeA;
-      });
-      setHomeworks(mergedList);
+      // Sort by publish date descending (most recent first)
+      fetchedList.sort((a, b) => b.publishDate.getTime() - a.publishDate.getTime());
+      setHomeworks(fetchedList);
 
     } catch (e) {
-      console.error(e);
+      console.error("Error fetching homeworks:", e);
     } finally {
       hideLoader();
     }
   };
 
-  const currentList = homeworks.filter(hw => hw.currentStatus === activeTab);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHomeworks();
+    setRefreshing(false);
+  };
 
-  const openDocumentPicker = async () => {
+  const handleOpenLink = (url?: string) => {
+    if (!url) return;
     try {
-      const result = await DocumentPicker.getDocumentAsync({});
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedFileUrl(result.assets[0].uri);
-        setAudioUri(null); // Clear audio if file picked
+      let target = url.trim();
+      if (!target.startsWith('http://') && !target.startsWith('https://')) {
+        target = 'https://' + target;
       }
-    } catch (err) {
-      console.error(err);
+      Linking.openURL(target);
+    } catch (e: any) {
+      Alert.alert("Cannot open link", e.message);
     }
   };
 
-  const openVideoPicker = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'videos',
-        allowsEditing: true,
-        quality: 1,
-      });
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedFileUrl(result.assets[0].uri);
-        setAudioUri(null);
-      }
-    } catch (err) {
-      console.error(err);
+  const handleSendOnWhatsApp = (hw: any) => {
+    const studentName = user?.name || 'Student';
+    const dateFormatted = hw.publishDate ? hw.publishDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today';
+    const msg = `*Speak Hub Academy - Homework Submission*\n\n` +
+      `👤 *Student Name:* ${studentName}\n` +
+      `📚 *Topic:* ${hw.title}\n` +
+      `📅 *Assigned Date:* ${dateFormatted}\n` +
+      `🎓 *Batch:* ${hw.batchName || batchName}\n\n` +
+      `_Hello Teacher, I have completed my homework. Please check my attached voice recording / photos / notes!_`;
+
+    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
+      Alert.alert("WhatsApp Not Available", "Could not launch WhatsApp. Please make sure WhatsApp is installed on your device.");
+    });
+  };
+
+  // Filter Computation
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const filteredHomeworks = homeworks.filter(hw => {
+    // 1. Text Search Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchTitle = (hw.title || '').toLowerCase().includes(q);
+      const matchDesc = (hw.description || '').toLowerCase().includes(q);
+      const matchTopic = (hw.topic || '').toLowerCase().includes(q);
+      const matchDate = (hw.publishDateString || '').includes(q);
+      if (!matchTitle && !matchDesc && !matchTopic && !matchDate) return false;
     }
-  };
 
-  const startRecording = async () => {
-    try {
-      const permission = await requestRecordingPermissionsAsync();
-      if (permission.status === 'granted') {
-        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-        await recorder.prepareToRecordAsync();
-        recorder.record();
-      }
-    } catch (err) {
-      console.error('Failed to start recording', err);
+    // 2. Date-wise filter
+    if (selectedDateFilter === 'today') {
+      return hw.publishDateString === todayStr || hw.dueDateString === todayStr;
     }
-  };
 
-  const stopRecording = async () => {
-    try {
-      if (recorderState.isRecording) {
-        await recorder.stop();
-        const uri = recorder.uri;
-        setAudioUri(uri);
-        setSelectedFileUrl(''); // Clear file if audio recorded
-      }
-    } catch (err) {
-      console.error('Failed to stop recording', err);
+    if (selectedDateFilter === 'yesterday') {
+      return hw.publishDateString === yesterdayStr || hw.dueDateString === yesterdayStr;
     }
-  };
 
-  const playRecording = async () => {
-    if (!audioUri) return;
-    try {
-      if (playerStatus.playing) {
-        player.pause();
-      } else {
-        player.replace(audioUri);
-        player.seekTo(0);
-        player.play();
-      }
-    } catch (e) {
-      console.error(e);
+    if (selectedDateFilter === 'week') {
+      return hw.publishDate.getTime() >= oneWeekAgo.getTime();
     }
-  };
 
-  const trackView = async (hwItem: any) => {
-    try {
-      const vq = query(collection(db, 'content_views'), where('studentId', '==', user?.id), where('contentId', '==', hwItem.id));
-      const vsnap = await getDocs(vq);
-      if (vsnap.empty) {
-        await addDoc(collection(db, 'content_views'), {
-          studentId: user?.id,
-          batchId: hwItem.batchId,
-          contentId: hwItem.id,
-          contentType: 'homework',
-          firstViewedAt: serverTimestamp(),
-          lastViewedAt: serverTimestamp(),
-          viewCount: 1,
-          totalReadingDuration: 20
-        });
-      } else {
-        const vdoc = vsnap.docs[0];
-        await updateDoc(doc(db, 'content_views', vdoc.id), {
-          lastViewedAt: serverTimestamp(),
-          viewCount: vdoc.data().viewCount + 1,
-          totalReadingDuration: (vdoc.data().totalReadingDuration || 0) + 20
-        });
-      }
-    } catch (err) {
-      console.error(err);
+    if (selectedDateFilter === 'specific') {
+      return hw.publishDateString === specificDateString || hw.dueDateString === specificDateString;
     }
-  };
 
-  const handleOpenModal = (item: any) => {
-    setSelectedHw(item);
-    setIsSubmitModalOpen(true);
-    trackView(item);
-  };
+    return true;
+  });
 
-  const handleOpenLink = (item: any) => {
-    if (item.attachmentUrl) Linking.openURL(item.attachmentUrl);
-    trackView(item);
-  };
-
-  const uploadFileToStorage = async (uri: string) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const filename = uri.substring(uri.lastIndexOf('/') + 1);
-    const storageRef = ref(storage, `homework_submissions/${Date.now()}_${filename}`);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
-  };
-
-  const handleHomeworkSubmit = async () => {
-    if (!selectedHw) return;
-    setIsUploading(true);
-    try {
-      let finalUrl = '';
-      if (selectedFileUrl) {
-        finalUrl = await uploadFileToStorage(selectedFileUrl);
-      } else if (audioUri) {
-        finalUrl = await uploadFileToStorage(audioUri);
-      }
-
-      const isLateSub = selectedHw.isLate;
-
-      const submissionData = {
-        homeworkId: selectedHw.id,
-        studentId: user?.id,
-        submissionUrl: finalUrl,
-        textAnswer,
-        remarks: studentRemarks,
-        submissionStatus: isLateSub ? 'late' : 'submitted',
-        submittedAt: serverTimestamp()
-      };
-
-      if (selectedHw.submission?.id) {
-        // Update existing
-        await updateDoc(doc(db, 'homework_submissions', selectedHw.submission.id), submissionData);
-      } else {
-        await addDoc(collection(db, 'homework_submissions'), submissionData);
-      }
-
-      Alert.alert('Success', 'Homework submitted successfully!');
-      setIsSubmitModalOpen(false);
-      resetSubmission();
-      fetchData();
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'Failed to submit homework.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const resetSubmission = () => {
-    setSelectedHw(null);
-    setTextAnswer('');
-    setSelectedFileUrl('');
-    setStudentRemarks('');
-    setAudioUri(null);
-    player.pause();
-  };
-
-  const renderHomeworkCard = ({ item }: { item: any }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.subject}>{item.topic || item.partChapter || 'Batch Assignment'}</Text>
-        <View style={[styles.statusBadge, item.currentStatus === 'Reviewed' ? styles.statusReviewed : item.currentStatus === 'Submitted' ? styles.statusCompleted : item.currentStatus === 'Overdue' ? styles.statusOverdue : styles.statusPending]}>
-          <Text style={item.currentStatus === 'Reviewed' ? styles.statusTextReviewed : item.currentStatus === 'Submitted' ? styles.statusTextCompleted : item.currentStatus === 'Overdue' ? styles.statusTextOverdue : styles.statusTextPending}>
-            {item.currentStatus.toUpperCase()}
-          </Text>
-        </View>
-      </View>
-      
-      <Text style={styles.title}>{item.title}</Text>
-      
-      {/* Prominent Task Instructions Box */}
-      {(item.instructions || item.description) ? (
-        <View style={styles.taskBox}>
-          <Text style={styles.taskBoxHeader}>📝 Questions &amp; Task:</Text>
-          <Text style={styles.taskBoxText} numberOfLines={4}>
-            {item.instructions || item.description}
-          </Text>
-        </View>
-      ) : null}
-      
-      <Text style={styles.date}>Due Date: {item.dDateCombined.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</Text>
-      
-      <View style={{flexDirection: 'row', gap: 10, marginTop: 12}}>
-        <TouchableOpacity 
-          style={[styles.actionButton, {flex: 1, backgroundColor: COLORS.primary}]} 
-          onPress={() => handleOpenModal(item)}
-        >
-          <Text style={styles.actionButtonText}>
-            {item.currentStatus === 'Reviewed' ? 'View Feedback' : item.currentStatus === 'Submitted' ? 'View Submission' : 'View Task & Submit'}
-          </Text>
-        </TouchableOpacity>
-
-        {item.attachmentUrl && (
-          <TouchableOpacity 
-            style={[styles.actionButton, {backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.primary, paddingHorizontal: 15}]} 
-            onPress={() => handleOpenLink(item)}
-          >
-            <Text style={[styles.actionButtonText, {color: COLORS.primary}]}>PDF</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
+  const todayHomeworkCount = homeworks.filter(h => h.publishDateString === todayStr || h.dueDateString === todayStr).length;
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabsContainer}>
-        {['Pending', 'Submitted', 'Reviewed', 'Overdue'].map((tab) => (
-          <TouchableOpacity 
-            key={tab} 
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => setActiveTab(tab as any)}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <FlatList 
-        data={currentList}
-        renderItem={renderHomeworkCard}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 16 }}
-        ListEmptyComponent={<Text style={styles.emptyText}>No homework found in this category.</Text>}
-      />
-
-      {/* Submission & Feedback Modal */}
-      <Modal visible={isSubmitModalOpen} animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => { setIsSubmitModalOpen(false); resetSubmission(); }}>
-              <MaterialIcons name="close" size={24} color={COLORS.textDark} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {selectedHw?.currentStatus === 'Reviewed' ? 'Teacher Feedback' : selectedHw?.currentStatus === 'Submitted' ? 'Your Submission' : 'Submit Homework'}
-            </Text>
-            <View style={{width: 24}}/>
-          </View>
-
-          <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
-            <Text style={styles.hwTitle}>{selectedHw?.title}</Text>
-            
-            <View style={styles.modalTaskContainer}>
-              <Text style={styles.modalTaskHeader}>📝 Task &amp; Instructions:</Text>
-              <Text style={styles.hwInstructions}>
-                {selectedHw?.instructions || selectedHw?.description || 'No detailed instructions provided.'}
+      {/* Top Banner Alert / Stats */}
+      <View style={styles.topSummaryCard}>
+        <LinearGradient
+          colors={['#E11D48', '#BE123C']}
+          style={styles.summaryGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={styles.summaryRow}>
+            <View style={{ flex: 1 }}>
+              <View style={styles.tagBadge}>
+                <MaterialIcons name="assignment" size={14} color="#ffffff" />
+                <Text style={styles.tagBadgeText}>HOMEWORK DIARY</Text>
+              </View>
+              <Text style={styles.summaryTitle}>Daily Homework & Tasks</Text>
+              <Text style={styles.summarySubtitle}>
+                Complete tasks & submit directly on WhatsApp to your teacher
               </Text>
             </View>
 
-            {selectedHw?.attachmentUrl && (
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#93c5fd', marginBottom: 15 }]}
-                onPress={() => handleOpenLink(selectedHw)}
+            <View style={styles.countCircle}>
+              <Text style={styles.countNumber}>{homeworks.length}</Text>
+              <Text style={styles.countLabel}>Total</Text>
+            </View>
+          </View>
+
+          {todayHomeworkCount > 0 ? (
+            <View style={styles.todayNoticePill}>
+              <MaterialIcons name="notifications-active" size={16} color="#FFE4E6" />
+              <Text style={styles.todayNoticeText}>
+                {todayHomeworkCount} homework task(s) assigned for today!
+              </Text>
+            </View>
+          ) : null}
+        </LinearGradient>
+      </View>
+
+      {/* Date Filter Pills Row */}
+      <View style={styles.filterSection}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterPillsContainer}
+        >
+          <TouchableOpacity
+            style={[styles.filterPill, selectedDateFilter === 'all' && styles.filterPillActive]}
+            onPress={() => { setSelectedDateFilter('all'); setShowDatePickerInput(false); }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="list-alt" size={15} color={selectedDateFilter === 'all' ? '#ffffff' : COLORS.textDark} />
+            <Text style={[styles.filterPillText, selectedDateFilter === 'all' && styles.filterPillTextActive]}>
+              All ({homeworks.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterPill, selectedDateFilter === 'today' && styles.filterPillActive]}
+            onPress={() => { setSelectedDateFilter('today'); setShowDatePickerInput(false); }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="today" size={15} color={selectedDateFilter === 'today' ? '#ffffff' : COLORS.textDark} />
+            <Text style={[styles.filterPillText, selectedDateFilter === 'today' && styles.filterPillTextActive]}>
+              Today ({todayHomeworkCount})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterPill, selectedDateFilter === 'yesterday' && styles.filterPillActive]}
+            onPress={() => { setSelectedDateFilter('yesterday'); setShowDatePickerInput(false); }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="history" size={15} color={selectedDateFilter === 'yesterday' ? '#ffffff' : COLORS.textDark} />
+            <Text style={[styles.filterPillText, selectedDateFilter === 'yesterday' && styles.filterPillTextActive]}>
+              Yesterday
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterPill, selectedDateFilter === 'week' && styles.filterPillActive]}
+            onPress={() => { setSelectedDateFilter('week'); setShowDatePickerInput(false); }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="date-range" size={15} color={selectedDateFilter === 'week' ? '#ffffff' : COLORS.textDark} />
+            <Text style={[styles.filterPillText, selectedDateFilter === 'week' && styles.filterPillTextActive]}>
+              This Week
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterPill, selectedDateFilter === 'specific' && styles.filterPillActive]}
+            onPress={() => { setSelectedDateFilter('specific'); setShowDatePickerInput(true); }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="event" size={15} color={selectedDateFilter === 'specific' ? '#ffffff' : COLORS.textDark} />
+            <Text style={[styles.filterPillText, selectedDateFilter === 'specific' && styles.filterPillTextActive]}>
+              Filter by Date 📅
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* Specific Date Picker Input */}
+        {showDatePickerInput && (
+          <View style={styles.specificDateRow}>
+            <MaterialIcons name="calendar-month" size={20} color={COLORS.primary} />
+            <Text style={styles.specificDateLabel}>Enter Date (YYYY-MM-DD):</Text>
+            <TextInput
+              style={styles.specificDateInput}
+              value={specificDateString}
+              onChangeText={setSpecificDateString}
+              placeholder="e.g. 2026-08-31"
+              placeholderTextColor={COLORS.textLight}
+              maxLength={10}
+            />
+          </View>
+        )}
+
+        {/* Search Bar */}
+        <View style={styles.searchBarBox}>
+          <MaterialIcons name="search" size={20} color={COLORS.textLight} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search homework topic, instructions..."
+            placeholderTextColor={COLORS.textLight}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="close" size={18} color={COLORS.textLight} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Main Homework Cards List */}
+      <ScrollView
+        style={styles.cardsScroll}
+        contentContainerStyle={styles.cardsScrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {filteredHomeworks.length > 0 ? (
+          filteredHomeworks.map((hw, idx) => {
+            const isCompleted = completedHwIds.includes(hw.id);
+            const pubDateStr = hw.publishDate ? hw.publishDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recent';
+            const dueDateStr = hw.dueDate ? hw.dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Flexible';
+            const isDueToday = hw.dueDateString === todayStr || hw.publishDateString === todayStr;
+
+            return (
+              <View key={hw.id || idx} style={[styles.homeworkCard, isCompleted && styles.homeworkCardCompleted]}>
+                {/* Top Card Header */}
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardHeaderLeft}>
+                    <View style={styles.topicBadge}>
+                      <Text style={styles.topicBadgeText}>{hw.topic ? hw.topic.toUpperCase() : 'SPEAKING TASK'}</Text>
+                    </View>
+                    {isDueToday && (
+                      <View style={styles.dueTodayBadge}>
+                        <Text style={styles.dueTodayBadgeText}>DUE TODAY</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.statusToggleBtn, isCompleted && styles.statusToggleBtnDone]}
+                    onPress={() => toggleHomeworkDone(hw.id)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons
+                      name={isCompleted ? "check-circle" : "radio-button-unchecked"}
+                      size={18}
+                      color={isCompleted ? "#15803d" : COLORS.textLight}
+                    />
+                    <Text style={[styles.statusToggleText, isCompleted && styles.statusToggleTextDone]}>
+                      {isCompleted ? "Completed" : "Mark Done"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Title */}
+                <Text style={styles.cardTitle}>{hw.title}</Text>
+
+                {/* Date & Batch Meta Row */}
+                <View style={styles.metaRow}>
+                  <View style={styles.metaItem}>
+                    <MaterialIcons name="calendar-today" size={13} color={COLORS.primary} />
+                    <Text style={styles.metaText}>Assigned: <Text style={{ fontWeight: '700', color: COLORS.textDark }}>{pubDateStr}</Text></Text>
+                  </View>
+
+                  <View style={styles.metaItem}>
+                    <MaterialIcons name="schedule" size={13} color="#b45309" />
+                    <Text style={styles.metaText}>Due: <Text style={{ fontWeight: '700', color: COLORS.textDark }}>{dueDateStr} ({hw.dueTime})</Text></Text>
+                  </View>
+                </View>
+
+                {/* Instructions / Description Body */}
+                <View style={styles.instructionsContainer}>
+                  <Text style={styles.instructionsLabel}>Instructions / Task Details:</Text>
+                  <Text style={styles.instructionsText}>
+                    {hw.instructions || hw.description || 'Practice speaking this topic out loud and send your voice note on WhatsApp.'}
+                  </Text>
+                </View>
+
+                {/* Material Attachment / Video Lesson Link */}
+                <View style={styles.attachmentsRow}>
+                  {hw.attachmentUrl ? (
+                    <TouchableOpacity
+                      style={styles.attachmentBtn}
+                      onPress={() => handleOpenLink(hw.attachmentUrl)}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialIcons name="picture-as-pdf" size={16} color="#dc2626" />
+                      <Text style={styles.attachmentBtnText} numberOfLines={1}>View Worksheet / PDF</Text>
+                      <MaterialIcons name="open-in-new" size={13} color="#dc2626" />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {hw.videoUrl ? (
+                    <TouchableOpacity
+                      style={styles.videoBtn}
+                      onPress={() => handleOpenLink(hw.videoUrl)}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialIcons name="play-circle-fill" size={16} color="#2563eb" />
+                      <Text style={styles.videoBtnText} numberOfLines={1}>Reference Video</Text>
+                      <MaterialIcons name="open-in-new" size={13} color="#2563eb" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                {/* Direct Send Homework via WhatsApp Button */}
+                <View style={styles.cardFooter}>
+                  <TouchableOpacity
+                    style={styles.whatsappSendBtn}
+                    onPress={() => handleSendOnWhatsApp(hw)}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient
+                      colors={['#25D366', '#128C7E']}
+                      style={styles.whatsappGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <MaterialIcons name="chat" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                      <Text style={styles.whatsappBtnText}>Submit on WhatsApp 💬</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
+        ) : (
+          <View style={styles.emptyStateContainer}>
+            <View style={styles.emptyIconCircle}>
+              <MaterialIcons name="assignment-turned-in" size={48} color={COLORS.primary} />
+            </View>
+            <Text style={styles.emptyStateTitle}>No Homework Found</Text>
+            <Text style={styles.emptyStateSubtitle}>
+              {selectedDateFilter === 'today'
+                ? "No homework was assigned for today yet. Check back after your live class!"
+                : "No homework matching your current search or date filter."}
+            </Text>
+            {selectedDateFilter !== 'all' && (
+              <TouchableOpacity
+                style={styles.resetFilterBtn}
+                onPress={() => { setSelectedDateFilter('all'); setSearchQuery(''); setShowDatePickerInput(false); }}
               >
-                <Text style={{ color: '#1e40af', fontWeight: 'bold' }}>📄 Open Attached PDF / File</Text>
+                <Text style={styles.resetFilterText}>View All Homework</Text>
               </TouchableOpacity>
             )}
-
-            {/* Reviewed Status */}
-            {selectedHw?.currentStatus === 'Reviewed' && (
-              <View style={styles.feedbackContainer}>
-                {selectedHw.submission?.marks !== undefined && (
-                  <View style={styles.scoreBox}>
-                    <Text style={styles.scoreText}>{selectedHw.submission?.marks} / {selectedHw.maximumMarks || 100}</Text>
-                    <Text style={{color: COLORS.textMedium, fontWeight: 'bold'}}>Marks Awarded</Text>
-                  </View>
-                )}
-                
-                {selectedHw.submission?.correctionNotes ? (
-                  <View style={styles.feedbackBlock}>
-                    <Text style={styles.feedbackLabel}>Correction Notes:</Text>
-                    <Text style={styles.feedbackText}>{selectedHw.submission.correctionNotes}</Text>
-                  </View>
-                ) : null}
-
-                {selectedHw.submission?.teacherComments ? (
-                  <View style={styles.feedbackBlock}>
-                    <Text style={styles.feedbackLabel}>Teacher Comments:</Text>
-                    <Text style={styles.feedbackText}>{selectedHw.submission.teacherComments}</Text>
-                  </View>
-                ) : null}
-              </View>
-            )}
-
-            {/* Submitted Status */}
-            {selectedHw?.currentStatus === 'Submitted' && (
-              <View style={{ backgroundColor: '#f0fdf4', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#bbf7d0', marginTop: 10 }}>
-                <Text style={{ color: '#166534', fontWeight: 'bold', fontSize: 14, marginBottom: 6 }}>✓ Submitted for Review</Text>
-                {selectedHw.submission?.textAnswer ? (
-                  <Text style={{ color: '#14532d', fontSize: 13, marginTop: 4 }}>Your Answer: {selectedHw.submission.textAnswer}</Text>
-                ) : null}
-              </View>
-            )}
-
-            {/* Pending / Overdue Status -> Submission Form */}
-            {(selectedHw?.currentStatus === 'Pending' || selectedHw?.currentStatus === 'Overdue') && (
-              <View style={styles.submissionContainer}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Your Written Answer / Response:</Text>
-                  <TextInput 
-                    style={styles.textArea}
-                    placeholder="Type your homework answer or response here..."
-                    multiline
-                    value={textAnswer}
-                    onChangeText={setTextAnswer}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Remarks for Teacher (Optional):</Text>
-                  <TextInput 
-                    style={styles.input}
-                    placeholder="e.g. Completed questions 1 to 5"
-                    value={studentRemarks}
-                    onChangeText={setStudentRemarks}
-                  />
-                </View>
-
-                <TouchableOpacity 
-                  style={styles.submitBtn} 
-                  onPress={handleHomeworkSubmit}
-                  disabled={isUploading}
-                >
-                  <Text style={styles.submitBtnText}>
-                    {isUploading ? 'Submitting Homework...' : 'Submit Homework'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
-
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  tabsContainer: { flexDirection: 'row', backgroundColor: COLORS.surface, paddingHorizontal: 10, paddingTop: 10 },
-  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: COLORS.primary },
-  tabText: { color: COLORS.textMedium, fontWeight: 'bold', fontSize: 12 },
-  activeTabText: { color: COLORS.primary },
-  emptyText: { textAlign: 'center', color: COLORS.textMedium, marginTop: 50, fontSize: 14 },
-  
-  card: { backgroundColor: COLORS.surface, padding: 16, borderRadius: 14, marginBottom: 14, elevation: 2, borderLeftWidth: 4, borderLeftColor: COLORS.primary, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  subject: { fontSize: 13, color: COLORS.primary, fontWeight: 'bold' },
-  title: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark, marginBottom: 6 },
-  
-  taskBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, borderLeftWidth: 3, borderLeftColor: '#3b82f6', marginBottom: 10 },
-  taskBoxHeader: { fontSize: 12, fontWeight: 'bold', color: '#1e40af', marginBottom: 4 },
-  taskBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
-  
-  date: { fontSize: 12, color: COLORS.textLight, fontWeight: '600' },
-  
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusPending: { backgroundColor: '#fff3cd' },
-  statusCompleted: { backgroundColor: '#e0f2fe' },
-  statusReviewed: { backgroundColor: COLORS.successBackground },
-  statusOverdue: { backgroundColor: '#fee2e2' },
-  
-  statusTextPending: { color: '#856404', fontSize: 10, fontWeight: 'bold' },
-  statusTextCompleted: { color: '#0369a1', fontSize: 10, fontWeight: 'bold' },
-  statusTextReviewed: { color: COLORS.successText, fontSize: 10, fontWeight: 'bold' },
-  statusTextOverdue: { color: '#ef4444', fontSize: 10, fontWeight: 'bold' },
-  
-  actionButton: { padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  actionButtonText: { color: '#ffffff', fontWeight: 'bold', fontSize: 13 },
-
-  modalContainer: { flex: 1, backgroundColor: COLORS.background },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 50, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderColor: COLORS.border },
-  modalTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark },
-  modalBody: { flex: 1, padding: 16 },
-  
-  hwTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary, marginBottom: 10 },
-  modalTaskContainer: { backgroundColor: '#f8fafc', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 15 },
-  modalTaskHeader: { fontSize: 13, fontWeight: 'bold', color: '#334155', marginBottom: 6 },
-  hwInstructions: { fontSize: 14, color: COLORS.textDark, lineHeight: 20 },
-  
-  submissionContainer: { marginTop: 10 },
-  inputGroup: { marginBottom: 15 },
-  label: { fontSize: 13, fontWeight: 'bold', color: COLORS.textMedium, marginBottom: 6 },
-  input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, fontSize: 14, color: COLORS.textDark },
-  textArea: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, fontSize: 14, minHeight: 120, textAlignVertical: 'top', color: COLORS.textDark },
-  
-  submitBtn: { backgroundColor: COLORS.primary, padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  submitBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
-
-  feedbackContainer: { marginTop: 10 },
-  scoreBox: { backgroundColor: COLORS.successBackground, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 15 },
-  scoreText: { fontSize: 28, fontWeight: 'bold', color: COLORS.successText },
-  feedbackBlock: { backgroundColor: COLORS.surface, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, marginBottom: 12 },
-  feedbackLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.textMedium, marginBottom: 4 },
-  feedbackText: { fontSize: 14, color: COLORS.textDark }
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  topSummaryCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+  },
+  summaryGradient: {
+    padding: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  tagBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  summarySubtitle: {
+    fontSize: 12,
+    color: '#FFF1F2',
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  countCircle: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  countNumber: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#ffffff',
+  },
+  countLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFF1F2',
+  },
+  todayNoticePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  todayNoticeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterSection: {
+    paddingHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  filterPillsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterPillActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textDark,
+  },
+  filterPillTextActive: {
+    color: '#ffffff',
+  },
+  specificDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  specificDateLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMedium,
+  },
+  specificDateInput: {
+    flex: 1,
+    height: 36,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  searchBarBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.textDark,
+    fontWeight: '500',
+  },
+  cardsScroll: {
+    flex: 1,
+  },
+  cardsScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  homeworkCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  homeworkCardCompleted: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#cbd5e1',
+    opacity: 0.9,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  topicBadge: {
+    backgroundColor: '#FFF1F2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FFE4E6',
+  },
+  topicBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  dueTodayBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  dueTodayBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#92400E',
+  },
+  statusToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  statusToggleBtnDone: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMedium,
+  },
+  statusToggleTextDone: {
+    color: '#15803d',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textDark,
+    marginBottom: 8,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 10,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    color: COLORS.textMedium,
+    fontWeight: '500',
+  },
+  instructionsContainer: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 12,
+  },
+  instructionsLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMedium,
+    marginBottom: 4,
+  },
+  instructionsText: {
+    fontSize: 13,
+    color: COLORS.textDark,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  attachmentsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  attachmentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  attachmentBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  videoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  videoBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  cardFooter: {
+    marginTop: 2,
+  },
+  whatsappSendBtn: {
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  whatsappGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  whatsappBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFF1F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textDark,
+    marginBottom: 6,
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMedium,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  resetFilterBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  resetFilterText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
 });

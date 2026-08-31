@@ -43,7 +43,7 @@ function RootLayoutNav() {
       AsyncStorage.setItem('@has_seen_onboarding', 'true');
       
       // If token is active / user logged in, bypass login/onboarding and go directly to Dashboard
-      if (inAuthGroup || segments.length === 0 || !segments[0]) {
+      if (inAuthGroup || !segments[0]) {
         router.replace('/(app)/dashboard');
       }
     } else {
