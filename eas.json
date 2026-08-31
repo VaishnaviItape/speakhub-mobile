@@ -12,6 +12,24 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "REACT_NATIVE_ARCHITECTURES": "arm64-v8a,armeabi-v7a"
+      }
+    },
+    "preview-arm64": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "REACT_NATIVE_ARCHITECTURES": "arm64-v8a"
+      }
+    },
+    "preview-universal": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {

@@ -537,7 +537,7 @@ Thank you!`;
   return (
     <ScrollView 
       style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} color={COLORS.primary} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       showsVerticalScrollIndicator={false}
     >
       {/* Course & Fee Overview Card */}

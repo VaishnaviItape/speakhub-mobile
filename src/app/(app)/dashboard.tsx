@@ -162,7 +162,30 @@ export default function DashboardScreen() {
     // 3. Real-time listener for courses collection (auto-updates course list)
     unsubCourses = onSnapshot(
       collection(db, 'courses'),
-      () => {
+      (snap) => {
+        try {
+          const liveCourses: any[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            if (data.status !== 'inactive') {
+              liveCourses.push({
+                id: d.id,
+                courseName: data.courseName || data.name || data.title || 'Course',
+                description: data.description || data.desc || 'Comprehensive English fluency course',
+                monthlyFee: data.monthlyFee || data.fee || data.price || 800,
+                duration: data.duration || '3 Months',
+                modeBadge: data.modeBadge || 'ONLINE / OFFLINE',
+                demoVideoUrl: data.demoVideoUrl || data.videoUrl || '',
+                ...data
+              });
+            }
+          });
+          if (liveCourses.length > 0) {
+            setAvailableCourses(liveCourses);
+          }
+        } catch (err) {
+          console.error("Courses live listener error:", err);
+        }
         fetchDashboardData();
       },
       (err) => {
@@ -235,11 +258,26 @@ export default function DashboardScreen() {
         cSnap.forEach(d => {
           const data = d.data();
           if (data.status !== 'inactive') {
-            fetchedCourses.push({ id: d.id, ...data });
+            fetchedCourses.push({
+              id: d.id,
+              courseName: data.courseName || data.name || data.title || 'Course',
+              description: data.description || data.desc || 'Comprehensive English fluency course',
+              monthlyFee: data.monthlyFee || data.fee || data.price || 800,
+              duration: data.duration || '3 Months',
+              modeBadge: data.modeBadge || 'ONLINE / OFFLINE',
+              demoVideoUrl: data.demoVideoUrl || data.videoUrl || '',
+              ...data
+            });
           }
         });
-        setAvailableCourses(fetchedCourses);
-      } catch (e) { }
+        if (fetchedCourses.length > 0) {
+          setAvailableCourses(fetchedCourses);
+        } else {
+          setAvailableCourses(DEFAULT_COURSES);
+        }
+      } catch (e) {
+        setAvailableCourses(DEFAULT_COURSES);
+      }
 
       // Collect all student batch & course identifiers
       const studentBatchKeys: string[] = [];
@@ -545,6 +583,39 @@ export default function DashboardScreen() {
 
   const YOUTUBE_DEMO_URL = "https://youtube.com/@speakhubacademy?si=ZSnvnh5MzSqXPrpM";
 
+  const DEFAULT_COURSES = [
+    {
+      id: 'default-course-1',
+      courseName: 'Spoken English & Fluency Masterclass',
+      description: 'Daily speaking practice, live conversation sessions, grammar mastery, and accent improvement.',
+      monthlyFee: 800,
+      duration: '3 Months',
+      modeBadge: 'ONLINE / OFFLINE',
+      demoVideoUrl: 'https://youtu.be/Uhg80b2TJVs?si=38ohmD_0kXfjgDhl',
+      status: 'active'
+    },
+    {
+      id: 'default-course-2',
+      courseName: 'Public Speaking & Personality Development',
+      description: 'Overcome stage fear, master presentations, body language, interview skills, and speech delivery.',
+      monthlyFee: 1200,
+      duration: '2 Months',
+      modeBadge: 'ONLINE / OFFLINE',
+      demoVideoUrl: 'https://youtu.be/Rax0DFWQ5qc?si=a6MQlguJSlIIbWol',
+      status: 'active'
+    },
+    {
+      id: 'default-course-3',
+      courseName: 'Kids & Teens English Foundation',
+      description: 'Interactive storytelling, vocabulary games, phonics, reading practice, and school grammar support.',
+      monthlyFee: 700,
+      duration: '6 Months',
+      modeBadge: 'ONLINE',
+      demoVideoUrl: 'https://youtu.be/nFfnnaJFV_U?si=ckhBwk4sW1mYbZQw',
+      status: 'active'
+    }
+  ];
+
   const DEFAULT_YOUTUBE_VIDEOS = [
     {
       id: 'yt-1',
@@ -619,7 +690,7 @@ export default function DashboardScreen() {
         parentOrHusbandName: bookingParentName || '',
         phone: bookingPhone,
         courseId: selectedCourseForBooking?.id || '',
-        courseName: selectedCourseForBooking?.courseName || '',
+        courseName: selectedCourseForBooking?.courseName || selectedCourseForBooking?.name || '',
         notes: bookingNotes,
         status: 'pending',
         createdAt: serverTimestamp()
@@ -631,7 +702,7 @@ export default function DashboardScreen() {
       // Show success alert message
       Alert.alert(
         "🎉 Seat Booking Inquiry Sent!",
-        `Thank you ${bookingName || 'Student'}! Your seat booking inquiry for "${selectedCourseForBooking?.courseName}" has been submitted.\n\nOur counseling team will call you at ${bookingPhone} to confirm your seat and schedule your free demo class.`,
+        `Thank you ${bookingName || 'Student'}! Your seat booking inquiry for "${selectedCourseForBooking?.courseName || selectedCourseForBooking?.name || 'the course'}" has been submitted.\n\nOur counseling team will call you at ${bookingPhone} to confirm your seat and schedule your free demo class.`,
         [{ text: "OK" }]
       );
     } catch (err: any) {
@@ -663,10 +734,13 @@ export default function DashboardScreen() {
     }
   };
 
-  const filteredCourses = availableCourses.filter(c =>
-    c.courseName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const coursesListToDisplay = availableCourses && availableCourses.length > 0 ? availableCourses : DEFAULT_COURSES;
+  const filteredCourses = coursesListToDisplay.filter(c => {
+    const name = String(c.courseName || c.name || c.title || '').toLowerCase();
+    const desc = String(c.description || c.desc || '').toLowerCase();
+    const q = (searchQuery || '').toLowerCase().trim();
+    return !q || name.includes(q) || desc.includes(q);
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.surface }}>
@@ -719,65 +793,67 @@ export default function DashboardScreen() {
       >
 
         <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-          {isInactiveAccount ? (
-            /* INACTIVE ACCOUNT CARD - EXPLAINS WHY MEETING LINK IS NOT SHOWING & HOW TO PAY FEES */
-            <View style={styles.inactiveAccountCard}>
-              <View style={styles.inactiveHeaderRow}>
-                <View style={styles.inactiveIconCircle}>
-                  <MaterialIcons name="lock-person" size={26} color="#dc2626" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.inactiveStatusBadge}>
-                    <View style={styles.inactiveStatusDot} />
-                    <Text style={styles.inactiveStatusBadgeText}>STATUS: INACTIVE</Text>
+          {activeBatch ? (
+            /* SECTION FOR ENROLLED STUDENTS WITH ASSIGNED BATCH */
+            <>
+              {isInactiveAccount ? (
+                /* INACTIVE ACCOUNT CARD - EXPLAINS WHY MEETING LINK IS NOT SHOWING & HOW TO PAY FEES */
+                <View style={styles.inactiveAccountCard}>
+                  <View style={styles.inactiveHeaderRow}>
+                    <View style={styles.inactiveIconCircle}>
+                      <MaterialIcons name="lock-person" size={26} color="#dc2626" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.inactiveStatusBadge}>
+                        <View style={styles.inactiveStatusDot} />
+                        <Text style={styles.inactiveStatusBadgeText}>STATUS: INACTIVE</Text>
+                      </View>
+                      <Text style={styles.inactiveTitle}>Meeting Link Access Paused</Text>
+                    </View>
                   </View>
-                  <Text style={styles.inactiveTitle}>Meeting Link Access Paused</Text>
-                </View>
-              </View>
 
-              <Text style={styles.inactiveDesc}>
-                Your live class meeting link is currently not showing because your student account is inactive. Please pay your pending fees or contact administration to reactivate your live classes and course materials.
-              </Text>
-
-              {feeDueDate ? (
-                <View style={styles.inactiveFeeDueBox}>
-                  <MaterialIcons name="event-busy" size={16} color="#b45309" />
-                  <Text style={styles.inactiveFeeDueText}>
-                    Fee Due Date: <Text style={{ fontWeight: 'bold' }}>{new Date(feeDueDate).toLocaleDateString()}</Text>
+                  <Text style={styles.inactiveDesc}>
+                    Your live class meeting link is currently not showing because your student account is inactive. Please pay your pending fees or contact administration to reactivate your live classes and course materials.
                   </Text>
+
+                  {feeDueDate ? (
+                    <View style={styles.inactiveFeeDueBox}>
+                      <MaterialIcons name="event-busy" size={16} color="#b45309" />
+                      <Text style={styles.inactiveFeeDueText}>
+                        Fee Due Date: <Text style={{ fontWeight: 'bold' }}>{new Date(feeDueDate).toLocaleDateString()}</Text>
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Action Buttons: Pay Fees & WhatsApp Admin */}
+                  <View style={styles.inactiveActionsRow}>
+                    <TouchableOpacity
+                      style={styles.inactivePayBtn}
+                      onPress={() => router.push("/(app)/fees")}
+                      activeOpacity={0.85}
+                    >
+                      <MaterialIcons name="payment" size={16} color="#ffffff" />
+                      <Text style={styles.inactivePayBtnText}>Pay Your Fees</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.inactiveHelpBtn}
+                      onPress={() => {
+                        const studentName = user?.name || 'Student';
+                        const msg = `Hello Speak Hub Admin, my student account (${studentName}) is currently inactive. Please assist me with fee payment and account reactivation.`;
+                        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
+                          Alert.alert("Contact Admin", "Please contact Speak Hub Academy administration to reactivate your student account.");
+                        });
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <MaterialIcons name="support-agent" size={16} color="#dc2626" />
+                      <Text style={styles.inactiveHelpBtnText}>Contact Admin</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : null}
 
-              {/* Action Buttons: Pay Fees & WhatsApp Admin */}
-              <View style={styles.inactiveActionsRow}>
-                <TouchableOpacity
-                  style={styles.inactivePayBtn}
-                  onPress={() => router.push("/(app)/fees")}
-                  activeOpacity={0.85}
-                >
-                  <MaterialIcons name="payment" size={16} color="#ffffff" />
-                  <Text style={styles.inactivePayBtnText}>Pay Your Fees</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.inactiveHelpBtn}
-                  onPress={() => {
-                    const studentName = user?.name || 'Student';
-                    const msg = `Hello Speak Hub Admin, my student account (${studentName}) is currently inactive. Please assist me with fee payment and account reactivation.`;
-                    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
-                      Alert.alert("Contact Admin", "Please contact Speak Hub Academy administration to reactivate your student account.");
-                    });
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <MaterialIcons name="support-agent" size={16} color="#dc2626" />
-                  <Text style={styles.inactiveHelpBtnText}>Contact Admin</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : activeBatch ? (
-            /* SECTION FOR ENROLLED STUDENTS WITH ASSIGNED BATCH */
-            <>
               {/* Next Class Banner for Enrolled Batch Students */}
               <View style={[styles.bannerCardContainer, { marginTop: 10, marginBottom: 20 }]}>
                 <View style={styles.bannerCard}>
@@ -884,6 +960,35 @@ export default function DashboardScreen() {
           ) : (
             /* SECTION FOR NEW JOINERS / UNASSIGNED STUDENTS */
             <>
+              {/* Batch Not Assigned Notice */}
+              <View style={styles.unassignedNoticeCard}>
+                <View style={styles.unassignedNoticeHeader}>
+                  <View style={styles.unassignedNoticeIconCircle}>
+                    <MaterialIcons name="school" size={24} color={COLORS.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.unassignedNoticeTitle}>No Batch Assigned Yet</Text>
+                    <Text style={styles.unassignedNoticeSubtitle}>
+                      Explore our available courses below, watch video lectures, and book a seat or contact admin for batch assignment.
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.unassignedContactBtn}
+                  onPress={() => {
+                    const studentName = user?.name || 'Student';
+                    const msg = `Hello Speak Hub Admin, I (${studentName}) am registered on Speak Hub. Please assign me to a batch.`;
+                    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
+                      Alert.alert("Speak Hub Academy", "Please contact admin via phone or WhatsApp to get assigned to a batch.");
+                    });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons name="chat" size={16} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.unassignedContactBtnText}>Contact Admin for Batch Assignment</Text>
+                </TouchableOpacity>
+              </View>
+
               {/* Watch Video Lessons Section */}
               <View style={styles.videosSectionHeader}>
                 <View>
@@ -975,7 +1080,7 @@ export default function DashboardScreen() {
                         <Text style={styles.badgeCapsuleText}>{course.modeBadge || 'ONLINE / OFFLINE'}</Text>
                       </View>
                       <Text style={styles.bannerCourseTitle} numberOfLines={2}>
-                        {course.courseName ? course.courseName.toUpperCase() : 'SPEAK HUB COURSE'}
+                        {(course.courseName || course.name || course.title || 'SPEAK HUB COURSE').toUpperCase()}
                       </Text>
                       <Text style={styles.bannerCourseTag}>SPEAK HUB ACADEMY</Text>
                     </View>
@@ -987,9 +1092,9 @@ export default function DashboardScreen() {
                         <Text style={styles.courseLangText}>ENGLISH</Text>
                       </View>
 
-                      <Text style={styles.courseCardName}>{course.courseName}</Text>
+                      <Text style={styles.courseCardName}>{course.courseName || course.name || course.title || 'Course'}</Text>
                       <Text style={styles.courseCardDesc} numberOfLines={2}>
-                        {course.description || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
+                        {course.description || course.desc || 'Interactive Spoken English, Public Speaking & Grammar Masterclass'}
                       </Text>
 
                       {/* Course Video Lesson Pill (if available) */}
@@ -1009,7 +1114,7 @@ export default function DashboardScreen() {
                       <View style={styles.courseCardFooter}>
                         <View>
                           <Text style={styles.coursePrice}>
-                            ₹{course.monthlyFee || '199'} <Text style={styles.coursePriceSub}>/ month</Text>
+                            ₹{course.monthlyFee || course.fee || course.price || '800'} <Text style={styles.coursePriceSub}>/ month</Text>
                           </Text>
                           <Text style={styles.courseDuration}>Duration: {course.duration || '3 Months'}</Text>
                         </View>
@@ -2404,5 +2509,58 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  unassignedNoticeCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  unassignedNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  unassignedNoticeIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primaryLightest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  unassignedNoticeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginBottom: 2,
+  },
+  unassignedNoticeSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMedium,
+    lineHeight: 16,
+  },
+  unassignedContactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  unassignedContactBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   }
 });

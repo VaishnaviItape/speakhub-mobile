@@ -7,10 +7,15 @@ import { doc, getDoc } from 'firebase/firestore';
 
 export interface User {
   id: string;
+  uid?: string;
+  documentId?: string;
   email?: string;
   phone?: string;
+  mobile?: string;
   address?: string;
   name: string;
+  parentName?: string;
+  parentOrHusbandName?: string;
   role: 'student';
   status: string;
   forcePasswordChange?: boolean;
@@ -18,7 +23,10 @@ export interface User {
   demoStartDate?: any;
   demoEndDate?: any;
   courses?: string[];
+  courseId?: string;
   batchIds?: string[];
+  batchId?: string;
+  batchName?: string;
   token?: string;
 }
 
