@@ -290,6 +290,7 @@ export default function DashboardScreen() {
     let unsubUser: (() => void) | null = null;
     let unsubBatches: (() => void) | null = null;
     let unsubCourses: (() => void) | null = null;
+    let unsubVideos: (() => void) | null = null;
 
     showLoader();
     const userId = user.id || (user as any).uid;
@@ -359,10 +360,33 @@ export default function DashboardScreen() {
       }
     );
 
+    unsubVideos = onSnapshot(
+      collection(db, "youtube_videos"),
+      (snap) => {
+        try {
+          const liveVideos: any[] = [];
+          snap.forEach((d) => {
+            const data = d.data();
+            const vStatus = String(data.status || "active").toLowerCase().trim();
+            if (vStatus !== "inactive" && vStatus !== "archived") {
+              liveVideos.push({ id: d.id, ...data });
+            }
+          });
+          setYoutubeVideos(liveVideos);
+        } catch (err) {
+          console.error("Videos live listener error:", err);
+        }
+      },
+      (err) => {
+        console.error("Videos snapshot error:", err);
+      }
+    );
+
     return () => {
       if (unsubUser) unsubUser();
       if (unsubBatches) unsubBatches();
       if (unsubCourses) unsubCourses();
+      if (unsubVideos) unsubVideos();
     };
   }, [user]);
 
@@ -541,20 +565,20 @@ export default function DashboardScreen() {
         });
       } catch (e) {}
 
-      // Fetch YouTube Videos
+      // Fetch YouTube Videos (Live DB only)
       try {
         const vSnap = await getDocs(collection(db, "youtube_videos"));
         const fetchedVideos: any[] = [];
         vSnap.forEach((d) => {
-          fetchedVideos.push({ id: d.id, ...d.data() });
+          const vData = d.data();
+          const vStatus = String(vData.status || "active").toLowerCase().trim();
+          if (vStatus !== "inactive" && vStatus !== "archived") {
+            fetchedVideos.push({ id: d.id, ...vData });
+          }
         });
-        if (fetchedVideos.length > 0) {
-          setYoutubeVideos(fetchedVideos);
-        } else {
-          setYoutubeVideos(DEFAULT_YOUTUBE_VIDEOS);
-        }
+        setYoutubeVideos(fetchedVideos);
       } catch (vErr) {
-        setYoutubeVideos(DEFAULT_YOUTUBE_VIDEOS);
+        setYoutubeVideos([]);
       }
 
       fetchedNotifications.sort(
