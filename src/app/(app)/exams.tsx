@@ -74,7 +74,7 @@ export default function ExamsScreen() {
       id: "mock-test-1",
       isMockTest: true,
       title: "English Mock Test",
-      instructor: "Teacher Hariom",
+      instructor: "Teacher ",
       batchBadge: "B31",
       batchBadgeColor: "#FFEDD5",
       batchBadgeTextColor: "#C2410C",
@@ -243,7 +243,7 @@ export default function ExamsScreen() {
       id: "mock-test-2",
       isMockTest: true,
       title: "English Mock Test",
-      instructor: "Teacher Hariom",
+      instructor: "Teacher ",
       batchBadge: "B32",
       batchBadgeColor: "#E0F2FE",
       batchBadgeTextColor: "#0284C7",
@@ -362,7 +362,7 @@ export default function ExamsScreen() {
       id: "mock-test-3",
       isMockTest: true,
       title: "Foundation Grammar & Vocabulary",
-      instructor: "Teacher Hariom",
+      instructor: "Teacher ",
       batchBadge: "Foundation",
       batchBadgeColor: "#EDE9FE",
       batchBadgeTextColor: "#7C3AED",
@@ -480,7 +480,7 @@ export default function ExamsScreen() {
             if (uSnap.exists()) {
               studentData = uSnap.data();
             }
-          } catch (e) {}
+          } catch (e) { }
         }
 
         const currentStatus = studentData.status || user.status || "active";
@@ -701,8 +701,8 @@ export default function ExamsScreen() {
       const sTime = exam.startDate.toDate
         ? exam.startDate.toDate().getTime()
         : exam.startDate.seconds
-        ? exam.startDate.seconds * 1000
-        : new Date(exam.startDate).getTime();
+          ? exam.startDate.seconds * 1000
+          : new Date(exam.startDate).getTime();
       if (sTime > Date.now()) {
         const dStr = new Date(sTime).toLocaleString("en-IN", {
           dateStyle: "medium",
@@ -719,8 +719,8 @@ export default function ExamsScreen() {
       const eTime = exam.endDate.toDate
         ? exam.endDate.toDate().getTime()
         : exam.endDate.seconds
-        ? exam.endDate.seconds * 1000
-        : new Date(exam.endDate).getTime();
+          ? exam.endDate.seconds * 1000
+          : new Date(exam.endDate).getTime();
       if (eTime < Date.now()) {
         Alert.alert(
           "Exam Window Closed",
@@ -867,12 +867,12 @@ export default function ExamsScreen() {
       (pct >= 90
         ? "A+"
         : pct >= 80
-        ? "A"
-        : pct >= 60
-        ? "B"
-        : pct >= 40
-        ? "C"
-        : "Pass");
+          ? "A"
+          : pct >= 60
+            ? "B"
+            : pct >= 40
+              ? "C"
+              : "Pass");
     const rank = scoreData?.rank ? `#${scoreData.rank}` : "#1";
 
     let celebrationMsg =
@@ -1175,10 +1175,10 @@ export default function ExamsScreen() {
               {activeTab === "Live"
                 ? "Check upcoming tab for future exams"
                 : activeTab === "Upcoming"
-                ? "No scheduled exams right now. Practice with mock tests below!"
-                : activeTab === "Completed"
-                ? "You haven't completed any exams yet."
-                : "No missed exams recorded."}
+                  ? "No scheduled exams right now. Practice with mock tests below!"
+                  : activeTab === "Completed"
+                    ? "You haven't completed any exams yet."
+                    : "No missed exams recorded."}
             </Text>
           </View>
         )}
@@ -1537,8 +1537,8 @@ export default function ExamsScreen() {
                       pct >= 80
                         ? styles.celebrationGold
                         : pct >= 60
-                        ? styles.celebrationGreen
-                        : styles.celebrationAmber,
+                          ? styles.celebrationGreen
+                          : styles.celebrationAmber,
                     ]}
                   >
                     <Text style={styles.bouquetIcon}>
@@ -1548,8 +1548,8 @@ export default function ExamsScreen() {
                       {pct >= 80
                         ? "Outstanding! Brilliant Work! 🎉"
                         : pct >= 60
-                        ? "Great Job! Well Done! 👏"
-                        : "Good Attempt! Keep Practicing! 💪"}
+                          ? "Great Job! Well Done! 👏"
+                          : "Good Attempt! Keep Practicing! 💪"}
                     </Text>
                   </View>
                 );
