@@ -24,6 +24,7 @@ import {
   getDocs,
   getDoc,
   doc,
+  onSnapshot,
 } from "firebase/firestore";
 import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
@@ -376,9 +377,176 @@ export default function NotesScreen() {
     },
   ];
 
+  // Helper to determine if a note is published (status = published OR scheduled date/time has arrived)
+  const checkIsPublished = (data: any): boolean => {
+    const nStatus = String(data.status || "published")
+      .toLowerCase()
+      .trim();
+
+    // 1. If draft or inactive, NEVER show
+    if (nStatus === "draft" || nStatus === "inactive") {
+      return false;
+    }
+
+    // 2. If directly marked published, ALWAYS show
+    if (nStatus === "published") {
+      return true;
+    }
+
+    // 3. If scheduled, check if the scheduled date and time has arrived
+    if (nStatus === "scheduled") {
+      const rawPDate = data.publishDate;
+      const pTimeStr = data.publishTime || "";
+      let publishDateTime: Date | null = null;
+
+      if (rawPDate) {
+        if (typeof rawPDate.toDate === "function") {
+          publishDateTime = rawPDate.toDate();
+        } else if (rawPDate instanceof Date) {
+          publishDateTime = new Date(rawPDate.getTime());
+        } else if (typeof rawPDate.seconds === "number") {
+          publishDateTime = new Date(rawPDate.seconds * 1000);
+        } else if (typeof rawPDate === "string") {
+          if (rawPDate.includes("T")) {
+            publishDateTime = new Date(rawPDate);
+          } else if (rawPDate.includes("-")) {
+            const parts = rawPDate.split("-").map(Number);
+            if (parts.length === 3) {
+              const y = parts[0] > 1000 ? parts[0] : parts[2];
+              const m = parts[1];
+              const d = parts[0] > 1000 ? parts[2] : parts[0];
+              publishDateTime = new Date(y, (m || 1) - 1, d || 1);
+            } else {
+              publishDateTime = new Date(rawPDate);
+            }
+          } else {
+            publishDateTime = new Date(rawPDate);
+          }
+        }
+      }
+
+      // If publishTime (HH:mm) is available, apply exact hour/minute
+      if (publishDateTime && !isNaN(publishDateTime.getTime()) && pTimeStr && pTimeStr.includes(":")) {
+        const [hh, mm] = pTimeStr.split(":").map(Number);
+        publishDateTime.setHours(hh || 0, mm || 0, 0, 0);
+      }
+
+      // If no valid schedule date found, default to visible
+      if (!publishDateTime || isNaN(publishDateTime.getTime())) {
+        return true;
+      }
+
+      // Check if scheduled time has arrived or passed
+      return Date.now() >= publishDateTime.getTime();
+    }
+
+    return false;
+  };
+
   useEffect(() => {
-    fetchNotes();
+    let unsubscribeNotes: (() => void) | null = null;
+    let timer: NodeJS.Timeout | null = null;
+
+    const setupListener = async () => {
+      showLoader();
+      try {
+        let studentData: any = {};
+        if (user?.id || user?.uid) {
+          try {
+            const uSnap = await getDoc(doc(db, "users", user.id || user.uid!));
+            if (uSnap.exists()) studentData = uSnap.data();
+          } catch (e) {}
+        }
+
+        const studentBatchKeys: string[] = ["all"];
+        if (Array.isArray(studentData.batchIds))
+          studentBatchKeys.push(...studentData.batchIds);
+        if (Array.isArray(studentData.batches))
+          studentBatchKeys.push(...studentData.batches);
+        if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
+        if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
+
+        const hasSpecificBatch = studentBatchKeys.length > 1;
+
+        // Fetch batches to map clean batch names
+        let bMap: Record<string, string> = {};
+        try {
+          const bSnap = await getDocs(collection(db, "batches"));
+          bSnap.forEach((bDoc) => {
+            const bData = bDoc.data();
+            if (bData.batchName) bMap[bDoc.id] = bData.batchName;
+          });
+        } catch (e) {}
+
+        let rawDocs: any[] = [];
+
+        const processNotes = () => {
+          const dbNotes: NoteItem[] = [];
+          rawDocs.forEach((docSnap) => {
+            const data = docSnap.data();
+
+            // Check if note is published or reached its scheduled time
+            if (!checkIsPublished(data)) {
+              return;
+            }
+
+            const isAssigned =
+              !data.batchId ||
+              data.batchId === "all" ||
+              !hasSpecificBatch ||
+              studentBatchKeys.includes(data.batchId) ||
+              (data.batchName && studentBatchKeys.includes(data.batchName));
+
+            if (isAssigned) {
+              const resolvedBatchName =
+                data.batchName ||
+                bMap[data.batchId] ||
+                (data.batchId && data.batchId.length < 15 ? data.batchId : "");
+
+              dbNotes.push({
+                id: docSnap.id,
+                ...data,
+                batchName: resolvedBatchName,
+              } as NoteItem);
+            }
+          });
+
+          setAllNotes(dbNotes);
+        };
+
+        // Listen in real-time to notes collection
+        unsubscribeNotes = onSnapshot(
+          collection(db, "notes"),
+          (snap) => {
+            rawDocs = snap.docs;
+            processNotes();
+            hideLoader();
+          },
+          (err) => {
+            console.error("onSnapshot notes error:", err);
+            hideLoader();
+          }
+        );
+
+        // Auto-refresh every 10 seconds to publish scheduled notes when their clock time arrives
+        timer = setInterval(() => {
+          if (rawDocs.length > 0) {
+            processNotes();
+          }
+        }, 10000);
+      } catch (err) {
+        console.error("Setup notes listener error:", err);
+        hideLoader();
+      }
+    };
+
+    setupListener();
     loadDownloadedNotes();
+
+    return () => {
+      if (unsubscribeNotes) unsubscribeNotes();
+      if (timer) clearInterval(timer);
+    };
   }, [user]);
 
   const loadDownloadedNotes = async () => {
@@ -392,67 +560,8 @@ export default function NotesScreen() {
     }
   };
 
-  const fetchNotes = async () => {
-    if (!user) {
-      setAllNotes(CURATED_STUDY_NOTES);
-      hideLoader();
-      return;
-    }
-    showLoader();
-    try {
-      let studentData: any = {};
-      if (user.id || user.uid) {
-        try {
-          const uSnap = await getDoc(doc(db, "users", user.id || user.uid!));
-          if (uSnap.exists()) studentData = uSnap.data();
-        } catch (e) {}
-      }
-
-      const studentBatchKeys: string[] = ["all"];
-      if (Array.isArray(studentData.batchIds))
-        studentBatchKeys.push(...studentData.batchIds);
-      if (Array.isArray(studentData.batches))
-        studentBatchKeys.push(...studentData.batches);
-      if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
-      if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
-
-      const dbNotes: NoteItem[] = [];
-      try {
-        const snap = await getDocs(collection(db, "notes"));
-        snap.forEach((docSnap) => {
-          const data = docSnap.data();
-          const nStatus = String(data.status || "published")
-            .toLowerCase()
-            .trim();
-          if (nStatus === "draft" || nStatus === "inactive") return;
-
-          const isAssigned =
-            !data.batchId ||
-            data.batchId === "all" ||
-            studentBatchKeys.includes(data.batchId) ||
-            (data.batchName && studentBatchKeys.includes(data.batchName));
-
-          if (isAssigned) {
-            dbNotes.push({ id: docSnap.id, ...data } as NoteItem);
-          }
-        });
-      } catch {}
-
-      if (dbNotes.length > 0) {
-        setAllNotes([...dbNotes, ...CURATED_STUDY_NOTES]);
-      } else {
-        setAllNotes(CURATED_STUDY_NOTES);
-      }
-    } catch (e) {
-      setAllNotes(CURATED_STUDY_NOTES);
-    } finally {
-      hideLoader();
-    }
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchNotes();
     await loadDownloadedNotes();
     setRefreshing(false);
   };
@@ -509,6 +618,32 @@ export default function NotesScreen() {
       })
       .join("");
 
+    const resourceAttachmentHTML =
+      item.referenceLink || item.fileUrl
+        ? `
+        <div class="note-section-card">
+          <h3 class="sec-heading">Attached Resource Document</h3>
+          <p class="sec-text">Access the official study worksheet &amp; class materials via the link below:</p>
+          <div style="margin-top: 10px;">
+            <a href="${item.referenceLink || item.fileUrl}" target="_blank" style="display: inline-block; background-color: #E11D48; color: #ffffff; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: bold; text-decoration: none;">Open Study Document / Drive Resource</a>
+          </div>
+        </div>
+      `
+        : "";
+
+    const videoAttachmentHTML =
+      item.youtubeLink || item.externalVideoLink
+        ? `
+        <div class="note-section-card">
+          <h3 class="sec-heading">Video Masterclass Reference</h3>
+          <p class="sec-text">Accompanying video lecture is available online:</p>
+          <div style="margin-top: 10px;">
+            <a href="${item.youtubeLink || item.externalVideoLink}" target="_blank" style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: bold; text-decoration: none;">Watch Video Lecture</a>
+          </div>
+        </div>
+      `
+        : "";
+
     return `
       <div class="note-module-container">
         <div class="title-card">
@@ -525,6 +660,8 @@ export default function NotesScreen() {
           }</div>
         </div>
         ${sectionsHTML}
+        ${resourceAttachmentHTML}
+        ${videoAttachmentHTML}
       </div>
     `;
   };
@@ -542,7 +679,11 @@ export default function NotesScreen() {
         year: "numeric",
       });
 
-      const notesToRender = item ? [item] : CURATED_STUDY_NOTES;
+      const notesToRender = item
+        ? [item]
+        : allNotes.length > 0
+        ? allNotes
+        : CURATED_STUDY_NOTES;
       const documentTitle = item
         ? item.title
         : "Speak Hub Complete Study Notes & Modules Master Book";
@@ -581,66 +722,60 @@ export default function NotesScreen() {
               display: flex;
               flex-direction: column;
             }
-            .brand-title {
+            .brand-name {
               font-size: 24px;
               font-weight: 900;
               color: #E11D48;
               letter-spacing: 0.5px;
             }
-            .brand-subtitle {
-              font-size: 12.5px;
+            .brand-sub {
+              font-size: 11px;
               color: #64748b;
-              margin-top: 3px;
               font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              margin-top: 2px;
             }
-            .meta-box {
+            .doc-info {
               text-align: right;
-              font-size: 11.5px;
-              color: #475569;
-              line-height: 16px;
             }
-            .doc-pill {
+            .doc-title-badge {
               display: inline-block;
               background-color: #FFF1F2;
-              color: #BE123C;
-              border: 1px solid #FECDD3;
-              padding: 3px 8px;
-              border-radius: 6px;
+              color: #E11D48;
               font-weight: 800;
-              font-size: 10px;
+              font-size: 11px;
+              padding: 4px 10px;
+              border-radius: 6px;
               margin-bottom: 4px;
+            }
+            .doc-date {
+              font-size: 11px;
+              color: #64748b;
             }
             
             .note-module-container {
-              margin-bottom: 30px;
+              margin-bottom: 28px;
             }
-            .page-divider {
-              border: 0;
-              height: 2px;
-              background: linear-gradient(to right, #E11D48, #fecdd3, transparent);
-              margin: 40px 0;
-              page-break-after: always;
-            }
-            
             .title-card {
               background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
               border-left: 5px solid #E11D48;
-              border-radius: 12px;
               padding: 16px 20px;
+              border-radius: 10px;
               margin-bottom: 20px;
             }
             .badge-row {
-              display: flex;
-              gap: 8px;
-              margin-bottom: 8px;
+              margin-bottom: 6px;
             }
             .topic-pill {
-              background-color: #BE123C;
+              background-color: #E11D48;
               color: #ffffff;
               font-size: 10px;
               font-weight: 800;
               padding: 3px 8px;
-              border-radius: 6px;
+              border-radius: 4px;
+              letter-spacing: 0.5px;
+              margin-right: 6px;
             }
             .level-pill {
               background-color: #CCFBF1;
@@ -648,46 +783,49 @@ export default function NotesScreen() {
               font-size: 10px;
               font-weight: 800;
               padding: 3px 8px;
-              border-radius: 6px;
+              border-radius: 4px;
             }
             .note-title {
-              font-size: 18px;
-              font-weight: 800;
+              font-size: 20px;
+              font-weight: 900;
               color: #0f172a;
-              margin-bottom: 4px;
+              margin-top: 6px;
+              line-height: 1.3;
             }
             .note-desc {
-              font-size: 12.5px;
+              font-size: 13px;
               color: #475569;
+              margin-top: 6px;
+              line-height: 1.5;
             }
             
             .note-section-card {
               background-color: #f8fafc;
               border: 1px solid #e2e8f0;
-              border-radius: 12px;
-              padding: 16px 18px;
-              margin-bottom: 18px;
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 16px;
               page-break-inside: avoid;
             }
             .sec-heading {
-              font-size: 14.5px;
+              font-size: 15px;
               font-weight: 800;
-              color: #BE123C;
-              margin-bottom: 12px;
-              border-bottom: 1.5px solid #fecdd3;
-              padding-bottom: 4px;
+              color: #0f172a;
+              margin-bottom: 10px;
+              padding-bottom: 6px;
+              border-bottom: 1px solid #e2e8f0;
             }
             .sec-text {
-              font-size: 12.5px;
+              font-size: 13px;
               color: #334155;
-              line-height: 18px;
-              margin-bottom: 10px;
+              line-height: 1.6;
+              white-space: pre-line;
             }
             .sec-list {
-              padding-left: 18px;
-              font-size: 12.5px;
+              margin-left: 20px;
+              font-size: 13px;
               color: #334155;
-              line-height: 20px;
+              line-height: 1.7;
             }
             .sec-list li {
               margin-bottom: 6px;
@@ -695,22 +833,21 @@ export default function NotesScreen() {
             
             .cards-grid {
               display: grid;
-              grid-template-columns: 1fr;
-              gap: 10px;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
               margin-top: 8px;
             }
             .concept-card {
               background-color: #ffffff;
-              border: 1px solid #e2e8f0;
-              border-left: 4px solid #E11D48;
+              border: 1px solid #cbd5e1;
               border-radius: 8px;
-              padding: 10px 14px;
+              padding: 12px;
             }
             .card-head {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              margin-bottom: 4px;
+              margin-bottom: 6px;
             }
             .card-title {
               font-size: 13px;
@@ -718,66 +855,63 @@ export default function NotesScreen() {
               color: #0f172a;
             }
             .card-tag {
-              background-color: #f1f5f9;
-              color: #475569;
-              font-size: 9.5px;
-              font-weight: 700;
+              font-size: 9px;
+              font-weight: 800;
+              background-color: #e0e7ff;
+              color: #4338ca;
               padding: 2px 6px;
               border-radius: 4px;
             }
             .card-sub {
-              font-size: 12px;
+              font-size: 11.5px;
               color: #475569;
-              line-height: 16px;
+              line-height: 1.4;
             }
             
             .dialogue-flow {
               display: flex;
               flex-direction: column;
-              gap: 10px;
+              gap: 8px;
               margin-top: 8px;
             }
             .dialogue-bubble {
-              background-color: #ffffff;
-              border-radius: 10px;
               padding: 10px 14px;
-              border: 1px solid #e2e8f0;
-            }
-            .formal-bubble {
-              border-left: 4px solid #0284c7;
-              background-color: #f0f9ff;
+              border-radius: 8px;
+              font-size: 12.5px;
             }
             .casual-bubble {
-              border-left: 4px solid #059669;
               background-color: #f0fdf4;
+              border-left: 4px solid #16a34a;
+            }
+            .formal-bubble {
+              background-color: #eff6ff;
+              border-left: 4px solid #2563eb;
             }
             .speaker-label {
-              font-size: 11.5px;
               font-weight: 800;
+              font-size: 11px;
               color: #0f172a;
               margin-bottom: 4px;
+              text-transform: uppercase;
             }
             .dialogue-text {
-              font-size: 12px;
               color: #334155;
-              line-height: 18px;
+              line-height: 1.5;
             }
             
-            .footer-info {
-              margin-top: 30px;
-              border-top: 2px solid #e2e8f0;
-              padding-top: 12px;
-              display: flex;
-              justify-content: space-between;
-              font-size: 11px;
-              color: #64748b;
+            .page-divider {
+              border: 0;
+              border-top: 2px dashed #cbd5e1;
+              margin: 32px 0;
             }
-            .watermark {
+            
+            .footer-note {
+              margin-top: 30px;
               text-align: center;
-              font-size: 10.5px;
+              font-size: 11px;
               color: #94a3b8;
-              font-weight: 600;
-              margin-top: 6px;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 12px;
             }
           </style>
         </head>
@@ -786,25 +920,21 @@ export default function NotesScreen() {
             <div class="brand-left">
               <img src="${SPEAK_HUB_LOGO_BASE64}" alt="Speak Hub Logo" class="brand-logo-img" />
               <div class="brand-text-col">
-                <div class="brand-title">SPEAK HUB ACADEMY</div>
-                <div class="brand-subtitle">Spoken English, Fluency &amp; Personality Masterclass</div>
+                <div class="brand-name">SPEAK HUB ACADEMY</div>
+                <div class="brand-sub">Master English Speaking &amp; Fluency</div>
               </div>
             </div>
-            <div class="meta-box">
-              <div class="doc-pill">OFFICIAL STUDY MATERIAL</div>
-              <div><b>Student:</b> ${studentName}</div>
-              <div><b>Date:</b> ${dateStr}</div>
+            <div class="doc-info">
+              <div class="doc-title-badge">STUDY WORKSHEET</div>
+              <div class="doc-date">${dateStr}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Student: <b>${studentName}</b></div>
             </div>
           </div>
-
+          
           ${bodyHTML}
-
-          <div class="footer-info">
-            <div><b>Speak Hub Academy</b> • Contact: +91 9970964742</div>
-            <div>Official Learning Resource • All Rights Reserved</div>
-          </div>
-          <div class="watermark">
-            Speak with Confidence • Lead with Fluency
+          
+          <div class="footer-note">
+            Speak Hub Academy © ${new Date().getFullYear()} • Dedicated to transforming your spoken English fluency &amp; personality.
           </div>
         </body>
         </html>
@@ -813,46 +943,26 @@ export default function NotesScreen() {
       if (Platform.OS === "web") {
         const printWindow = window.open("", "_blank");
         if (printWindow) {
-          printWindow.document.open();
           printWindow.document.write(html);
           printWindow.document.close();
+          printWindow.focus();
           setTimeout(() => {
-            printWindow.focus();
             printWindow.print();
           }, 350);
         } else {
-          const iframe = document.createElement("iframe");
-          iframe.style.position = "fixed";
-          iframe.style.right = "0";
-          iframe.style.bottom = "0";
-          iframe.style.width = "0";
-          iframe.style.height = "0";
-          iframe.style.border = "0";
-          document.body.appendChild(iframe);
-          const doc = iframe.contentWindow?.document;
-          if (doc) {
-            doc.open();
-            doc.write(html);
-            doc.close();
-            setTimeout(() => {
-              iframe.contentWindow?.focus();
-              iframe.contentWindow?.print();
-              setTimeout(() => {
-                document.body.removeChild(iframe);
-              }, 1000);
-            }, 350);
-          }
+          Alert.alert("Notice", "Pop-up blocked. Please allow pop-ups to view PDF.");
         }
       } else {
         const { uri } = await Print.printToFileAsync({ html });
         await Sharing.shareAsync(uri, {
           UTI: ".pdf",
           mimeType: "application/pdf",
-          dialogTitle: `${documentTitle} - Speak Hub`,
+          dialogTitle: `Download ${documentTitle}`,
         });
       }
-    } catch (e: any) {
-      Alert.alert("PDF Error", "Could not generate PDF: " + e.message);
+    } catch (e) {
+      console.error("PDF generation failed:", e);
+      Alert.alert("Export Error", "Failed to generate study document.");
     } finally {
       setIsGeneratingPDF(false);
       setGeneratingNoteId(null);
@@ -861,18 +971,21 @@ export default function NotesScreen() {
 
   const handleDownloadNote = async (item: NoteItem) => {
     try {
-      const isAlready = downloadedNotes.some((n) => n.id === item.id);
-      let updated: NoteItem[];
-      if (isAlready) {
-        updated = downloadedNotes.filter((n) => n.id !== item.id);
-        Alert.alert("Removed", `"${item.title}" removed from saved notes.`);
+      const exists = downloadedNotes.some((d) => d.id === item.id);
+      let updated: NoteItem[] = [];
+      if (exists) {
+        updated = downloadedNotes.filter((d) => d.id !== item.id);
+        Alert.alert("Removed", `"${item.title}" removed from downloaded notes.`);
       } else {
-        const offlineItem = {
+        const saveItem: NoteItem = {
           ...item,
-          downloadedAt: new Date().toISOString(),
+          downloadedAt: new Date().toLocaleDateString(),
         };
-        updated = [offlineItem, ...downloadedNotes];
-        Alert.alert("Saved Offline", `"${item.title}" saved to your device!`);
+        updated = [saveItem, ...downloadedNotes];
+        Alert.alert(
+          "Saved Offline",
+          `"${item.title}" is now available offline in Downloaded tab.`
+        );
       }
       setDownloadedNotes(updated);
       await AsyncStorage.setItem(
@@ -902,7 +1015,8 @@ export default function NotesScreen() {
 
   const renderNoteCard = (item: NoteItem) => {
     const isSavedOffline = downloadedNotes.some((d) => d.id === item.id);
-    const isThisGenerating = isGeneratingPDF && generatingNoteId === item.id;
+    const docUrl = item.fileUrl || item.referenceLink;
+    const videoUrl = item.youtubeLink || item.externalVideoLink;
 
     return (
       <View key={item.id} style={styles.noteCard}>
@@ -939,31 +1053,44 @@ export default function NotesScreen() {
         <Text style={styles.cardTitle}>{item.title}</Text>
 
         {item.description ? (
-          <Text style={styles.cardDescription} numberOfLines={2}>
+          <Text style={styles.cardDescription} numberOfLines={3}>
             {item.description}
           </Text>
         ) : null}
 
+        {/* Footer Actions: Open Document & Read Lesson aligned on ONE line */}
         <View style={styles.cardFooterRow}>
-          <TouchableOpacity
-            style={styles.downloadPdfBtn}
-            onPress={() => generateAndDownloadPDF(item)}
-            activeOpacity={0.85}
-            disabled={isGeneratingPDF}
-          >
-            {isThisGenerating ? (
-              <ActivityIndicator size="small" color="#dc2626" />
-            ) : (
-              <>
-                <MaterialIcons name="picture-as-pdf" size={16} color="#dc2626" />
-                <Text style={styles.downloadPdfBtnText}>Generate PDF</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {docUrl ? (
+            <TouchableOpacity
+              style={styles.openDocumentBtn}
+              onPress={() => WebBrowser.openBrowserAsync(docUrl)}
+              activeOpacity={0.85}
+            >
+              <MaterialIcons name="link" size={15} color="#0284C7" />
+              <Text style={styles.openDocumentBtnText}>Open Document</Text>
+            </TouchableOpacity>
+          ) : videoUrl ? (
+            <TouchableOpacity
+              style={[styles.openDocumentBtn, { backgroundColor: "#FEF2F2", borderColor: "#FECDD3" }]}
+              onPress={() => WebBrowser.openBrowserAsync(videoUrl)}
+              activeOpacity={0.85}
+            >
+              <MaterialIcons name="play-circle-outline" size={15} color="#E11D48" />
+              <Text style={[styles.openDocumentBtnText, { color: "#E11D48" }]}>Video</Text>
+            </TouchableOpacity>
+          ) : (
+            <View />
+          )}
 
           <TouchableOpacity
             style={styles.openMaterialBtn}
-            onPress={() => setSelectedNote(item)}
+            onPress={() => {
+              if (docUrl && (!item.contentSections || item.contentSections.length === 0) && !item.description) {
+                WebBrowser.openBrowserAsync(docUrl);
+              } else {
+                setSelectedNote(item);
+              }
+            }}
             activeOpacity={0.85}
           >
             <Text style={styles.openMaterialBtnText}>Read Lesson</Text>
@@ -1047,27 +1174,6 @@ export default function NotesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Master PDF Download Action Ribbon */}
-      <TouchableOpacity
-        style={styles.masterPdfRibbon}
-        onPress={() => generateAndDownloadPDF()}
-        activeOpacity={0.85}
-        disabled={isGeneratingPDF}
-      >
-        <View style={styles.masterPdfRibbonIcon}>
-          <MaterialIcons name="picture-as-pdf" size={20} color="#ffffff" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.masterPdfRibbonTitle}>
-            Download All Notes (Master PDF)
-          </Text>
-          <Text style={styles.masterPdfRibbonSubtitle}>
-            Complete Speak Hub Academy spoken English curriculum in one PDF
-          </Text>
-        </View>
-        <MaterialIcons name="arrow-forward-ios" size={14} color="#BE123C" />
-      </TouchableOpacity>
-
       {/* Search Input Bar */}
       <View style={styles.searchBarWrapper}>
         <MaterialIcons
@@ -1139,7 +1245,7 @@ export default function NotesScreen() {
               <TouchableOpacity
                 key={topic.id}
                 style={styles.featuredCard}
-                onPress={() => generateAndDownloadPDF(topic)}
+                onPress={() => setSelectedNote(topic)}
                 activeOpacity={0.85}
               >
                 <Text style={styles.featuredCardTitle} numberOfLines={2}>
@@ -1152,16 +1258,8 @@ export default function NotesScreen() {
                 <View style={styles.featuredBadgeRow}>
                   <View style={styles.featuredLevelBadge}>
                     <Text style={styles.featuredLevelBadgeText}>
-                      {topic.level || "B2 Upper-Intermediate"}
+                      {topic.level ? topic.level.split(" ")[0] : "B2"}
                     </Text>
-                  </View>
-                  <View style={styles.featuredPdfAction}>
-                    <MaterialIcons
-                      name="picture-as-pdf"
-                      size={14}
-                      color="#dc2626"
-                    />
-                    <Text style={styles.featuredPdfActionText}>PDF</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -1236,6 +1334,40 @@ export default function NotesScreen() {
                   ))}
                 </View>
               ))}
+
+              {/* External Document / Video Links for Web-uploaded notes */}
+              {selectedNote?.fileUrl || selectedNote?.referenceLink ? (
+                <View style={[styles.readerSectionBox, { backgroundColor: "#F0F9FF", borderColor: "#BAE6FD" }]}>
+                  <Text style={[styles.readerSectionHeading, { color: "#0369A1" }]}>
+                    Attached Study Resource
+                  </Text>
+                  <Text style={styles.readerSectionText}>
+                    Access the complete document / worksheet on Google Drive:
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.openMaterialBtn, { backgroundColor: "#0284C7", alignSelf: "flex-start", marginTop: 8 }]}
+                    onPress={() => WebBrowser.openBrowserAsync(selectedNote.fileUrl || selectedNote.referenceLink!)}
+                  >
+                    <MaterialIcons name="open-in-browser" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={styles.openMaterialBtnText}>Open Document / Drive Link</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {selectedNote?.youtubeLink || selectedNote?.externalVideoLink ? (
+                <View style={[styles.readerSectionBox, { backgroundColor: "#FEF2F2", borderColor: "#FECDD3" }]}>
+                  <Text style={[styles.readerSectionHeading, { color: "#BE123C" }]}>
+                    Video Masterclass
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.openMaterialBtn, { backgroundColor: "#E11D48", alignSelf: "flex-start", marginTop: 8 }]}
+                    onPress={() => WebBrowser.openBrowserAsync(selectedNote.youtubeLink || selectedNote.externalVideoLink!)}
+                  >
+                    <MaterialIcons name="play-circle-fill" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={styles.openMaterialBtnText}>Watch Video Lecture</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </ScrollView>
 
             {/* Modal Bottom PDF Download Button */}
@@ -1554,6 +1686,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
   },
+  attachmentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  attachmentPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0284C7",
+  },
   saveIconBtn: {
     padding: 4,
   },
@@ -1594,12 +1742,28 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#dc2626",
   },
+  openDocumentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  openDocumentBtnText: {
+    color: "#0284C7",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   openMaterialBtn: {
     backgroundColor: COLORS.primary,
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 10,
   },
   openMaterialBtnText: {
