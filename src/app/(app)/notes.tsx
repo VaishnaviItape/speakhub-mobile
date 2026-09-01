@@ -25,6 +25,8 @@ import {
   getDoc,
   doc,
   onSnapshot,
+  query,
+  where,
 } from "firebase/firestore";
 import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
@@ -52,6 +54,7 @@ interface NoteItem {
   fileType?: string;
   youtubeLink?: string;
   externalVideoLink?: string;
+  referenceLink?: string;
   publishDate?: any;
   status?: string;
   createdAt?: any;
@@ -445,28 +448,62 @@ export default function NotesScreen() {
 
   useEffect(() => {
     let unsubscribeNotes: (() => void) | null = null;
-    let timer: NodeJS.Timeout | null = null;
+    let timer: any = null;
 
     const setupListener = async () => {
       showLoader();
       try {
         let studentData: any = {};
-        if (user?.id || user?.uid) {
+        const lookupIds = [user?.id, user?.uid, (user as any)?.documentId].filter(Boolean) as string[];
+        
+        for (const uid of lookupIds) {
           try {
-            const uSnap = await getDoc(doc(db, "users", user.id || user.uid!));
-            if (uSnap.exists()) studentData = uSnap.data();
+            const uSnap = await getDoc(doc(db, "users", uid));
+            if (uSnap.exists()) {
+              studentData = uSnap.data();
+              break;
+            }
           } catch (e) {}
         }
 
+        // Fallback by phone/mobile if needed
+        const uPhone = user?.phone || user?.mobile || studentData?.phone || studentData?.mobile;
+        if ((!studentData || Object.keys(studentData).length === 0) && uPhone) {
+          const cleanPhone = String(uPhone).replace(/[^0-9]/g, "");
+          if (cleanPhone.length >= 10) {
+            const last10 = cleanPhone.slice(-10);
+            try {
+              const qP = query(collection(db, "users"), where("phone", "==", last10));
+              const sP = await getDocs(qP);
+              if (!sP.empty) {
+                studentData = sP.docs[0].data();
+              }
+            } catch (e) {}
+          }
+        }
+
         const studentBatchKeys: string[] = ["all"];
-        if (Array.isArray(studentData.batchIds))
-          studentBatchKeys.push(...studentData.batchIds);
-        if (Array.isArray(studentData.batches))
-          studentBatchKeys.push(...studentData.batches);
+        if (Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+        if (Array.isArray(studentData.batches)) studentBatchKeys.push(...studentData.batches);
         if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
         if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
+        if (Array.isArray(user?.batchIds)) studentBatchKeys.push(...user.batchIds);
+        if (Array.isArray(user?.batches)) studentBatchKeys.push(...(user as any).batches);
+        if (user?.batchId) studentBatchKeys.push(user.batchId);
+        if (user?.batchName) studentBatchKeys.push(user.batchName);
 
-        const hasSpecificBatch = studentBatchKeys.length > 1;
+        const studentCourseKeys: string[] = ["all"];
+        if (Array.isArray(studentData.courseIds)) studentCourseKeys.push(...studentData.courseIds);
+        if (Array.isArray(studentData.courses)) studentCourseKeys.push(...studentData.courses);
+        if (studentData.courseId) studentCourseKeys.push(studentData.courseId);
+        if (studentData.courseName) studentCourseKeys.push(studentData.courseName);
+        if (Array.isArray(user?.courseIds)) studentCourseKeys.push(...user.courseIds);
+        if (Array.isArray(user?.courses)) studentCourseKeys.push(...user.courses);
+        if (user?.courseId) studentCourseKeys.push(user.courseId);
+        if (user?.courseName) studentCourseKeys.push(user.courseName);
+
+        const hasSpecificBatch = studentBatchKeys.filter((k) => k !== "all").length > 0;
+        const hasSpecificCourse = studentCourseKeys.filter((k) => k !== "all").length > 0;
 
         // Fetch batches to map clean batch names
         let bMap: Record<string, string> = {};
@@ -490,18 +527,36 @@ export default function NotesScreen() {
               return;
             }
 
-            const isAssigned =
-              !data.batchId ||
-              data.batchId === "all" ||
+            const bId = data.batchId;
+            const cId = data.courseId;
+
+            const isBatchMatch =
+              !bId ||
+              bId === "all" ||
               !hasSpecificBatch ||
-              studentBatchKeys.includes(data.batchId) ||
-              (data.batchName && studentBatchKeys.includes(data.batchName));
+              studentBatchKeys.includes(bId) ||
+              (data.batchName &&
+                studentBatchKeys.some(
+                  (k) => k && k.toLowerCase() === String(data.batchName).toLowerCase()
+                ));
+
+            const isCourseMatch =
+              !cId ||
+              cId === "all" ||
+              !hasSpecificCourse ||
+              studentCourseKeys.includes(cId) ||
+              (data.courseName &&
+                studentCourseKeys.some(
+                  (k) => k && k.toLowerCase() === String(data.courseName).toLowerCase()
+                ));
+
+            const isAssigned = isBatchMatch && (isCourseMatch || !cId);
 
             if (isAssigned) {
               const resolvedBatchName =
                 data.batchName ||
-                bMap[data.batchId] ||
-                (data.batchId && data.batchId.length < 15 ? data.batchId : "");
+                (bId ? bMap[bId] : "") ||
+                (bId && bId.length < 15 ? bId : "");
 
               dbNotes.push({
                 id: docSnap.id,

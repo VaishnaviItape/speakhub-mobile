@@ -32,8 +32,10 @@ export interface User {
   courseId?: string;
   courseName?: string;
   batchIds?: string[];
+  batches?: string[];
   batchId?: string;
   batchName?: string;
+  photoURL?: string;
   token?: string;
 }
 
@@ -162,6 +164,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const parsedUser = JSON.parse(savedUser) as User;
           setUser(parsedUser);
           if (savedToken) setToken(savedToken);
+
+          // Proactively refresh latest batch, course and profile data in the background
+          const identifier = parsedUser.email || parsedUser.phone || parsedUser.mobile || '';
+          fetchAndSetUserData(parsedUser.documentId || parsedUser.id || parsedUser.uid || '', identifier, savedToken || undefined).catch((e) => {
+            console.warn("Background user refresh error:", e);
+          });
         }
       } catch (err) {
         console.warn("Error restoring session from AsyncStorage:", err);
@@ -191,7 +199,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           unsubUserDoc = onSnapshot(userDocRef, (snap) => {
             if (snap.exists()) {
               const data = snap.data();
-              const formatted = formatUserData(snap.id, data, idToken);
+              const formatted = formatUserData(snap.id, { ...data, uid: firebaseUser.uid }, idToken);
               setUser(formatted);
               saveAuthSession(formatted, idToken);
             } else {
@@ -210,10 +218,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } else {
         // If Firebase says no user and we have no cached user, clear
-        const cachedUser = await AsyncStorage.getItem(AUTH_USER_KEY);
-        if (!cachedUser) {
-          setUser(null);
-          setToken(null);
+        try {
+          const cachedUser = await AsyncStorage.getItem(AUTH_USER_KEY);
+          if (!cachedUser) {
+            setUser(null);
+            setToken(null);
+          } else {
+            const parsed = JSON.parse(cachedUser) as User;
+            setUser(parsed);
+            fetchAndSetUserData(parsed.documentId || parsed.id || parsed.uid || '', parsed.email || parsed.phone || '').catch(() => {});
+          }
+        } catch (e) {
+          // ignore
         }
         setLoading(false);
       }
@@ -380,6 +396,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const userDocRef = doc(db, 'users', userCred.user.uid);
         const userSnap = await getDoc(userDocRef);
         let data = userSnap.exists() ? userSnap.data() : null;
+        let docId = userCred.user.uid;
 
         // If not found by UID, search by phone query
         if (!data) {
@@ -388,12 +405,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const last10 = rawClean.slice(-10);
             const qP = query(collection(db, 'users'), where('phone', '==', last10));
             const sP = await getDocs(qP);
-            if (!sP.empty) data = sP.docs[0].data();
+            if (!sP.empty) {
+              data = sP.docs[0].data();
+              docId = sP.docs[0].id;
+            } else {
+              const qM = query(collection(db, 'users'), where('mobile', '==', last10));
+              const sM = await getDocs(qM);
+              if (!sM.empty) {
+                data = sM.docs[0].data();
+                docId = sM.docs[0].id;
+              }
+            }
           }
         }
 
         if (data) {
-          const loggedUser = formatUserData(userCred.user.uid, data, idToken);
+          const loggedUser = formatUserData(docId, { ...data, uid: userCred.user.uid }, idToken);
           setUser(loggedUser);
           await saveAuthSession(loggedUser, idToken);
           return { success: true, forcePasswordChange: data?.forcePasswordChange };

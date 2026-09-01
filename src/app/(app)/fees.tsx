@@ -163,7 +163,8 @@ Thank you!`;
       await asset.downloadAsync();
       
       let localUri = asset.localUri || asset.uri;
-      const targetFileUri = `${FileSystem.cacheDirectory}feeQR.jpeg`;
+      const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+      const targetFileUri = `${cacheDir}feeQR.jpeg`;
 
       if (localUri) {
         if (localUri.startsWith('http://') || localUri.startsWith('https://')) {

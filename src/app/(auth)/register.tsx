@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  KeyboardAvoidingView, 
+  Platform, 
+  TouchableWithoutFeedback, 
+  Keyboard 
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
@@ -27,6 +38,7 @@ export default function RegisterScreen() {
   const router = useRouter();
 
   const handleRegister = async () => {
+    Keyboard.dismiss();
     setError('');
     
     const nameVal = validateName(name, 'Full Name');
@@ -161,123 +173,127 @@ export default function RegisterScreen() {
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
       
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.card}>
-          <Text style={styles.title}>Student Registration</Text>
-          <Text style={styles.subtitle}>Create your free account to access courses & lessons</Text>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={styles.card}>
+            <Text style={styles.title}>Student Registration</Text>
+            <Text style={styles.subtitle}>Create your free account to access courses & lessons</Text>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <Text style={styles.label}>Full Name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your full name"
-            placeholderTextColor={COLORS.textLight}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <Text style={styles.label}>Parent / Guardian Name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter parent / guardian name"
-            placeholderTextColor={COLORS.textLight}
-            value={parentName}
-            onChangeText={setParentName}
-          />
-
-          <Text style={styles.label}>Mobile Number (Used for Login) *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="10-digit mobile number"
-            placeholderTextColor={COLORS.textLight}
-            keyboardType="phone-pad"
-            maxLength={10}
-            value={phone}
-            onChangeText={setPhone}
-          />
-
-          <Text style={styles.label}>Set Password *</Text>
-          <View style={styles.passwordWrapper}>
+            <Text style={styles.label}>Full Name *</Text>
             <TextInput
-              style={styles.passwordInput}
-              placeholder="Create password (min 6 chars)"
+              style={styles.input}
+              placeholder="Enter your full name"
               placeholderTextColor={COLORS.textLight}
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
+              value={name}
+              onChangeText={setName}
             />
-            <TouchableOpacity 
-              style={styles.eyeButton} 
-              onPress={() => setShowPassword(!showPassword)}
-            >
-              <MaterialIcons 
-                name={showPassword ? "visibility" : "visibility-off"} 
-                size={22} 
-                color={COLORS.textMedium} 
+
+            <Text style={styles.label}>Parent / Guardian Name *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter parent / guardian name"
+              placeholderTextColor={COLORS.textLight}
+              value={parentName}
+              onChangeText={setParentName}
+            />
+
+            <Text style={styles.label}>Mobile Number (Used for Login) *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="10-digit mobile number"
+              placeholderTextColor={COLORS.textLight}
+              keyboardType="phone-pad"
+              maxLength={10}
+              value={phone}
+              onChangeText={setPhone}
+            />
+
+            <Text style={styles.label}>Set Password *</Text>
+            <View style={styles.passwordWrapper}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Create password (min 6 chars)"
+                placeholderTextColor={COLORS.textLight}
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
               />
+              <TouchableOpacity 
+                style={styles.eyeButton} 
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <MaterialIcons 
+                  name={showPassword ? "visibility" : "visibility-off"} 
+                  size={22} 
+                  color={COLORS.textMedium} 
+                />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>Confirm Password *</Text>
+            <View style={styles.passwordWrapper}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Re-enter password"
+                placeholderTextColor={COLORS.textLight}
+                secureTextEntry={!showConfirmPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+              <TouchableOpacity 
+                style={styles.eyeButton} 
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <MaterialIcons 
+                  name={showConfirmPassword ? "visibility" : "visibility-off"} 
+                  size={22} 
+                  color={COLORS.textMedium} 
+                />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>Address (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. City / Address"
+              placeholderTextColor={COLORS.textLight}
+              value={address}
+              onChangeText={setAddress}
+            />
+
+            <Text style={styles.label}>Date of Birth (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={COLORS.textLight}
+              value={dob}
+              onChangeText={setDob}
+            />
+
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={handleRegister}
+            >
+              <Text style={styles.buttonText}>Register Now</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.backButton}>
+              <Text style={styles.backText}>Already registered? Login here</Text>
             </TouchableOpacity>
           </View>
-
-          <Text style={styles.label}>Confirm Password *</Text>
-          <View style={styles.passwordWrapper}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Re-enter password"
-              placeholderTextColor={COLORS.textLight}
-              secureTextEntry={!showConfirmPassword}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            <TouchableOpacity 
-              style={styles.eyeButton} 
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              <MaterialIcons 
-                name={showConfirmPassword ? "visibility" : "visibility-off"} 
-                size={22} 
-                color={COLORS.textMedium} 
-              />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.label}>Address (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. City / Address"
-            placeholderTextColor={COLORS.textLight}
-            value={address}
-            onChangeText={setAddress}
-          />
-
-          <Text style={styles.label}>Date of Birth (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="DD/MM/YYYY"
-            placeholderTextColor={COLORS.textLight}
-            value={dob}
-            onChangeText={setDob}
-          />
-
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={handleRegister}
-          >
-            <Text style={styles.buttonText}>Complete Registration</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.backButton}>
-            <Text style={styles.backText}>Already registered? Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }

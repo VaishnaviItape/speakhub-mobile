@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  Platform, 
+  ScrollView, 
+  TouchableWithoutFeedback, 
+  Keyboard 
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
@@ -18,6 +29,7 @@ export default function ChangePasswordScreen() {
   const router = useRouter();
 
   const handleChangePassword = async () => {
+    Keyboard.dismiss();
     if (newPassword.length < 6) {
       alert("Password must be at least 6 characters.");
       return;
@@ -51,48 +63,56 @@ export default function ChangePasswordScreen() {
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
       
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.card}>
-        <Text style={styles.title}>Update Password</Text>
-        <Text style={styles.subtitle}>For security reasons, you must change your default password before continuing.</Text>
-
-        <View style={styles.passwordWrapper}>
-          <TextInput
-            style={styles.passwordInput}
-            placeholder="New Password (min 6 characters)"
-            placeholderTextColor={COLORS.textLight}
-            secureTextEntry={!showPassword}
-            value={newPassword}
-            onChangeText={setNewPassword}
-          />
-          <TouchableOpacity 
-            style={styles.eyeButton} 
-            onPress={() => setShowPassword(!showPassword)}
-          >
-            <MaterialIcons 
-              name={showPassword ? "visibility" : "visibility-off"} 
-              size={22} 
-              color={COLORS.textMedium} 
-            />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleChangePassword}
-          disabled={newPassword.length < 6}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          <Text style={styles.buttonText}>Update Password</Text>
-        </TouchableOpacity>
-        </View>
-      </ScrollView>
+          <View style={styles.card}>
+            <Text style={styles.title}>Update Password</Text>
+            <Text style={styles.subtitle}>For security reasons, you must change your default password before continuing.</Text>
+
+            <View style={styles.passwordWrapper}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="New Password (min 6 characters)"
+                placeholderTextColor={COLORS.textLight}
+                secureTextEntry={!showPassword}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleChangePassword}
+              />
+              <TouchableOpacity 
+                style={styles.eyeButton} 
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons 
+                  name={showPassword ? "visibility" : "visibility-off"} 
+                  size={22} 
+                  color={COLORS.textMedium} 
+                />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={handleChangePassword}
+              disabled={newPassword.length < 6}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>Update Password</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }

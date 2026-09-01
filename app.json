@@ -30,6 +30,7 @@
         "resizeMode": "contain",
         "backgroundColor": "#E11D48"
       },
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "package": "com.vaishnaviitape.speakhubmobile"
     },

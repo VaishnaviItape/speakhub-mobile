@@ -474,16 +474,35 @@ export default function ExamsScreen() {
       showLoader();
       try {
         let studentData: any = {};
-        if (user.id) {
+        const lookupIds = [user?.id, user?.uid, (user as any)?.documentId].filter(Boolean) as string[];
+
+        for (const uid of lookupIds) {
           try {
-            const uSnap = await getDoc(doc(db, "users", user.id));
+            const uSnap = await getDoc(doc(db, "users", uid));
             if (uSnap.exists()) {
               studentData = uSnap.data();
+              break;
             }
-          } catch (e) { }
+          } catch (e) {}
         }
 
-        const currentStatus = studentData.status || user.status || "active";
+        // Fallback by phone/mobile if needed
+        const uPhone = user?.phone || user?.mobile || studentData?.phone || studentData?.mobile;
+        if ((!studentData || Object.keys(studentData).length === 0) && uPhone) {
+          const cleanPhone = String(uPhone).replace(/[^0-9]/g, "");
+          if (cleanPhone.length >= 10) {
+            const last10 = cleanPhone.slice(-10);
+            try {
+              const qP = query(collection(db, "users"), where("phone", "==", last10));
+              const sP = await getDocs(qP);
+              if (!sP.empty) {
+                studentData = sP.docs[0].data();
+              }
+            } catch (e) {}
+          }
+        }
+
+        const currentStatus = String(studentData.status || user.status || "active").toLowerCase().trim();
         let isDemoActive = false;
         if (studentData.isDemoMode && studentData.demoEndDate) {
           const endDate = studentData.demoEndDate.toDate
@@ -492,7 +511,7 @@ export default function ExamsScreen() {
           if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
         }
 
-        if (currentStatus === "inactive" && !isDemoActive) {
+        if ((currentStatus === "inactive" || currentStatus === "blocked" || currentStatus === "suspended") && !isDemoActive) {
           setIsAccessDenied(true);
           setExams([]);
           setAttempts([]);
@@ -502,32 +521,75 @@ export default function ExamsScreen() {
 
         setIsAccessDenied(false);
 
-        const studentBatchIdOrName =
-          (studentData.batchIds && studentData.batchIds[0]) ||
-          user.batchIds?.[0];
+        const studentBatchKeys: string[] = ["all"];
+        if (Array.isArray(studentData?.batchIds)) studentBatchKeys.push(...studentData.batchIds);
+        if (Array.isArray(studentData?.batches)) studentBatchKeys.push(...studentData.batches);
+        if (studentData?.batchId) studentBatchKeys.push(studentData.batchId);
+        if (studentData?.batchName) studentBatchKeys.push(studentData.batchName);
+        if (Array.isArray(user?.batchIds)) studentBatchKeys.push(...user.batchIds);
+        if (Array.isArray(user?.batches)) studentBatchKeys.push(...(user as any).batches);
+        if (user?.batchId) studentBatchKeys.push(user.batchId);
+        if (user?.batchName) studentBatchKeys.push(user.batchName);
 
-        const targetBatchIdentifiers: string[] = ["all"];
-        if (studentBatchIdOrName) {
-          targetBatchIdentifiers.push(studentBatchIdOrName);
-        }
+        const studentCourseKeys: string[] = ["all"];
+        if (Array.isArray(studentData?.courseIds)) studentCourseKeys.push(...studentData.courseIds);
+        if (Array.isArray(studentData?.courses)) studentCourseKeys.push(...studentData.courses);
+        if (studentData?.courseId) studentCourseKeys.push(studentData.courseId);
+        if (studentData?.courseName) studentCourseKeys.push(studentData.courseName);
+        if (Array.isArray(user?.courseIds)) studentCourseKeys.push(...user.courseIds);
+        if (Array.isArray(user?.courses)) studentCourseKeys.push(...user.courses);
+        if (user?.courseId) studentCourseKeys.push(user.courseId);
+        if (user?.courseName) studentCourseKeys.push(user.courseName);
 
-        const examsQ = query(
-          collection(db, "exams"),
-          where("status", "in", ["published", "completed", "scheduled"])
-        );
+        const hasSpecificBatch = studentBatchKeys.filter((k) => k !== "all").length > 0;
+        const hasSpecificCourse = studentCourseKeys.filter((k) => k !== "all").length > 0;
+
+        const examsQ = query(collection(db, "exams"));
 
         unsubExams = onSnapshot(examsQ, (snapshot) => {
           const examsList: any[] = [];
           snapshot.forEach((d) => {
             const data = d.data();
-            const qCount = Number(data.numberOfQuestions) || 0;
-            const bId = data.batchId || "all";
-            const isMatch =
-              targetBatchIdentifiers.includes(bId) ||
+            const exStatus = String(data.status || "published").toLowerCase().trim();
+            if (exStatus === "draft" || exStatus === "inactive" || exStatus === "archived") {
+              return;
+            }
+
+            const bId = data.batchId;
+            const cId = data.courseId;
+
+            const isBatchMatch =
+              !bId ||
               bId === "all" ||
-              !studentBatchIdOrName;
-            if (qCount > 0 && isMatch) {
-              examsList.push({ id: d.id, ...data });
+              !hasSpecificBatch ||
+              studentBatchKeys.includes(bId) ||
+              (data.batchName &&
+                studentBatchKeys.some(
+                  (k) => k && k.toLowerCase() === String(data.batchName).toLowerCase()
+                ));
+
+            const isCourseMatch =
+              !cId ||
+              cId === "all" ||
+              !hasSpecificCourse ||
+              studentCourseKeys.includes(cId) ||
+              (data.courseName &&
+                studentCourseKeys.some(
+                  (k) => k && k.toLowerCase() === String(data.courseName).toLowerCase()
+                ));
+
+            const isMatch = isBatchMatch && (isCourseMatch || !cId);
+
+            if (isMatch) {
+              const qCount =
+                Number(data.numberOfQuestions) ||
+                (Array.isArray(data.questions) ? data.questions.length : 0);
+
+              examsList.push({
+                id: d.id,
+                ...data,
+                numberOfQuestions: qCount || data.numberOfQuestions || 0,
+              });
             }
           });
           setExams(examsList);
