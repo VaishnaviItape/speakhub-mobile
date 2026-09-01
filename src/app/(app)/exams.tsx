@@ -533,19 +533,27 @@ export default function ExamsScreen() {
           setExams(examsList);
         });
 
-        if (user.id) {
-          const attemptsQ = query(
-            collection(db, "exam_attempts"),
-            where("studentId", "==", user.id)
-          );
-          unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
-            const attemptsList: any[] = [];
-            snapshot.forEach((d) =>
-              attemptsList.push({ id: d.id, ...d.data() })
-            );
-            setAttempts(attemptsList);
+        const attemptsQ = query(collection(db, "exam_attempts"));
+        unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
+          const attemptsList: any[] = [];
+          const userPhone = user?.phone || user?.mobile || studentData?.phone || studentData?.mobile || "";
+          const cleanPhone = String(userPhone).replace(/[^0-9]/g, "").slice(-10);
+
+          snapshot.forEach((d) => {
+            const aData = d.data();
+            const isStudentMatch =
+              aData.studentId === user.id ||
+              aData.studentId === user.uid ||
+              aData.studentId === (user as any)?.documentId ||
+              (cleanPhone && aData.studentPhone && String(aData.studentPhone).includes(cleanPhone)) ||
+              (aData.studentName && user?.name && aData.studentName.toLowerCase() === user.name.toLowerCase());
+
+            if (isStudentMatch) {
+              attemptsList.push({ id: d.id, ...aData });
+            }
           });
-        }
+          setAttempts(attemptsList);
+        });
       } catch (error) {
         console.error("Error setting up exam listeners:", error);
       } finally {
@@ -648,18 +656,22 @@ export default function ExamsScreen() {
                   : `Exceeded max time away (${maxDuration}s)`;
               setAutoSubmitReason(reason);
 
-              if (currentExam?.violationAction === "AutoSubmit") {
-                Alert.alert(
-                  "Exam Terminated",
-                  `Anti-cheat violation: ${reason}. Your exam is being submitted immediately.`
-                );
-                forceSubmitExam(newSwitchCount, newExitDuration, true, reason);
-              } else {
-                Alert.alert(
-                  "Warning",
-                  "Suspicious activity detected. Your test session has recorded an exit."
-                );
-              }
+              Alert.alert(
+                "Anti-Cheat Violation",
+                `${reason}. Your exam will be submitted automatically.`,
+                [
+                  {
+                    text: "OK",
+                    onPress: () =>
+                      forceSubmitExam(
+                        newSwitchCount,
+                        newExitDuration,
+                        true,
+                        reason
+                      ),
+                  },
+                ]
+              );
             } else {
               Alert.alert(
                 "Warning: Stay on Screen!",
@@ -674,27 +686,26 @@ export default function ExamsScreen() {
     });
 
     return () => subscription.remove();
-  }, [appState, examStarted, appSwitchCount, totalExitDuration, currentExam]);
+  }, [examStarted, appState, appSwitchCount, totalExitDuration, currentExam]);
 
-  // Live Timer
+  // Exam Timer
   useEffect(() => {
-    if (examStarted && appState === "active" && timeLeft > 0) {
+    if (examStarted && timeLeft > 0) {
       timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            submitExam();
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
     }
-
-    if (timeLeft === 0 && examStarted) {
-      Alert.alert("Time's Up!", "Your test has automatically been submitted.");
-      submitExam();
-    }
-
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [examStarted, appState, timeLeft]);
+  }, [examStarted, timeLeft]);
 
   const requestStartExam = async (exam: any) => {
     if (exam.startDate && !exam.isMockTest) {
@@ -818,10 +829,12 @@ export default function ExamsScreen() {
     const attemptData = {
       examId: currentExam.id,
       examTitle: currentExam.title,
-      studentId: user?.id || "guest",
+      studentId: user?.id || user?.uid || (user as any)?.documentId || "student",
       studentName: user?.name || "Student",
+      studentPhone: user?.phone || user?.mobile || "",
       answers,
       score,
+      totalMarks,
       percentage,
       correctCount,
       wrongCount,
@@ -835,12 +848,11 @@ export default function ExamsScreen() {
     };
 
     try {
-      if (user?.id) {
-        await addDoc(collection(db, "exam_attempts"), attemptData);
-        setAttempts((prev) => [...prev, attemptData]);
-      }
+      const docRef = await addDoc(collection(db, "exam_attempts"), attemptData);
+      setAttempts((prev) => [...prev, { id: docRef.id, ...attemptData }]);
     } catch (e: any) {
       console.warn("Could not save attempt to DB:", e);
+      setAttempts((prev) => [...prev, attemptData]);
     }
 
     setScoreData(attemptData);
@@ -927,20 +939,50 @@ export default function ExamsScreen() {
     const completed: any[] = [];
     const missed: any[] = [];
 
+    // 1. Process all Real Exams from Firestore
     exams.forEach((ex) => {
-      const start = new Date(ex.startDate).getTime();
-      const end = new Date(ex.endDate).getTime();
+      const start = ex.startDate ? new Date(ex.startDate).getTime() : 0;
+      const end = ex.endDate ? new Date(ex.endDate).getTime() : 0;
       const attempt = attempts.find((a) => a.examId === ex.id);
 
       if (attempt) {
-        completed.push({ ...ex, attempt });
-      } else if (now < start) {
+        // Handled in completed below
+      } else if (start && now < start) {
         upcoming.push(ex);
-      } else if (now > end) {
+      } else if (end && now > end) {
         missed.push(ex);
       } else {
         live.push(ex);
       }
+    });
+
+    // 2. Also add suggested mock tests to Live if not attempted yet
+    SUGGESTED_MOCK_TESTS.forEach((mock) => {
+      const attempt = attempts.find((a) => a.examId === mock.id);
+      if (!attempt) {
+        live.push(mock);
+      }
+    });
+
+    // 3. Process all Completed attempts (both real exams and mock tests)
+    attempts.forEach((att) => {
+      const matchingExam =
+        exams.find((e) => e.id === att.examId) ||
+        SUGGESTED_MOCK_TESTS.find((m) => m.id === att.examId);
+
+      completed.push({
+        id: att.examId || att.id,
+        title: att.examTitle || matchingExam?.title || "Exam Assessment",
+        duration: matchingExam?.duration || 15,
+        numberOfQuestions:
+          matchingExam?.numberOfQuestions ||
+          (Number(att.correctCount || 0) + Number(att.wrongCount || 0) + Number(att.unansweredCount || 0)) ||
+          15,
+        totalMarks: att.totalMarks || matchingExam?.totalMarks || 50,
+        endDate: att.submittedAt,
+        attempt: att,
+        isCompleted: true,
+      });
     });
 
     return {

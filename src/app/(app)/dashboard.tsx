@@ -56,6 +56,10 @@ export default function DashboardScreen() {
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [feeDueDate, setFeeDueDate] = useState<string>("");
 
+  // Live Push Banner State (looks like phone push notification)
+  const [bannerNotification, setBannerNotification] = useState<any | null>(null);
+  const [isBannerVisible, setIsBannerVisible] = useState(false);
+
   // Available Courses & Booking State
   const [availableCourses, setAvailableCourses] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -131,6 +135,86 @@ export default function DashboardScreen() {
     };
     loadReadNotifications();
   }, []);
+
+  // Real-time live Firestore listener for notifications & in-app push banners
+  useEffect(() => {
+    const qNotifs = query(collection(db, "notifications"));
+    const unsubscribe = onSnapshot(
+      qNotifs,
+      (snapshot) => {
+        const list: any[] = [];
+        const studentBatchKeys: string[] = [];
+        if (Array.isArray(user?.batchIds)) studentBatchKeys.push(...user.batchIds);
+        if (Array.isArray(user?.batches)) studentBatchKeys.push(...user.batches);
+        if (user?.batchId) studentBatchKeys.push(user.batchId);
+        if (user?.batchName) studentBatchKeys.push(user.batchName);
+        if (activeBatch?.id) studentBatchKeys.push(activeBatch.id);
+        if (activeBatch?.batchName) studentBatchKeys.push(activeBatch.batchName);
+
+        snapshot.forEach((d) => {
+          const nData = d.data();
+          const bId = nData.batchId;
+          const isMatch =
+            !bId ||
+            bId === "all" ||
+            studentBatchKeys.length === 0 ||
+            studentBatchKeys.some(
+              (k) =>
+                k === bId ||
+                (k && nData.batchName && k.toLowerCase() === nData.batchName.toLowerCase())
+            );
+
+          if (isMatch) {
+            const nDate = nData.createdAt?.toDate
+              ? nData.createdAt.toDate()
+              : nData.createdAt
+              ? new Date(nData.createdAt)
+              : new Date();
+
+            list.push({
+              id: d.id,
+              title: nData.title || "Academy Update",
+              description: nData.message || nData.description || "Check out new updates.",
+              type: nData.type || "general",
+              categoryTag: (nData.type || "UPDATE").toUpperCase(),
+              date: nDate,
+              route: nData.route || undefined,
+              actionLabel: nData.actionLabel || "View Details",
+            });
+          }
+        });
+
+        list.sort((a, b) => b.date.getTime() - a.date.getTime());
+        setNotifications(list);
+
+        // If there's an unread notification created in the last 24 hours, show the top push banner
+        if (list.length > 0) {
+          const latest = list[0];
+          const isUnread = !readNotifIds.includes(latest.id);
+          const ageSecs = (Date.now() - latest.date.getTime()) / 1000;
+          if (isUnread && ageSecs < 86400) {
+            setBannerNotification(latest);
+            setIsBannerVisible(true);
+          }
+        }
+      },
+      (err) => {
+        console.warn("Notifications onSnapshot error:", err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, activeBatch, readNotifIds]);
+
+  // Auto-hide floating banner after 7 seconds
+  useEffect(() => {
+    if (isBannerVisible) {
+      const timer = setTimeout(() => {
+        setIsBannerVisible(false);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [isBannerVisible]);
 
   const handleMarkAsRead = async (notifId: string, route?: string) => {
     try {
@@ -623,8 +707,56 @@ export default function DashboardScreen() {
     activeBatch?.timeSlot ||
     "April-2026 • Evening (08:00 - 09:30 PM)";
 
+  const unreadCount = notifications.filter(
+    (n) => !readNotifIds.includes(n.id)
+  ).length;
+
   return (
     <View style={[styles.mainScreen, { paddingTop: insets.top }]}>
+      {/* In-App Floating Push Notification Banner (styled like OS push notification) */}
+      {isBannerVisible && bannerNotification && (
+        <TouchableOpacity
+          style={[styles.pushBannerContainer, { top: insets.top + 8 }]}
+          activeOpacity={0.92}
+          onPress={() => {
+            setIsBannerVisible(false);
+            handleMarkAsRead(bannerNotification.id, bannerNotification.route);
+          }}
+        >
+          <View style={styles.pushBannerContent}>
+            {/* App Avatar & Badge */}
+            <View style={styles.pushBannerIconBox}>
+              <Image
+                source={require("../../../assets/images/favicon.png")}
+                style={styles.pushBannerAppIcon}
+              />
+              <View style={styles.pushBannerTypeDot} />
+            </View>
+
+            <View style={styles.pushBannerTextBox}>
+              <View style={styles.pushBannerHeaderRow}>
+                <Text style={styles.pushBannerAppName}>Speak Hub</Text>
+                <Text style={styles.pushBannerTime}>• now</Text>
+              </View>
+              <Text style={styles.pushBannerTitle} numberOfLines={1}>
+                {bannerNotification.title}
+              </Text>
+              <Text style={styles.pushBannerDesc} numberOfLines={2}>
+                {bannerNotification.description}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.pushBannerCloseBtn}
+              onPress={() => setIsBannerVisible(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="close" size={18} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Top Header: Avatar, Greeting, Hamburger, Notification Bell */}
       <View style={styles.topHeader}>
         <View style={styles.headerLeft}>
@@ -667,7 +799,13 @@ export default function DashboardScreen() {
               size={26}
               color="#0f172a"
             />
-            {unreadCount > 0 && <View style={styles.notifBadgeDot} />}
+            {unreadCount > 0 && (
+              <View style={styles.notifBadgePill}>
+                <Text style={styles.notifBadgePillText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -1992,5 +2130,110 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#64748b",
     marginTop: 4,
+  },
+
+  /* Floating In-App Push Banner */
+  pushBannerContainer: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    zIndex: 9999,
+    elevation: 10,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+  },
+  pushBannerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0f172a",
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#1e293b",
+    gap: 12,
+  },
+  pushBannerIconBox: {
+    position: "relative",
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pushBannerAppIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+  },
+  pushBannerTypeDot: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#10b981",
+    borderWidth: 2,
+    borderColor: "#0f172a",
+  },
+  pushBannerTextBox: {
+    flex: 1,
+  },
+  pushBannerHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 2,
+  },
+  pushBannerAppName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#f8fafc",
+    letterSpacing: 0.2,
+  },
+  pushBannerTime: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "500",
+  },
+  pushBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 1,
+  },
+  pushBannerDesc: {
+    fontSize: 12,
+    color: "#cbd5e1",
+    lineHeight: 16,
+  },
+  pushBannerCloseBtn: {
+    padding: 6,
+    alignSelf: "flex-start",
+  },
+
+  /* Bell Badge Pill */
+  notifBadgePill: {
+    position: "absolute",
+    top: -2,
+    right: -4,
+    backgroundColor: "#e11d48",
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+  },
+  notifBadgePillText: {
+    color: "#ffffff",
+    fontSize: 9.5,
+    fontWeight: "900",
   },
 });
