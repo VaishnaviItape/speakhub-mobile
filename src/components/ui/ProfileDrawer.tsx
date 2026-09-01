@@ -74,38 +74,72 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
   }, [isOpen]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && isOpen) {
       fetchProfile();
     }
-  }, [user]);
+  }, [user, isOpen]);
 
   const fetchProfile = async () => {
     try {
       const uSnap = await getDoc(doc(db, 'users', user!.id));
+      let uData: any = {};
       if (uSnap.exists()) {
-        const uData = uSnap.data();
+        uData = uSnap.data();
         setProfileData(uData);
+      }
 
-        const bIds = uData.batchIds || [];
-        if (bIds.length > 0) {
-          const bTarget = bIds[0];
-          try {
-            const bSnap = await getDoc(doc(db, 'batches', bTarget));
-            if (bSnap.exists()) {
-              setBatchName(bSnap.data().batchName || bTarget);
-            } else {
-              const bq = query(collection(db, 'batches'), where('batchName', '==', bTarget));
-              const bSnap2 = await getDocs(bq);
-              if (!bSnap2.empty) {
-                setBatchName(bSnap2.docs[0].data().batchName || bTarget);
-              } else {
-                setBatchName(bTarget);
-              }
-            }
-          } catch (e) {
-            setBatchName(bTarget);
+      // Collect all possible batch identifiers
+      const candidates: string[] = [];
+      if (Array.isArray(uData.batchIds)) candidates.push(...uData.batchIds);
+      if (Array.isArray(uData.batches)) candidates.push(...uData.batches);
+      if (uData.batchId) candidates.push(uData.batchId);
+      if (uData.batchName) candidates.push(uData.batchName);
+      if (uData.batch) candidates.push(uData.batch);
+      if (uData.assignedBatch) candidates.push(uData.assignedBatch);
+      if (Array.isArray(user?.batchIds)) candidates.push(...user!.batchIds);
+      if (user?.batchId) candidates.push(user.batchId);
+      if (user?.batchName) candidates.push(user.batchName);
+
+      // Fallback: check students collection
+      if (candidates.length === 0) {
+        try {
+          const sq = query(collection(db, 'students'), where('userId', '==', user!.id));
+          const sSnap = await getDocs(sq);
+          if (!sSnap.empty) {
+            const sData = sSnap.docs[0].data();
+            if (Array.isArray(sData.batchIds)) candidates.push(...sData.batchIds);
+            if (sData.batchId) candidates.push(sData.batchId);
+            if (sData.batchName) candidates.push(sData.batchName);
           }
+        } catch (sErr) {
+          console.warn("Fallback student query skipped:", sErr);
         }
+      }
+
+      const validCandidates = candidates.filter(c => typeof c === 'string' && c.trim().length > 0 && c !== 'all' && c !== 'Unassigned');
+
+      if (validCandidates.length > 0) {
+        const bTarget = validCandidates[0].trim();
+        try {
+          // 1. Try fetching by document ID
+          const bSnap = await getDoc(doc(db, 'batches', bTarget));
+          if (bSnap.exists()) {
+            setBatchName(bSnap.data().batchName || bTarget);
+          } else {
+            // 2. Try fetching by batchName
+            const bq = query(collection(db, 'batches'), where('batchName', '==', bTarget));
+            const bSnap2 = await getDocs(bq);
+            if (!bSnap2.empty) {
+              setBatchName(bSnap2.docs[0].data().batchName || bTarget);
+            } else {
+              setBatchName(bTarget);
+            }
+          }
+        } catch (e) {
+          setBatchName(bTarget);
+        }
+      } else {
+        setBatchName('Unassigned');
       }
     } catch (e) {
       console.error("Error fetching profile:", e);
@@ -213,7 +247,16 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
 
               <View style={styles.menuDivider} />
 
-              <TouchableOpacity style={styles.logoutRow} onPress={() => { onClose(); logout(); }}>
+              <TouchableOpacity 
+                style={styles.logoutRow} 
+                onPress={async () => { 
+                  onClose(); 
+                  try {
+                    await logout();
+                  } catch (e) {}
+                  router.replace('/(auth)/login');
+                }}
+              >
                 <MaterialIcons name="logout" size={22} color="#be123c" />
                 <Text style={styles.logoutRowText}>Logout</Text>
               </TouchableOpacity>

@@ -7,13 +7,28 @@
     "icon": "./assets/images/favicon.png",
     "scheme": "speakhubmobile",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E11D48"
+    },
     "ios": {
-      "icon": "./assets/images/favicon.png"
+      "icon": "./assets/images/favicon.png",
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#E11D48"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/favicon.png"
+      },
+      "splash": {
+        "image": "./assets/images/splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#E11D48"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.vaishnaviitape.speakhubmobile"
@@ -27,9 +42,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF",
+          "backgroundColor": "#E11D48",
           "image": "./assets/images/splash.png",
-          "imageWidth": 220
+          "imageWidth": 220,
+          "dark": {
+            "backgroundColor": "#E11D48"
+          }
         }
       ],
       "expo-sharing",

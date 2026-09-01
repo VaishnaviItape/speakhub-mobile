@@ -79,48 +79,6 @@ export default function DashboardScreen() {
   const YOUTUBE_DEMO_URL =
     "https://youtube.com/@speakhubacademy?si=ZSnvnh5MzSqXPrpM";
 
-  const DEFAULT_COURSES = [
-    {
-      id: "default-course-1",
-      courseName: "Fluency Accelerator",
-      instructor: "Teacher Hariom",
-      level: "B2 Upper-Intermediate",
-      description:
-        "Daily speaking practice, live conversation sessions, grammar mastery, and accent improvement.",
-      monthlyFee: 800,
-      duration: "3 Months",
-      modeBadge: "ONLINE / OFFLINE",
-      demoVideoUrl: "https://youtu.be/Uhg80b2TJVs?si=38ohmD_0kXfjgDhl",
-      status: "active",
-    },
-    {
-      id: "default-course-2",
-      courseName: "Spoken English Masterclass",
-      instructor: "Teacher Hariom",
-      level: "B1 Intermediate",
-      description:
-        "Overcome stage fear, master presentations, body language, interview skills, and speech delivery.",
-      monthlyFee: 1200,
-      duration: "2 Months",
-      modeBadge: "ONLINE / OFFLINE",
-      demoVideoUrl: "https://youtu.be/Rax0DFWQ5qc?si=a6MQlguJSlIIbWol",
-      status: "active",
-    },
-    {
-      id: "default-course-3",
-      courseName: "Kids & Teens English Foundation",
-      instructor: "Teacher Hariom",
-      level: "A2 Elementary",
-      description:
-        "Interactive storytelling, vocabulary games, phonics, reading practice, and school grammar support.",
-      monthlyFee: 700,
-      duration: "6 Months",
-      modeBadge: "ONLINE",
-      demoVideoUrl: "https://youtu.be/nFfnnaJFV_U?si=ckhBwk4sW1mYbZQw",
-      status: "active",
-    },
-  ];
-
   const DEFAULT_YOUTUBE_VIDEOS = [
     {
       id: "yt-1",
@@ -285,29 +243,28 @@ export default function DashboardScreen() {
           const liveCourses: any[] = [];
           snap.forEach((d) => {
             const data = d.data();
-            if (data.status !== "inactive") {
+            const cStatus = String(data.status || "active").toLowerCase().trim();
+            if (cStatus !== "inactive" && cStatus !== "archived") {
               liveCourses.push({
                 id: d.id,
                 courseName:
                   data.courseName || data.name || data.title || "Course",
-                instructor: data.instructor || data.teacher || "Teacher Hariom",
-                level: data.level || "B2 Upper-Intermediate",
+                instructor: data.instructor || data.teacher || "",
+                level: data.level || "",
                 description:
                   data.description ||
                   data.desc ||
-                  "Comprehensive English fluency course",
+                  "",
                 monthlyFee:
-                  data.monthlyFee || data.fee || data.price || 800,
-                duration: data.duration || "3 Months",
-                modeBadge: data.modeBadge || "ONLINE / OFFLINE",
+                  data.monthlyFee ?? data.fee ?? data.price ?? 0,
+                duration: data.duration || "",
+                modeBadge: data.modeBadge || "ONLINE",
                 demoVideoUrl: data.demoVideoUrl || data.videoUrl || "",
                 ...data,
               });
             }
           });
-          if (liveCourses.length > 0) {
-            setAvailableCourses(liveCourses);
-          }
+          setAvailableCourses(liveCourses);
         } catch (err) {
           console.error("Courses live listener error:", err);
         }
@@ -399,7 +356,7 @@ export default function DashboardScreen() {
       const isStudentAllowed = isActiveStatus || isDemoActive;
       setIsInactiveAccount(!isStudentAllowed);
 
-      // Fetch Courses
+      // Fetch Courses from Firestore
       try {
         const cSnap = await getDocs(query(collection(db, "courses")));
         const fetchedCourses: any[] = [];
@@ -411,28 +368,24 @@ export default function DashboardScreen() {
               id: d.id,
               courseName:
                 data.courseName || data.name || data.title || "Course",
-              instructor: data.instructor || data.teacher || "Teacher Hariom",
-              level: data.level || "B2 Upper-Intermediate",
+              instructor: data.instructor || data.teacher || "",
+              level: data.level || "",
               description:
                 data.description ||
                 data.desc ||
-                "Comprehensive English fluency course",
+                "",
               monthlyFee:
-                data.monthlyFee || data.fee || data.price || 800,
-              duration: data.duration || "3 Months",
-              modeBadge: data.modeBadge || "ONLINE / OFFLINE",
+                data.monthlyFee ?? data.fee ?? data.price ?? 0,
+              duration: data.duration || "",
+              modeBadge: data.modeBadge || "ONLINE",
               demoVideoUrl: data.demoVideoUrl || data.videoUrl || "",
               ...data,
             });
           }
         });
-        if (fetchedCourses.length > 0) {
-          setAvailableCourses(fetchedCourses);
-        } else {
-          setAvailableCourses(DEFAULT_COURSES);
-        }
+        setAvailableCourses(fetchedCourses);
       } catch (e) {
-        setAvailableCourses(DEFAULT_COURSES);
+        console.error("Error fetching courses:", e);
       }
 
       // Collect student batch identifiers
@@ -652,15 +605,14 @@ export default function DashboardScreen() {
     }
   };
 
-  const coursesListToDisplay =
-    availableCourses && availableCourses.length > 0
-      ? availableCourses
-      : DEFAULT_COURSES;
+  const coursesListToDisplay = availableCourses || [];
   const filteredCourses = coursesListToDisplay.filter((c) => {
     const name = String(c.courseName || c.name || c.title || "").toLowerCase();
     const desc = String(c.description || c.desc || "").toLowerCase();
+    const dur = String(c.duration || "").toLowerCase();
+    const mode = String(c.modeBadge || "").toLowerCase();
     const q = (searchQuery || "").toLowerCase().trim();
-    return !q || name.includes(q) || desc.includes(q);
+    return !q || name.includes(q) || desc.includes(q) || dur.includes(q) || mode.includes(q);
   });
 
   const studentFirstName = user?.name?.split(" ")[0] || "Student";
@@ -995,48 +947,81 @@ export default function DashboardScreen() {
           {/* Suggested Courses for You Section */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Suggested Courses for You</Text>
+            {filteredCourses.length > 0 && (
+              <View style={styles.courseCountBadge}>
+                <Text style={styles.courseCountBadgeText}>
+                  {filteredCourses.length} {filteredCourses.length === 1 ? "Course" : "Courses"}
+                </Text>
+              </View>
+            )}
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.coursesHorizontalScroll}
-          >
-            {filteredCourses.map((course: any, index: number) => (
-              <TouchableOpacity
-                key={course.id || index}
-                style={styles.suggestedCourseCard}
-                onPress={() => handleOpenBookingModal(course)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.suggestedCourseTitle} numberOfLines={1}>
-                  {course.courseName || course.name || "Fluency Accelerator"}
-                </Text>
+          {filteredCourses.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.coursesHorizontalScroll}
+            >
+              {filteredCourses.map((course: any, index: number) => {
+                const badgeLabel = course.modeBadge || "ONLINE";
+                const durationLabel = course.duration ? `${course.duration}` : null;
+                const subtitle = course.instructor
+                  ? `Instructor: ${course.instructor}`
+                  : course.duration
+                  ? `${course.duration} Program`
+                  : (course.description || "Speak Hub Course");
 
-                <Text style={styles.suggestedCourseInstructor}>
-                  {course.instructor || "Teacher Hariom"}
-                </Text>
-
-                <View style={styles.suggestedCourseBadgeRow}>
-                  <View style={styles.levelBadgePill}>
-                    <Text style={styles.levelBadgeText}>
-                      {course.level || "B2 Upper-Intermediate"}
+                return (
+                  <TouchableOpacity
+                    key={course.id || index}
+                    style={styles.suggestedCourseCard}
+                    onPress={() => handleOpenBookingModal(course)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.suggestedCourseTitle} numberOfLines={1}>
+                      {course.courseName || course.name || "Course"}
                     </Text>
-                  </View>
-                </View>
 
-                <View style={styles.suggestedCourseFooter}>
-                  <Text style={styles.suggestedCoursePrice}>
-                    ₹{course.monthlyFee || 800}
-                    <Text style={styles.suggestedCoursePriceSub}>/mo</Text>
-                  </Text>
-                  <View style={styles.bookPill}>
-                    <Text style={styles.bookPillText}>Book Seat</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                    <Text style={styles.suggestedCourseInstructor} numberOfLines={1}>
+                      {subtitle}
+                    </Text>
+
+                    <View style={styles.suggestedCourseBadgeRow}>
+                      <View style={styles.levelBadgePill}>
+                        <Text style={styles.levelBadgeText}>
+                          {badgeLabel}
+                        </Text>
+                      </View>
+                      {durationLabel && (
+                        <View style={[styles.levelBadgePill, { backgroundColor: "#f1f5f9", marginLeft: 6 }]}>
+                          <Text style={[styles.levelBadgeText, { color: "#475569" }]}>
+                            {durationLabel}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.suggestedCourseFooter}>
+                      <Text style={styles.suggestedCoursePrice}>
+                        ₹{course.monthlyFee ?? 0}
+                        <Text style={styles.suggestedCoursePriceSub}>/mo</Text>
+                      </Text>
+                      <View style={styles.bookPill}>
+                        <Text style={styles.bookPillText}>Book Seat</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.noCoursesContainer}>
+              <MaterialIcons name="school" size={28} color="#94a3b8" />
+              <Text style={styles.noCoursesText}>
+                {searchQuery ? "No courses matching your search." : "No courses published yet."}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -1786,6 +1771,33 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 11,
     fontWeight: "700",
+  },
+  courseCountBadge: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  courseCountBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  noCoursesContainer: {
+    padding: 24,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 4,
+  },
+  noCoursesText: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "500",
   },
 
   /* Modals Common */

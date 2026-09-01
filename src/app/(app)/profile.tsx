@@ -8,6 +8,7 @@ import {
   Alert,
   Linking,
   SafeAreaView,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -53,54 +54,67 @@ export default function ProfileScreen() {
       const userDocRef = doc(db, 'users', user!.id);
       const userSnap = await getDoc(userDocRef);
 
+      let uData: any = {};
       if (userSnap.exists()) {
-        const uData = userSnap.data();
-
+        uData = userSnap.data();
         setProfileData(uData);
+      }
 
-        const bIds = uData.batchIds || [];
+      // Collect all possible batch identifiers
+      const candidates: string[] = [];
+      if (Array.isArray(uData.batchIds)) candidates.push(...uData.batchIds);
+      if (Array.isArray(uData.batches)) candidates.push(...uData.batches);
+      if (uData.batchId) candidates.push(uData.batchId);
+      if (uData.batchName) candidates.push(uData.batchName);
+      if (uData.batch) candidates.push(uData.batch);
+      if (uData.assignedBatch) candidates.push(uData.assignedBatch);
+      if (Array.isArray(user?.batchIds)) candidates.push(...user!.batchIds);
+      if (user?.batchId) candidates.push(user.batchId);
+      if (user?.batchName) candidates.push(user.batchName);
 
-        if (bIds.length > 0) {
-          const bTarget = bIds[0];
-
-          try {
-            // First try batch document ID
-            const bSnap = await getDoc(
-              doc(db, 'batches', bTarget)
-            );
-
-            if (bSnap.exists()) {
-              setBatchName(
-                bSnap.data().batchName || bTarget
-              );
-            } else {
-              // If not document ID, search by batch name
-              const bq = query(
-                collection(db, 'batches'),
-                where('batchName', '==', bTarget)
-              );
-
-              const bSnap2 = await getDocs(bq);
-
-              if (!bSnap2.empty) {
-                setBatchName(
-                  bSnap2.docs[0].data().batchName ||
-                  bTarget
-                );
-              } else {
-                setBatchName(bTarget);
-              }
-            }
-          } catch (error) {
-            setBatchName(bTarget);
+      // Fallback: check students collection
+      if (candidates.length === 0) {
+        try {
+          const sq = query(collection(db, 'students'), where('userId', '==', user!.id));
+          const sSnap = await getDocs(sq);
+          if (!sSnap.empty) {
+            const sData = sSnap.docs[0].data();
+            if (Array.isArray(sData.batchIds)) candidates.push(...sData.batchIds);
+            if (sData.batchId) candidates.push(sData.batchId);
+            if (sData.batchName) candidates.push(sData.batchName);
           }
+        } catch (sErr) {
+          console.warn("Fallback student query skipped:", sErr);
         }
       }
+
+      const validCandidates = candidates.filter(c => typeof c === 'string' && c.trim().length > 0 && c !== 'all' && c !== 'Unassigned');
+
+      if (validCandidates.length > 0) {
+        const bTarget = validCandidates[0].trim();
+        try {
+          // First try batch document ID
+          const bSnap = await getDoc(doc(db, 'batches', bTarget));
+          if (bSnap.exists()) {
+            setBatchName(bSnap.data().batchName || bTarget);
+          } else {
+            // If not document ID, search by batch name
+            const bq = query(collection(db, 'batches'), where('batchName', '==', bTarget));
+            const bSnap2 = await getDocs(bq);
+            if (!bSnap2.empty) {
+              setBatchName(bSnap2.docs[0].data().batchName || bTarget);
+            } else {
+              setBatchName(bTarget);
+            }
+          }
+        } catch (error) {
+          setBatchName(bTarget);
+        }
+      } else {
+        setBatchName('Unassigned Batch');
+      }
     } catch (error) {
-      console.error(
-        'Error fetching profile data:',
-        error
-      );
+      console.error('Error fetching profile data:', error);
     } finally {
       hideLoader();
     }
@@ -139,7 +153,15 @@ export default function ProfileScreen() {
   // LOGOUT
   // --------------------------------------------------
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      try {
+        await logout();
+      } catch (e) {}
+      router.replace('/(auth)/login');
+      return;
+    }
+
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
@@ -151,7 +173,12 @@ export default function ProfileScreen() {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: logout,
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (e) {}
+            router.replace('/(auth)/login');
+          },
         },
       ]
     );
