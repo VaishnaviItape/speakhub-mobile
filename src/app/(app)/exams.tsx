@@ -1,45 +1,463 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert, AppState, ScrollView, Share, Linking } from 'react-native';
-import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/theme';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useAuth } from '../../contexts/AuthContext';
-import { useLoader } from '../../contexts/LoaderContext';
-import { db } from '../../config/firebase';
-import { collection, query, getDocs, where, addDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Modal,
+  Alert,
+  AppState,
+  ScrollView,
+  Share,
+  Linking,
+  Image,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import {
+  collection,
+  query,
+  getDocs,
+  where,
+  addDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+} from "firebase/firestore";
+import { COLORS } from "../../constants/theme";
+import { useAuth } from "../../contexts/AuthContext";
+import { useLoader } from "../../contexts/LoaderContext";
+import { db } from "../../config/firebase";
+import ProfileDrawer from "../../components/ui/ProfileDrawer";
 
 export default function ExamsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { showLoader, hideLoader } = useLoader();
+
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [exams, setExams] = useState<any[]>([]);
   const [attempts, setAttempts] = useState<any[]>([]);
   const [questions, setQuestions] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'Upcoming' | 'Live' | 'Completed' | 'Missed'>('Live');
+  const [activeTab, setActiveTab] = useState<"Live" | "Upcoming" | "Completed" | "Missed">("Live");
   const [isAccessDenied, setIsAccessDenied] = useState(false);
-  const { showLoader, hideLoader } = useLoader();
 
-  // Exam State
+  // Exam / Mock Test State
   const [examStarted, setExamStarted] = useState(false);
   const [currentExam, setCurrentExam] = useState<any>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<{[key: string]: string}>({});
+  const [answers, setAnswers] = useState<{ [key: string]: string }>({});
   const [showReview, setShowReview] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [scoreData, setScoreData] = useState<any>(null);
-  
+
   // Anti-Cheat State
   const [showConsent, setShowConsent] = useState(false);
   const [appSwitchCount, setAppSwitchCount] = useState(0);
   const [totalExitDuration, setTotalExitDuration] = useState(0);
   const [isSuspicious, setIsSuspicious] = useState(false);
-  const [autoSubmitReason, setAutoSubmitReason] = useState('');
+  const [autoSubmitReason, setAutoSubmitReason] = useState("");
   const lastExitTimeRef = useRef<number | null>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [timeLeft, setTimeLeft] = useState(0);
   const [appState, setAppState] = useState(AppState.currentState);
   const timerRef = useRef<any>(null);
+
+  // Mock Test Datasets (Available for All Students & Unassigned Batch Students)
+  const SUGGESTED_MOCK_TESTS = [
+    {
+      id: "mock-test-1",
+      isMockTest: true,
+      title: "English Mock Test",
+      instructor: "Teacher Hariom",
+      batchBadge: "B31",
+      batchBadgeColor: "#FFEDD5",
+      batchBadgeTextColor: "#C2410C",
+      level: "B2 Upper-Intermediate",
+      levelColor: "#CCFBF1",
+      levelTextColor: "#0D9488",
+      duration: 15,
+      numberOfQuestions: 15,
+      totalMarks: 50,
+      marksPerQuestion: 3.33,
+      negativeMarking: false,
+      questions: [
+        {
+          id: "m1_q1",
+          question: "Which of the following is the correct sentence for daily English conversation?",
+          questionType: "MCQ",
+          optionA: "He don't know the answer",
+          optionB: "He doesn't knows the answer",
+          optionC: "He doesn't know the answer",
+          optionD: "He not know the answer",
+          correctAnswer: "C",
+        },
+        {
+          id: "m1_q2",
+          question: "Which modal verb is best used to make polite requests in spoken English?",
+          questionType: "MCQ",
+          optionA: "Could",
+          optionB: "Must",
+          optionC: "Shall",
+          optionD: "Ought",
+          correctAnswer: "A",
+        },
+        {
+          id: "m1_q3",
+          question: "Select the sentence with correct subject-verb agreement:",
+          questionType: "MCQ",
+          optionA: "Each of the students are ready",
+          optionB: "Each of the students is ready",
+          optionC: "Each of the student were ready",
+          optionD: "Each of students have ready",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q4",
+          question: "Identify the correct preposition: 'I have been learning with Speak Hub ______ 2024.'",
+          questionType: "MCQ",
+          optionA: "for",
+          optionB: "from",
+          optionC: "since",
+          optionD: "in",
+          correctAnswer: "C",
+        },
+        {
+          id: "m1_q5",
+          question: "What does the idiom 'Break the ice' mean in public speaking?",
+          questionType: "MCQ",
+          optionA: "To cool down a room",
+          optionB: "To start a friendly conversation and ease tension",
+          optionC: "To speak very loudly",
+          optionD: "To stop speaking suddenly",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q6",
+          question: "What is the most natural response to the formal greeting 'How do you do?'",
+          questionType: "MCQ",
+          optionA: "I am doing well",
+          optionB: "How do you do?",
+          optionC: "Good morning",
+          optionD: "I am fine thank you",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q7",
+          question: "Choose the correct preposition: 'She is exceptionally good ______ public speaking.'",
+          questionType: "MCQ",
+          optionA: "in",
+          optionB: "at",
+          optionC: "with",
+          optionD: "on",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q8",
+          question: "Identify the antonym of 'Hesitant' in spoken English:",
+          questionType: "MCQ",
+          optionA: "Confident",
+          optionB: "Shy",
+          optionC: "Fearful",
+          optionD: "Nervous",
+          correctAnswer: "A",
+        },
+        {
+          id: "m1_q9",
+          question: "Choose the correct phrase: 'I look forward to ______ you in the next masterclass.'",
+          questionType: "MCQ",
+          optionA: "meet",
+          optionB: "meeting",
+          optionC: "met",
+          optionD: "have met",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q10",
+          question: "Identify the correct question tag: 'You practice English every day, ______?'",
+          questionType: "MCQ",
+          optionA: "don't you?",
+          optionB: "aren't you?",
+          optionC: "isn't it?",
+          optionD: "do you?",
+          correctAnswer: "A",
+        },
+        {
+          id: "m1_q11",
+          question: "Which of the following demonstrates confident body language during presentations?",
+          questionType: "MCQ",
+          optionA: "Looking at the floor continuously",
+          optionB: "Maintaining natural eye contact and open posture",
+          optionC: "Crossing arms tightly",
+          optionD: "Fidgeting with hands",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q12",
+          question: "Fill in the blank: 'Neither the instructor nor the students ______ absent today.'",
+          questionType: "MCQ",
+          optionA: "was",
+          optionB: "were",
+          optionC: "is",
+          optionD: "has been",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q13",
+          question: "What is the best technique to overcome hesitation when answering spontaneous questions?",
+          questionType: "MCQ",
+          optionA: "Switch back to your mother tongue",
+          optionB: "Take a calm breath, use conversational transitions, and structure thoughts",
+          optionC: "Stop speaking completely",
+          optionD: "Speak extremely fast without pauses",
+          correctAnswer: "B",
+        },
+        {
+          id: "m1_q14",
+          question: "Select the correct passive voice: 'Teacher Hariom conducted the fluency seminar.'",
+          questionType: "MCQ",
+          optionA: "The fluency seminar was conducted by Teacher Hariom.",
+          optionB: "The fluency seminar is conducted by Teacher Hariom.",
+          optionC: "The fluency seminar has conducted by Teacher Hariom.",
+          optionD: "The fluency seminar had been conducted.",
+          correctAnswer: "A",
+        },
+        {
+          id: "m1_q15",
+          question: "Which word means 'the ability to speak easily and smoothly'?",
+          questionType: "MCQ",
+          optionA: "Hesitation",
+          optionB: "Fluency",
+          optionC: "Monotone",
+          optionD: "Slang",
+          correctAnswer: "B",
+        },
+      ],
+    },
+    {
+      id: "mock-test-2",
+      isMockTest: true,
+      title: "English Mock Test",
+      instructor: "Teacher Hariom",
+      batchBadge: "B32",
+      batchBadgeColor: "#E0F2FE",
+      batchBadgeTextColor: "#0284C7",
+      level: "B2 Upper-Intermediate",
+      levelColor: "#CCFBF1",
+      levelTextColor: "#0D9488",
+      duration: 15,
+      numberOfQuestions: 10,
+      totalMarks: 50,
+      marksPerQuestion: 5,
+      negativeMarking: false,
+      questions: [
+        {
+          id: "m2_q1",
+          question: "Which phrase is ideal for introducing oneself in an interview?",
+          questionType: "MCQ",
+          optionA: "Myself Rahul from Pune",
+          optionB: "Good morning, I am Rahul, a graduate with a passion for communication",
+          optionC: "Me Rahul from Maharashtra",
+          optionD: "My name is Rahul and I is graduate",
+          correctAnswer: "B",
+        },
+        {
+          id: "m2_q2",
+          question: "Identify the correct synonym of 'Articulate':",
+          questionType: "MCQ",
+          optionA: "Clear and expressive",
+          optionB: "Unclear",
+          optionC: "Hesitant",
+          optionD: "Silent",
+          correctAnswer: "A",
+        },
+        {
+          id: "m2_q3",
+          question: "Choose the correct sentence:",
+          questionType: "MCQ",
+          optionA: "If I was you, I would practice daily",
+          optionB: "If I were you, I would practice daily",
+          optionC: "If I am you, I will practice",
+          optionD: "If I be you, I practice",
+          correctAnswer: "B",
+        },
+        {
+          id: "m2_q4",
+          question: "Fill in the blank: 'He spoke so ______ that everyone understood clearly.'",
+          questionType: "MCQ",
+          optionA: "fluent",
+          optionB: "fluently",
+          optionC: "more fluent",
+          optionD: "fluency",
+          correctAnswer: "B",
+        },
+        {
+          id: "m2_q5",
+          question: "What is the antonym of 'Ambiguous'?",
+          questionType: "MCQ",
+          optionA: "Clear and precise",
+          optionB: "Vague",
+          optionC: "Confusing",
+          optionD: "Doubtful",
+          correctAnswer: "A",
+        },
+        {
+          id: "m2_q6",
+          question: "Which sentence uses the correct conditional format?",
+          questionType: "MCQ",
+          optionA: "If it rains, we will postpone the outdoor session.",
+          optionB: "If it will rain, we postpone the session.",
+          optionC: "If it rained, we will postpone.",
+          optionD: "If it rain, we postpone.",
+          correctAnswer: "A",
+        },
+        {
+          id: "m2_q7",
+          question: "Choose the correct phrase to disagree politely in a group discussion:",
+          questionType: "MCQ",
+          optionA: "You are completely wrong!",
+          optionB: "I see your point, however, I look at it from a slightly different perspective.",
+          optionC: "Shut up, that makes no sense.",
+          optionD: "I don't care about your opinion.",
+          correctAnswer: "B",
+        },
+        {
+          id: "m2_q8",
+          question: "Identify the correct spelling:",
+          questionType: "MCQ",
+          optionA: "Pronounciation",
+          optionB: "Pronunciation",
+          optionC: "Pronuntiation",
+          optionD: "Prononciation",
+          correctAnswer: "B",
+        },
+        {
+          id: "m2_q9",
+          question: "What does the phrasal verb 'Brush up on' mean?",
+          questionType: "MCQ",
+          optionA: "To clean with a brush",
+          optionB: "To practice and improve an existing skill",
+          optionC: "To forget something",
+          optionD: "To paint a wall",
+          correctAnswer: "B",
+        },
+        {
+          id: "m2_q10",
+          question: "Which connector shows contrast between two ideas?",
+          questionType: "MCQ",
+          optionA: "Furthermore",
+          optionB: "In addition",
+          optionC: "Nevertheless",
+          optionD: "Similarly",
+          correctAnswer: "C",
+        },
+      ],
+    },
+    {
+      id: "mock-test-3",
+      isMockTest: true,
+      title: "Foundation Grammar & Vocabulary",
+      instructor: "Teacher Hariom",
+      batchBadge: "Foundation",
+      batchBadgeColor: "#EDE9FE",
+      batchBadgeTextColor: "#7C3AED",
+      level: "A2 Elementary",
+      levelColor: "#FEF3C7",
+      levelTextColor: "#D97706",
+      duration: 10,
+      numberOfQuestions: 8,
+      totalMarks: 30,
+      marksPerQuestion: 3.75,
+      negativeMarking: false,
+      questions: [
+        {
+          id: "m3_q1",
+          question: "Choose the correct plural form of 'Child':",
+          questionType: "MCQ",
+          optionA: "Childs",
+          optionB: "Children",
+          optionC: "Childrens",
+          optionD: "Childes",
+          correctAnswer: "B",
+        },
+        {
+          id: "m3_q2",
+          question: "Fill in the blank with correct article: 'He is ______ honest person.'",
+          questionType: "MCQ",
+          optionA: "a",
+          optionB: "an",
+          optionC: "the",
+          optionD: "no article",
+          correctAnswer: "B",
+        },
+        {
+          id: "m3_q3",
+          question: "Select the correct past tense of 'Speak':",
+          questionType: "MCQ",
+          optionA: "Speaked",
+          optionB: "Spoke",
+          optionC: "Spoken",
+          optionD: "Speaking",
+          correctAnswer: "B",
+        },
+        {
+          id: "m3_q4",
+          question: "Which word is an adjective in: 'She gave a brilliant presentation.'?",
+          questionType: "MCQ",
+          optionA: "She",
+          optionB: "gave",
+          optionC: "brilliant",
+          optionD: "presentation",
+          correctAnswer: "C",
+        },
+        {
+          id: "m3_q5",
+          question: "Complete the sentence: 'They ______ to the Speak Hub academy every weekend.'",
+          questionType: "MCQ",
+          optionA: "go",
+          optionB: "goes",
+          optionC: "going",
+          optionD: "gone",
+          correctAnswer: "A",
+        },
+        {
+          id: "m3_q6",
+          question: "What is the opposite of 'Ancient'?",
+          questionType: "MCQ",
+          optionA: "Old",
+          optionB: "Modern",
+          optionC: "Historic",
+          optionD: "Classic",
+          correctAnswer: "B",
+        },
+        {
+          id: "m3_q7",
+          question: "Choose the correct sentence:",
+          questionType: "MCQ",
+          optionA: "Where you are going?",
+          optionB: "Where are you going?",
+          optionC: "Where you go?",
+          optionD: "Where going you?",
+          correctAnswer: "B",
+        },
+        {
+          id: "m3_q8",
+          question: "What is the meaning of 'Vocabulary'?",
+          questionType: "MCQ",
+          optionA: "Grammar rules",
+          optionB: "The body of words used in a particular language",
+          optionC: "Handwriting style",
+          optionD: "Reading speed",
+          correctAnswer: "B",
+        },
+      ],
+    },
+  ];
 
   useEffect(() => {
     let unsubExams: (() => void) | undefined;
@@ -55,28 +473,26 @@ export default function ExamsScreen() {
 
       showLoader();
       try {
-        const { doc, getDoc, onSnapshot } = await import('firebase/firestore');
-        
-        // 1. Fetch latest user document to verify active status
         let studentData: any = {};
         if (user.id) {
           try {
-            const uSnap = await getDoc(doc(db, 'users', user.id));
+            const uSnap = await getDoc(doc(db, "users", user.id));
             if (uSnap.exists()) {
               studentData = uSnap.data();
             }
           } catch (e) {}
         }
 
-        const currentStatus = studentData.status || user.status || 'pending';
+        const currentStatus = studentData.status || user.status || "active";
         let isDemoActive = false;
         if (studentData.isDemoMode && studentData.demoEndDate) {
-          const endDate = studentData.demoEndDate.toDate ? studentData.demoEndDate.toDate() : new Date(studentData.demoEndDate);
+          const endDate = studentData.demoEndDate.toDate
+            ? studentData.demoEndDate.toDate()
+            : new Date(studentData.demoEndDate);
           if (endDate.getTime() >= new Date().getTime()) isDemoActive = true;
         }
 
-        // STRICT CHECK: If student is inactive or not active/demo, strictly block all exams
-        if (currentStatus !== 'active' && !isDemoActive) {
+        if (currentStatus === "inactive" && !isDemoActive) {
           setIsAccessDenied(true);
           setExams([]);
           setAttempts([]);
@@ -86,79 +502,50 @@ export default function ExamsScreen() {
 
         setIsAccessDenied(false);
 
-        // 2. Resolve active student batch identifiers
-        const studentBatchIdOrName = (studentData.batchIds && studentData.batchIds[0]) || user.batchIds?.[0];
-        if (!studentBatchIdOrName) {
-          // No batch assigned to student
-          setExams([]);
-          hideLoader();
-          return;
+        const studentBatchIdOrName =
+          (studentData.batchIds && studentData.batchIds[0]) ||
+          user.batchIds?.[0];
+
+        const targetBatchIdentifiers: string[] = ["all"];
+        if (studentBatchIdOrName) {
+          targetBatchIdentifiers.push(studentBatchIdOrName);
         }
-
-        let isBatchActive = false;
-        const targetBatchIdentifiers: string[] = [];
-        try {
-          const bSnap = await getDoc(doc(db, 'batches', studentBatchIdOrName));
-          if (bSnap.exists()) {
-            const bData = bSnap.data();
-            if (bData.status === 'active') {
-              isBatchActive = true;
-              targetBatchIdentifiers.push(studentBatchIdOrName);
-              if (bData.batchName) targetBatchIdentifiers.push(bData.batchName);
-            }
-          }
-        } catch (e) {}
-
-        if (!isBatchActive) {
-          try {
-            const bq = query(collection(db, 'batches'), where('batchName', '==', studentBatchIdOrName));
-            const bSnap = await getDocs(bq);
-            if (!bSnap.empty) {
-              const bData = bSnap.docs[0].data();
-              if (bData.status === 'active') {
-                isBatchActive = true;
-                targetBatchIdentifiers.push(bSnap.docs[0].id);
-                targetBatchIdentifiers.push(studentBatchIdOrName);
-              }
-            }
-          } catch (e) {}
-        }
-
-        // If batch itself is not active, do not load exams
-        if (!isBatchActive || targetBatchIdentifiers.length === 0) {
-          setExams([]);
-          hideLoader();
-          return;
-        }
-
-        targetBatchIdentifiers.push('all');
 
         const examsQ = query(
-          collection(db, 'exams'),
-          where('batchId', 'in', targetBatchIdentifiers),
-          where('status', 'in', ['published', 'completed', 'scheduled'])
+          collection(db, "exams"),
+          where("status", "in", ["published", "completed", "scheduled"])
         );
 
         unsubExams = onSnapshot(examsQ, (snapshot) => {
           const examsList: any[] = [];
-          snapshot.forEach(d => {
+          snapshot.forEach((d) => {
             const data = d.data();
             const qCount = Number(data.numberOfQuestions) || 0;
-            // Show exam if questions are assigned (> 0) and status is published/completed/scheduled
-            if (qCount > 0 && (data.status === 'published' || data.status === 'completed' || data.status === 'scheduled')) {
+            const bId = data.batchId || "all";
+            const isMatch =
+              targetBatchIdentifiers.includes(bId) ||
+              bId === "all" ||
+              !studentBatchIdOrName;
+            if (qCount > 0 && isMatch) {
               examsList.push({ id: d.id, ...data });
             }
           });
           setExams(examsList);
         });
 
-        const attemptsQ = query(collection(db, 'exam_attempts'), where('studentId', '==', user.id));
-        unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
-          const attemptsList: any[] = [];
-          snapshot.forEach(d => attemptsList.push({ id: d.id, ...d.data() }));
-          setAttempts(attemptsList);
-        });
-
+        if (user.id) {
+          const attemptsQ = query(
+            collection(db, "exam_attempts"),
+            where("studentId", "==", user.id)
+          );
+          unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
+            const attemptsList: any[] = [];
+            snapshot.forEach((d) =>
+              attemptsList.push({ id: d.id, ...d.data() })
+            );
+            setAttempts(attemptsList);
+          });
+        }
       } catch (error) {
         console.error("Error setting up exam listeners:", error);
       } finally {
@@ -172,69 +559,111 @@ export default function ExamsScreen() {
       if (unsubExams) unsubExams();
       if (unsubAttempts) unsubAttempts();
     };
-  }, [user, user?.status]);
+  }, [user]);
 
-  const fetchQuestionsForExam = async (examId: string) => {
-    const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
-    const snap = await getDocs(q);
-    const qList: any[] = [];
-    snap.forEach(doc => {
-      const data = doc.data();
-      const normalizedData = {
-        id: doc.id,
-        ...data,
-        question: data.question || data.questionText || '',
-        questionType: data.questionType || (data.type === 'mcq' ? 'MCQ' : data.type) || 'MCQ',
-        optionA: data.optionA || (data.options ? data.options[0] : ''),
-        optionB: data.optionB || (data.options ? data.options[1] : ''),
-        optionC: data.optionC || (data.options ? data.options[2] : ''),
-        optionD: data.optionD || (data.options ? data.options[3] : ''),
-        correctAnswer: data.correctAnswer || (data.correctOptionIndex !== undefined ? ['A','B','C','D'][data.correctOptionIndex] : 'A')
-      };
-      qList.push(normalizedData);
-    });
-    const currentE = exams.find(e => e.id === examId);
-    if (currentE?.shuffleQuestions) {
-      qList.sort(() => Math.random() - 0.5);
+  const fetchQuestionsForExam = async (exam: any) => {
+    if (exam.isMockTest && exam.questions) {
+      setQuestions(exam.questions);
+      return;
     }
-    setQuestions(qList);
+
+    try {
+      const q = query(
+        collection(db, "exam_questions"),
+        where("examId", "==", exam.id)
+      );
+      const snap = await getDocs(q);
+      const qList: any[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const normalizedData = {
+          id: docSnap.id,
+          ...data,
+          question: data.question || data.questionText || "",
+          questionType:
+            data.questionType ||
+            (data.type === "mcq" ? "MCQ" : data.type) ||
+            "MCQ",
+          optionA: data.optionA || (data.options ? data.options[0] : ""),
+          optionB: data.optionB || (data.options ? data.options[1] : ""),
+          optionC: data.optionC || (data.options ? data.options[2] : ""),
+          optionD: data.optionD || (data.options ? data.options[3] : ""),
+          correctAnswer:
+            data.correctAnswer ||
+            (data.correctOptionIndex !== undefined
+              ? ["A", "B", "C", "D"][data.correctOptionIndex]
+              : "A"),
+        };
+        qList.push(normalizedData);
+      });
+
+      if (qList.length === 0) {
+        // Fallback to sample questions if none in DB
+        setQuestions(SUGGESTED_MOCK_TESTS[0].questions);
+      } else {
+        if (exam.shuffleQuestions) {
+          qList.sort(() => Math.random() - 0.5);
+        }
+        setQuestions(qList);
+      }
+    } catch {
+      setQuestions(SUGGESTED_MOCK_TESTS[0].questions);
+    }
   };
 
   // Anti-Cheat App State Listener
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (examStarted) {
-        if (appState.match(/active/) && nextAppState.match(/inactive|background/)) {
-          // App goes to background
+        if (
+          appState.match(/active/) &&
+          nextAppState.match(/inactive|background/)
+        ) {
           lastExitTimeRef.current = Date.now();
-        } else if (appState.match(/inactive|background/) && nextAppState === 'active') {
-          // App returns to foreground
+        } else if (
+          appState.match(/inactive|background/) &&
+          nextAppState === "active"
+        ) {
           if (lastExitTimeRef.current) {
-            const timeAwaySecs = Math.floor((Date.now() - lastExitTimeRef.current) / 1000);
+            const timeAwaySecs = Math.floor(
+              (Date.now() - lastExitTimeRef.current) / 1000
+            );
             const newExitDuration = totalExitDuration + timeAwaySecs;
             const newSwitchCount = appSwitchCount + 1;
-            
+
             setTotalExitDuration(newExitDuration);
             setAppSwitchCount(newSwitchCount);
 
             const maxAllowedExits = currentExam?.maxViolationsAllowed || 3;
             const maxDuration = currentExam?.maxViolationDuration || 30;
 
-            if (newSwitchCount > maxAllowedExits || newExitDuration > maxDuration) {
+            if (
+              newSwitchCount > maxAllowedExits ||
+              newExitDuration > maxDuration
+            ) {
               setIsSuspicious(true);
-              const reason = newSwitchCount > maxAllowedExits ? `Exceeded max app exits (${maxAllowedExits})` : `Exceeded max time away (${maxDuration}s)`;
+              const reason =
+                newSwitchCount > maxAllowedExits
+                  ? `Exceeded max app exits (${maxAllowedExits})`
+                  : `Exceeded max time away (${maxDuration}s)`;
               setAutoSubmitReason(reason);
-              
-              if (currentExam?.violationAction === 'AutoSubmit') {
-                Alert.alert("Exam Terminated", `Anti-cheat violation: ${reason}. Your exam is being submitted immediately.`);
+
+              if (currentExam?.violationAction === "AutoSubmit") {
+                Alert.alert(
+                  "Exam Terminated",
+                  `Anti-cheat violation: ${reason}. Your exam is being submitted immediately.`
+                );
                 forceSubmitExam(newSwitchCount, newExitDuration, true, reason);
               } else {
-                Alert.alert("Warning", "Suspicious activity detected. Your teacher has been notified.");
+                Alert.alert(
+                  "Warning",
+                  "Suspicious activity detected. Your test session has recorded an exit."
+                );
               }
             } else {
               Alert.alert(
-                "Warning: Do not exit the app!", 
-                `You have exited the exam ${newSwitchCount} time(s). Exceeding ${maxAllowedExits} exits will terminate the exam.`
+                "Warning: Stay on Screen!",
+                `You exited the exam screen ${newSwitchCount} time(s). Exceeding ${maxAllowedExits} exits will auto-submit your test.`
               );
             }
           }
@@ -249,16 +678,16 @@ export default function ExamsScreen() {
 
   // Live Timer
   useEffect(() => {
-    if (examStarted && appState === 'active' && timeLeft > 0) {
+    if (examStarted && appState === "active" && timeLeft > 0) {
       timerRef.current = setInterval(() => {
-        setTimeLeft(prev => prev - 1);
+        setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
 
     if (timeLeft === 0 && examStarted) {
-      Alert.alert("Time's Up!", "Your exam has automatically been submitted.");
+      Alert.alert("Time's Up!", "Your test has automatically been submitted.");
       submitExam();
     }
 
@@ -268,18 +697,35 @@ export default function ExamsScreen() {
   }, [examStarted, appState, timeLeft]);
 
   const requestStartExam = async (exam: any) => {
-    if (exam.startDate) {
-      const sTime = exam.startDate.toDate ? exam.startDate.toDate().getTime() : (exam.startDate.seconds ? exam.startDate.seconds * 1000 : new Date(exam.startDate).getTime());
+    if (exam.startDate && !exam.isMockTest) {
+      const sTime = exam.startDate.toDate
+        ? exam.startDate.toDate().getTime()
+        : exam.startDate.seconds
+        ? exam.startDate.seconds * 1000
+        : new Date(exam.startDate).getTime();
       if (sTime > Date.now()) {
-        const dStr = new Date(sTime).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-        Alert.alert("Exam Not Started Yet", `This exam is scheduled to begin on ${dStr}. Please return at that time to take the test.`);
+        const dStr = new Date(sTime).toLocaleString("en-IN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+        Alert.alert(
+          "Exam Not Started Yet",
+          `This exam is scheduled to begin on ${dStr}. Please return at that time to take the test.`
+        );
         return;
       }
     }
-    if (exam.endDate) {
-      const eTime = exam.endDate.toDate ? exam.endDate.toDate().getTime() : (exam.endDate.seconds ? exam.endDate.seconds * 1000 : new Date(exam.endDate).getTime());
+    if (exam.endDate && !exam.isMockTest) {
+      const eTime = exam.endDate.toDate
+        ? exam.endDate.toDate().getTime()
+        : exam.endDate.seconds
+        ? exam.endDate.seconds * 1000
+        : new Date(exam.endDate).getTime();
       if (eTime < Date.now()) {
-        Alert.alert("Exam Window Closed", "The time window for this exam has already ended.");
+        Alert.alert(
+          "Exam Window Closed",
+          "The time window for this exam has already ended."
+        );
         return;
       }
     }
@@ -289,35 +735,42 @@ export default function ExamsScreen() {
 
   const confirmStartExam = async () => {
     setShowConsent(false);
-    if (!permission?.granted) {
+    if (!currentExam?.isMockTest && !permission?.granted) {
       const { granted } = await requestPermission();
       if (!granted) {
-        Alert.alert("Permission Required", "Camera access is required for proctoring.");
-        return;
+        Alert.alert(
+          "Permission Required",
+          "Camera access is required for proctored exams."
+        );
       }
     }
-    
-    await fetchQuestionsForExam(currentExam.id);
-    setTimeLeft(currentExam.duration * 60); 
+
+    await fetchQuestionsForExam(currentExam);
+    setTimeLeft((currentExam.duration || 15) * 60);
     setCurrentQuestionIndex(0);
     setAnswers({});
-    
+
     setAppSwitchCount(0);
     setTotalExitDuration(0);
     setIsSuspicious(false);
-    setAutoSubmitReason('');
+    setAutoSubmitReason("");
     lastExitTimeRef.current = null;
-    
+
     setShowReview(false);
     setShowResult(false);
     setExamStarted(true);
   };
 
   const handleSelectOption = (questionId: string, answer: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    setAnswers((prev) => ({ ...prev, [questionId]: answer }));
   };
 
-  const forceSubmitExam = async (switches: number, duration: number, suspicious: boolean, reason: string) => {
+  const forceSubmitExam = async (
+    switches: number,
+    duration: number,
+    suspicious: boolean,
+    reason: string
+  ) => {
     if (timerRef.current) clearInterval(timerRef.current);
     setExamStarted(false);
     calculateAndSaveAttempt(switches, duration, suspicious, reason);
@@ -326,57 +779,72 @@ export default function ExamsScreen() {
   const submitExam = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setExamStarted(false);
-    calculateAndSaveAttempt(appSwitchCount, totalExitDuration, isSuspicious, autoSubmitReason);
+    calculateAndSaveAttempt(
+      appSwitchCount,
+      totalExitDuration,
+      isSuspicious,
+      autoSubmitReason
+    );
   };
 
-  const calculateAndSaveAttempt = async (switches: number, exitDur: number, suspicious: boolean, reason: string) => {
-    let correctCount = 0, wrongCount = 0, score = 0, unansweredCount = 0;
+  const calculateAndSaveAttempt = async (
+    switches: number,
+    exitDur: number,
+    suspicious: boolean,
+    reason: string
+  ) => {
+    let correctCount = 0,
+      wrongCount = 0,
+      score = 0,
+      unansweredCount = 0;
 
-    questions.forEach(q => {
+    questions.forEach((q) => {
       const studentAns = answers[q.id];
       if (!studentAns) {
         unansweredCount++;
       } else if (studentAns === q.correctAnswer) {
         correctCount++;
-        score += Number(q.marks || currentExam.marksPerQuestion || 1);
+        score += Number(q.marks || currentExam.marksPerQuestion || 3.33);
       } else {
         wrongCount++;
         if (currentExam.negativeMarking) score -= 0.5;
       }
     });
 
-    const percentage = (score / Number(currentExam.totalMarks)) * 100;
+    score = Math.round(score * 10) / 10;
+    const totalMarks = currentExam.totalMarks || 50;
+    const percentage = Math.min(100, Math.round((score / Number(totalMarks)) * 100));
 
     const attemptData = {
       examId: currentExam.id,
-      studentId: user?.id,
+      examTitle: currentExam.title,
+      studentId: user?.id || "guest",
+      studentName: user?.name || "Student",
       answers,
       score,
       percentage,
       correctCount,
       wrongCount,
       unansweredCount,
-      timeUsed: (currentExam.duration * 60) - timeLeft,
+      timeUsed: (currentExam.duration || 15) * 60 - timeLeft,
       appSwitchCount: switches,
       totalExitDuration: exitDur,
       isSuspicious: suspicious,
       autoSubmitReason: reason,
-      submittedAt: new Date().toISOString()
+      submittedAt: new Date().toISOString(),
     };
 
     try {
-      await addDoc(collection(db, 'exam_attempts'), attemptData);
-      setAttempts(prev => [...prev, attemptData]);
-      
-      if (currentExam.showResultImmediately !== false) {
-        setScoreData(attemptData);
-        setShowResult(true);
-      } else {
-        Alert.alert("Submitted", "Your exam has been submitted successfully. Results will be published later.");
+      if (user?.id) {
+        await addDoc(collection(db, "exam_attempts"), attemptData);
+        setAttempts((prev) => [...prev, attemptData]);
       }
     } catch (e: any) {
-      Alert.alert("Error", "Failed to submit exam: " + e.message);
+      console.warn("Could not save attempt to DB:", e);
     }
+
+    setScoreData(attemptData);
+    setShowResult(true);
   };
 
   const viewLeaderboard = (exam: any, attempt: any) => {
@@ -386,21 +854,41 @@ export default function ExamsScreen() {
   };
 
   const handleShareWhatsApp = async () => {
-    const studentName = user?.name || 'Student';
-    const examTitle = currentExam?.title || 'Exam Assessment';
+    const studentName = user?.name || "Student";
+    const examTitle = currentExam?.title || "Exam Assessment";
     const score = scoreData?.score ?? 0;
     const totalMarks = currentExam?.totalMarks || 50;
-    const pct = scoreData?.percentage !== undefined ? Math.round(Number(scoreData.percentage)) : Math.round((Number(score) / Number(totalMarks)) * 100);
-    const grade = scoreData?.grade || (pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'Pass');
-    const rank = scoreData?.rank ? `#${scoreData.rank}` : '#1';
+    const pct =
+      scoreData?.percentage !== undefined
+        ? Math.round(Number(scoreData.percentage))
+        : Math.round((Number(score) / Number(totalMarks)) * 100);
+    const grade =
+      scoreData?.grade ||
+      (pct >= 90
+        ? "A+"
+        : pct >= 80
+        ? "A"
+        : pct >= 60
+        ? "B"
+        : pct >= 40
+        ? "C"
+        : "Pass");
+    const rank = scoreData?.rank ? `#${scoreData.rank}` : "#1";
 
-    let celebrationMsg = "💐 🏆 Outstanding Performance! Congratulations! 🎉";
-    if (pct >= 80) celebrationMsg = "💐 🏆 Outstanding Performance! Brilliant Work! 🎉";
-    else if (pct >= 60) celebrationMsg = "💐 🌟 Great Job! Well Done! 👏";
-    else if (pct >= 40) celebrationMsg = "🌸 👍 Well Tried! Keep It Up & Keep Practicing! 💪";
+    let celebrationMsg =
+      "💐 🏆 Outstanding Performance! Congratulations! 🎉";
+    if (pct >= 80)
+      celebrationMsg =
+        "💐 🏆 Outstanding Performance! Brilliant Work! 🎉";
+    else if (pct >= 60)
+      celebrationMsg = "💐 🌟 Great Job! Well Done! 👏";
+    else if (pct >= 40)
+      celebrationMsg =
+        "🌸 👍 Well Tried! Keep It Up & Keep Practicing! 💪";
     else celebrationMsg = "💐 🌱 Good Effort! Practice More for Next Exam! 🌟";
 
-    const shareText = `🎓 *SPEAK HUB ACADEMY* 🎓\n` +
+    const shareText =
+      `🎓 *SPEAK HUB ACADEMY* 🎓\n` +
       `📜 *Official Exam Scorecard*\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
       `👤 *Student:* ${studentName}\n` +
@@ -412,20 +900,22 @@ export default function ExamsScreen() {
       `✨ Learning with Speak Hub Academy! 🚀`;
 
     try {
-      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
+      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(
+        shareText
+      )}`;
       const canOpen = await Linking.canOpenURL(whatsappUrl);
       if (canOpen) {
         await Linking.openURL(whatsappUrl);
       } else {
         await Share.share({
           message: shareText,
-          title: `${studentName}'s Scorecard - Speak Hub`
+          title: `${studentName}'s Scorecard - Speak Hub`,
         });
       }
-    } catch (error) {
+    } catch {
       await Share.share({
         message: shareText,
-        title: `${studentName}'s Scorecard - Speak Hub`
+        title: `${studentName}'s Scorecard - Speak Hub`,
       });
     }
   };
@@ -437,10 +927,10 @@ export default function ExamsScreen() {
     const completed: any[] = [];
     const missed: any[] = [];
 
-    exams.forEach(ex => {
+    exams.forEach((ex) => {
       const start = new Date(ex.startDate).getTime();
       const end = new Date(ex.endDate).getTime();
-      const attempt = attempts.find(a => a.examId === ex.id);
+      const attempt = attempts.find((a) => a.examId === ex.id);
 
       if (attempt) {
         completed.push({ ...ex, attempt });
@@ -453,197 +943,394 @@ export default function ExamsScreen() {
       }
     });
 
-    return { Live: live, Upcoming: upcoming, Completed: completed, Missed: missed };
+    return {
+      Live: live,
+      Upcoming: upcoming,
+      Completed: completed,
+      Missed: missed,
+    };
   };
 
   const currentList = categorizedExams()[activeTab];
 
   const formatIndianClockDate = (dateVal: any) => {
-    if (!dateVal) return '-';
+    if (!dateVal) return "-";
     const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return '-';
-    const dateStr = d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    if (isNaN(d.getTime())) return "-";
+    const dateStr = d.toLocaleDateString("en-IN", {
+      month: "short",
+      day: "numeric",
+    });
+    const timeStr = d.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
     return `${dateStr}, ${timeStr}`;
   };
 
-  const renderExamCard = ({ item }: { item: any }) => {
-    const isLive = activeTab === 'Live';
-    const isCompleted = activeTab === 'Completed';
-    const isUpcoming = activeTab === 'Upcoming';
-    const isMissed = activeTab === 'Missed';
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-          {isCompleted && item.attempt && (
-            <View style={styles.scorePill}>
-              <MaterialIcons name="emoji-events" size={13} color={COLORS.primary} />
-              <Text style={styles.scorePillText}>Score: {item.attempt.score}</Text>
-            </View>
-          )}
-          {isLive && (
-            <View style={styles.livePill}>
-              <View style={styles.liveDot} />
-              <Text style={styles.livePillText}>LIVE NOW</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.cardMetaRow}>
-          <View style={styles.metaBadge}>
-            <MaterialIcons name="schedule" size={13} color={COLORS.textMedium} />
-            <Text style={styles.metaBadgeText}>{item.duration} mins</Text>
-          </View>
-          <View style={styles.metaBadge}>
-            <MaterialIcons name="format-list-numbered" size={13} color={COLORS.textMedium} />
-            <Text style={styles.metaBadgeText}>{item.numberOfQuestions || '20'} Qs</Text>
-          </View>
-          {item.totalMarks ? (
-            <View style={styles.metaBadge}>
-              <MaterialIcons name="grade" size={13} color={COLORS.textMedium} />
-              <Text style={styles.metaBadgeText}>{item.totalMarks} Marks</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.cardFooterRow}>
-          <View style={styles.dateInfoWrapper}>
-            <MaterialIcons name="event" size={13} color="#94a3b8" />
-            <Text style={styles.dateText} numberOfLines={1}>
-              Ends: {formatIndianClockDate(item.endDate)}
-            </Text>
-          </View>
-
-          {isLive && (
-            <TouchableOpacity style={styles.startButton} onPress={() => requestStartExam(item)} activeOpacity={0.85}>
-              <Text style={styles.startText}>Start Exam</Text>
-              <MaterialIcons name="arrow-forward" size={14} color="#ffffff" />
-            </TouchableOpacity>
-          )}
-
-          {isCompleted && (
-            <TouchableOpacity style={styles.viewResultButton} onPress={() => viewLeaderboard(item, item.attempt)} activeOpacity={0.85}>
-              <Text style={styles.viewResultText}>View Result</Text>
-              <MaterialIcons name="visibility" size={14} color={COLORS.primary} />
-            </TouchableOpacity>
-          )}
-
-          {isUpcoming && (
-            <View style={styles.disabledBadge}>
-              <MaterialIcons name="lock" size={12} color="#64748b" />
-              <Text style={styles.disabledText}>Starts Soon</Text>
-            </View>
-          )}
-
-          {isMissed && (
-            <View style={styles.missedBadge}>
-              <MaterialIcons name="event-busy" size={12} color="#dc2626" />
-              <Text style={styles.missedText}>Expired</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  const tabs: ('Live' | 'Upcoming' | 'Completed' | 'Missed')[] = ['Live', 'Upcoming', 'Completed', 'Missed'];
-  const categorized = categorizedExams();
+  const tabs: ("Live" | "Upcoming" | "Completed" | "Missed")[] = [
+    "Live",
+    "Upcoming",
+    "Completed",
+    "Missed",
+  ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Top Header: Hamburger Menu + Title */}
+      <View style={styles.screenHeader}>
+        <TouchableOpacity
+          style={styles.drawerButton}
+          onPress={() => setIsDrawerOpen(true)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialIcons name="menu" size={26} color="#0f172a" />
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>Exams & Quizzes</Text>
+      </View>
+
+      {/* 4 Filter Tabs (Live, Upcoming, Completed, Missed) */}
       <View style={styles.tabsWrapper}>
         <View style={styles.tabsSegment}>
           {tabs.map((tab) => {
             const isActive = activeTab === tab;
-            const count = categorized[tab]?.length || 0;
             return (
-              <TouchableOpacity 
-                key={tab} 
-                style={[styles.tabSegmentBtn, isActive && styles.tabSegmentBtnActive]}
+              <TouchableOpacity
+                key={tab}
+                style={[
+                  styles.tabSegmentBtn,
+                  isActive && styles.tabSegmentBtnActive,
+                ]}
                 onPress={() => setActiveTab(tab)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.tabText, isActive && styles.activeTabText]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    isActive && styles.activeTabText,
+                  ]}
+                  numberOfLines={1}
+                >
                   {tab}
                 </Text>
-                {count > 0 && (
-                  <View style={[styles.tabCountPill, isActive && styles.tabCountPillActive]}>
-                    <Text style={[styles.tabCountText, isActive && styles.tabCountTextActive]}>{count}</Text>
-                  </View>
-                )}
               </TouchableOpacity>
             );
           })}
         </View>
       </View>
 
-      {isAccessDenied || user?.status !== 'active' ? (
-        <View style={styles.accessDeniedContainer}>
-          <View style={styles.accessDeniedCard}>
-            <View style={styles.accessDeniedIconWrapper}>
-              <MaterialIcons name="lock-person" size={40} color="#dc2626" />
-            </View>
-            <View style={styles.accessDeniedBadge}>
-              <Text style={styles.accessDeniedBadgeText}>STATUS: INACTIVE</Text>
-            </View>
-            <Text style={styles.accessDeniedTitle}>Exam Access Paused</Text>
-            <Text style={styles.accessDeniedSubtitle}>
-              Your student account is marked inactive due to pending fees or renewal. Live exams, assessments, and test results are paused until fees are cleared.
-            </Text>
-            <TouchableOpacity 
-              style={{
-                backgroundColor: '#dc2626',
-                paddingVertical: 11,
-                paddingHorizontal: 22,
-                borderRadius: 12,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 10
-              }}
-              onPress={() => router.push("/(app)/fees" as any)}
-              activeOpacity={0.85}
-            >
-              <MaterialIcons name="payment" size={16} color="#ffffff" />
-              <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>Pay Fees / View Dues</Text>
-            </TouchableOpacity>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 30 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Main Tab Content / Exam List or Empty State */}
+        {currentList && currentList.length > 0 ? (
+          <View style={styles.examListContent}>
+            {currentList.map((item) => {
+              const isLive = activeTab === "Live";
+              const isCompleted = activeTab === "Completed";
+              const isUpcoming = activeTab === "Upcoming";
+              const isMissed = activeTab === "Missed";
+
+              return (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardHeaderRow}>
+                    <Text style={styles.title} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    {isCompleted && item.attempt && (
+                      <View style={styles.scorePill}>
+                        <MaterialIcons
+                          name="emoji-events"
+                          size={13}
+                          color={COLORS.primary}
+                        />
+                        <Text style={styles.scorePillText}>
+                          Score: {item.attempt.score}
+                        </Text>
+                      </View>
+                    )}
+                    {isLive && (
+                      <View style={styles.livePill}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.livePillText}>LIVE NOW</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.cardMetaRow}>
+                    <View style={styles.metaBadge}>
+                      <MaterialIcons
+                        name="schedule"
+                        size={13}
+                        color={COLORS.textMedium}
+                      />
+                      <Text style={styles.metaBadgeText}>
+                        {item.duration} mins
+                      </Text>
+                    </View>
+                    <View style={styles.metaBadge}>
+                      <MaterialIcons
+                        name="format-list-numbered"
+                        size={13}
+                        color={COLORS.textMedium}
+                      />
+                      <Text style={styles.metaBadgeText}>
+                        {item.numberOfQuestions || "15"} Qs
+                      </Text>
+                    </View>
+                    {item.totalMarks ? (
+                      <View style={styles.metaBadge}>
+                        <MaterialIcons
+                          name="grade"
+                          size={13}
+                          color={COLORS.textMedium}
+                        />
+                        <Text style={styles.metaBadgeText}>
+                          {item.totalMarks} Marks
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.cardFooterRow}>
+                    <View style={styles.dateInfoWrapper}>
+                      <MaterialIcons name="event" size={13} color="#94a3b8" />
+                      <Text style={styles.dateText} numberOfLines={1}>
+                        Ends: {formatIndianClockDate(item.endDate)}
+                      </Text>
+                    </View>
+
+                    {isLive && (
+                      <TouchableOpacity
+                        style={styles.startButton}
+                        onPress={() => requestStartExam(item)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.startText}>Start Exam</Text>
+                        <MaterialIcons
+                          name="arrow-forward"
+                          size={14}
+                          color="#ffffff"
+                        />
+                      </TouchableOpacity>
+                    )}
+
+                    {isCompleted && (
+                      <TouchableOpacity
+                        style={styles.viewResultButton}
+                        onPress={() =>
+                          viewLeaderboard(item, item.attempt)
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.viewResultText}>View Result</Text>
+                        <MaterialIcons
+                          name="visibility"
+                          size={14}
+                          color={COLORS.primary}
+                        />
+                      </TouchableOpacity>
+                    )}
+
+                    {isUpcoming && (
+                      <View style={styles.disabledBadge}>
+                        <MaterialIcons
+                          name="lock"
+                          size={12}
+                          color="#64748b"
+                        />
+                        <Text style={styles.disabledText}>Starts Soon</Text>
+                      </View>
+                    )}
+
+                    {isMissed && (
+                      <View style={styles.missedBadge}>
+                        <MaterialIcons
+                          name="event-busy"
+                          size={12}
+                          color="#dc2626"
+                        />
+                        <Text style={styles.missedText}>Expired</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
           </View>
+        ) : (
+          /* Empty State Matching Screenshot */
+          <View style={styles.emptyStateContainer}>
+            <Image
+              source={require("../../../assets/images/exam_clock.png")}
+              style={styles.emptyClockImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.emptyStateTitle}>No {activeTab} Exams</Text>
+            <Text style={styles.emptyStateSubtitle}>
+              {activeTab === "Live"
+                ? "Check upcoming tab for future exams"
+                : activeTab === "Upcoming"
+                ? "No scheduled exams right now. Practice with mock tests below!"
+                : activeTab === "Completed"
+                ? "You haven't completed any exams yet."
+                : "No missed exams recorded."}
+            </Text>
+          </View>
+        )}
+
+        {/* Suggested Mock Tests Section (Available for All Students & Unassigned Batch Students) */}
+        <View style={styles.mockTestsSection}>
+          <Text style={styles.mockTestsSectionTitle}>Suggested Mock Tests</Text>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.mockTestsScrollContent}
+          >
+            {SUGGESTED_MOCK_TESTS.map((test) => (
+              <TouchableOpacity
+                key={test.id}
+                style={styles.mockTestCard}
+                onPress={() => requestStartExam(test)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.mockTestCardTop}>
+                  <View style={{ flex: 1, paddingRight: 6 }}>
+                    <Text style={styles.mockTestCardTitle} numberOfLines={1}>
+                      {test.title}
+                    </Text>
+                    <Text style={styles.mockTestInstructor}>
+                      {test.instructor}
+                    </Text>
+
+                    {/* Batch Badge (e.g. B31 / B32) */}
+                    <View
+                      style={[
+                        styles.batchCodePill,
+                        { backgroundColor: test.batchBadgeColor },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.batchCodePillText,
+                          { color: test.batchBadgeTextColor },
+                        ]}
+                      >
+                        {test.batchBadge}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Image
+                    source={require("../../../assets/images/mock_test_icon.png")}
+                    style={styles.mockTestIconImage}
+                    resizeMode="contain"
+                  />
+                </View>
+
+                {/* Level Badge */}
+                <View style={styles.mockTestLevelRow}>
+                  <View
+                    style={[
+                      styles.mockLevelPill,
+                      { backgroundColor: test.levelColor },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.mockLevelPillText,
+                        { color: test.levelTextColor },
+                      ]}
+                    >
+                      {test.level}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Bottom Action Footer */}
+                <View style={styles.mockTestFooter}>
+                  <View style={styles.mockTestMetaInfo}>
+                    <MaterialIcons
+                      name="schedule"
+                      size={12}
+                      color="#64748b"
+                    />
+                    <Text style={styles.mockTestMetaText}>
+                      {test.duration} min • {test.numberOfQuestions} Qs
+                    </Text>
+                  </View>
+
+                  <View style={styles.startMockBtn}>
+                    <Text style={styles.startMockBtnText}>Start Test</Text>
+                    <MaterialIcons
+                      name="arrow-forward"
+                      size={12}
+                      color="#ffffff"
+                    />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-      ) : (
-        <FlatList 
-          data={currentList}
-          renderItem={renderExamCard}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="assignment-late" size={44} color="#cbd5e1" />
-              <Text style={styles.emptyTitle}>No {activeTab} Exams</Text>
-              <Text style={styles.emptySubtitle}>There are no {activeTab.toLowerCase()} exams scheduled for your batch.</Text>
-            </View>
-          }
-        />
-      )}
+      </ScrollView>
+
+      {/* Profile / Menu Drawer Overlay */}
+      <ProfileDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+      />
 
       {/* Pre-Exam Consent Modal */}
       <Modal visible={showConsent} animationType="fade" transparent={true}>
         <View style={styles.reviewModalOverlay}>
           <View style={styles.reviewModalContent}>
-            <Text style={styles.resultTitle}>Anti-Cheat Warning</Text>
+            <Text style={styles.resultTitle}>Start Test Assessment</Text>
             <Text style={styles.resultMessage}>
-              This exam must be taken in Full-Screen Mode. If you exit the app, change tabs, or receive a call, it will be recorded as a violation.
+              You are about to start "{currentExam?.title}". This test contains{" "}
+              {currentExam?.numberOfQuestions || 15} questions with a time limit
+              of {currentExam?.duration || 15} minutes.
             </Text>
-            <Text style={{color: COLORS.error, fontWeight: 'bold', marginBottom: 20, textAlign: 'center'}}>
-              Max App Exits Allowed: {currentExam?.maxViolationsAllowed || 3}
+            <Text
+              style={{
+                color: COLORS.primary,
+                fontWeight: "700",
+                marginBottom: 16,
+                textAlign: "center",
+                fontSize: 13,
+              }}
+            >
+              Please stay on this screen until you finish the test.
             </Text>
-            <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-              <TouchableOpacity style={[styles.finishBtn, {backgroundColor: COLORS.textMedium}]} onPress={() => setShowConsent(false)}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.finishBtn,
+                  { backgroundColor: "#94a3b8", flex: 1 },
+                ]}
+                onPress={() => setShowConsent(false)}
+              >
                 <Text style={styles.finishBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.finishBtn} onPress={confirmStartExam}>
-                <Text style={styles.finishBtnText}>I Agree, Start Exam</Text>
+              <TouchableOpacity
+                style={[
+                  styles.finishBtn,
+                  { backgroundColor: COLORS.primary, flex: 1.5 },
+                ]}
+                onPress={confirmStartExam}
+              >
+                <Text style={styles.finishBtnText}>Start Now</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -652,83 +1339,126 @@ export default function ExamsScreen() {
 
       {/* Live Exam Modal */}
       <Modal visible={examStarted} animationType="slide">
-        <View style={styles.examContainer}>
+        <View style={[styles.examContainer, { paddingTop: insets.top }]}>
           <View style={styles.examHeader}>
-            <Text style={styles.examTitleText}>{currentExam?.title}</Text>
-            <Text style={styles.timerText}>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</Text>
-            {currentExam?.allowReview !== false && (
-              <TouchableOpacity onPress={() => setShowReview(true)} style={styles.reviewBtnHeader}>
-                <Text style={styles.reviewBtnText}>Grid</Text>
-              </TouchableOpacity>
-            )}
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.examTitleText} numberOfLines={1}>
+                {currentExam?.title}
+              </Text>
+            </View>
+            <View style={styles.timerPill}>
+              <MaterialIcons name="timer" size={16} color="#ffffff" />
+              <Text style={styles.timerText}>
+                {Math.floor(timeLeft / 60)}:
+                {(timeLeft % 60).toString().padStart(2, "0")}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowReview(true)}
+              style={styles.reviewBtnHeader}
+            >
+              <MaterialIcons name="grid-view" size={18} color="#ffffff" />
+            </TouchableOpacity>
           </View>
 
-          {permission?.granted && (
-            <View style={styles.proctorCameraContainer}>
-              <CameraView style={styles.camera} facing="front" />
-            </View>
-          )}
-          
           {questions.length > 0 && (
-            <ScrollView style={styles.questionContainer}>
-              <Text style={styles.questionNumber}>
-                Question {currentQuestionIndex + 1} of {questions.length}
-              </Text>
+            <ScrollView
+              style={styles.questionContainer}
+              contentContainerStyle={{ paddingBottom: 30 }}
+            >
+              <View style={styles.questionProgressRow}>
+                <Text style={styles.questionNumber}>
+                  Question {currentQuestionIndex + 1} of {questions.length}
+                </Text>
+                <Text style={styles.questionMarksBadge}>
+                  {currentExam?.marksPerQuestion || 3} Marks
+                </Text>
+              </View>
+
               <Text style={styles.questionText}>
                 {questions[currentQuestionIndex]?.question}
               </Text>
-              
-              {questions[currentQuestionIndex]?.questionType === 'MCQ' && (
-                ['A', 'B', 'C', 'D'].map((opt) => {
-                  const val = questions[currentQuestionIndex][`option${opt}`];
+
+              {questions[currentQuestionIndex]?.questionType === "MCQ" &&
+                ["A", "B", "C", "D"].map((opt) => {
+                  const val =
+                    questions[currentQuestionIndex][`option${opt}`];
                   if (!val) return null;
-                  const isSelected = answers[questions[currentQuestionIndex].id] === opt;
+                  const isSelected =
+                    answers[questions[currentQuestionIndex].id] === opt;
                   return (
-                    <TouchableOpacity 
-                      key={opt} 
-                      style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                      onPress={() => handleSelectOption(questions[currentQuestionIndex].id, opt)}
+                    <TouchableOpacity
+                      key={opt}
+                      style={[
+                        styles.optionButton,
+                        isSelected && styles.optionButtonSelected,
+                      ]}
+                      onPress={() =>
+                        handleSelectOption(
+                          questions[currentQuestionIndex].id,
+                          opt
+                        )
+                      }
+                      activeOpacity={0.8}
                     >
-                      <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-                        {opt}. {val}
+                      <View
+                        style={[
+                          styles.optionRadioCircle,
+                          isSelected && styles.optionRadioCircleSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.optionLetter,
+                            isSelected && styles.optionLetterSelected,
+                          ]}
+                        >
+                          {opt}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.optionText,
+                          isSelected && styles.optionTextSelected,
+                        ]}
+                      >
+                        {val}
                       </Text>
                     </TouchableOpacity>
-                  )
-                })
-              )}
-              {questions[currentQuestionIndex]?.questionType === 'TrueFalse' && (
-                ['True', 'False'].map((opt) => {
-                  const isSelected = answers[questions[currentQuestionIndex].id] === opt;
-                  return (
-                    <TouchableOpacity 
-                      key={opt} 
-                      style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                      onPress={() => handleSelectOption(questions[currentQuestionIndex].id, opt)}
-                    >
-                      <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{opt}</Text>
-                    </TouchableOpacity>
-                  )
-                })
-              )}
+                  );
+                })}
             </ScrollView>
           )}
 
           <View style={styles.navigationFooter}>
-            <TouchableOpacity 
-              style={[styles.navBtn, currentQuestionIndex === 0 && styles.navBtnDisabled]} 
-              onPress={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+            <TouchableOpacity
+              style={[
+                styles.navBtn,
+                currentQuestionIndex === 0 && styles.navBtnDisabled,
+              ]}
+              onPress={() =>
+                setCurrentQuestionIndex((prev) => Math.max(0, prev - 1))
+              }
               disabled={currentQuestionIndex === 0}
             >
               <Text style={styles.navBtnText}>Previous</Text>
             </TouchableOpacity>
 
             {currentQuestionIndex === questions.length - 1 ? (
-              <TouchableOpacity style={[styles.navBtn, styles.submitBtn]} onPress={submitExam}>
-                <Text style={styles.submitBtnText}>Submit</Text>
+              <TouchableOpacity
+                style={[styles.navBtn, styles.submitBtn]}
+                onPress={submitExam}
+              >
+                <Text style={styles.submitBtnText}>Submit Test</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.navBtn} onPress={() => setCurrentQuestionIndex(prev => prev + 1)}>
-                <Text style={styles.navBtnText}>Next</Text>
+              <TouchableOpacity
+                style={[styles.navBtn, { backgroundColor: COLORS.primary }]}
+                onPress={() =>
+                  setCurrentQuestionIndex((prev) => prev + 1)
+                }
+              >
+                <Text style={styles.submitBtnText}>Next</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -739,982 +1469,884 @@ export default function ExamsScreen() {
       <Modal visible={showReview} animationType="fade" transparent={true}>
         <View style={styles.reviewModalOverlay}>
           <View style={styles.reviewModalContent}>
-            <Text style={styles.reviewTitle}>Question Grid</Text>
+            <Text style={styles.reviewTitle}>Questions Palette</Text>
             <View style={styles.gridContainer}>
               {questions.map((q, index) => {
                 const isAttempted = !!answers[q.id];
                 return (
-                  <TouchableOpacity 
-                    key={q.id} 
-                    style={[styles.gridItem, isAttempted ? styles.gridItemAttempted : styles.gridItemUnattempted]}
-                    onPress={() => { setCurrentQuestionIndex(index); setShowReview(false); }}
+                  <TouchableOpacity
+                    key={q.id}
+                    style={[
+                      styles.gridItem,
+                      isAttempted
+                        ? styles.gridItemAttempted
+                        : styles.gridItemUnattempted,
+                    ]}
+                    onPress={() => {
+                      setCurrentQuestionIndex(index);
+                      setShowReview(false);
+                    }}
                   >
-                    <Text style={isAttempted ? styles.gridTextAttempted : styles.gridText}>{index + 1}</Text>
+                    <Text
+                      style={
+                        isAttempted
+                          ? styles.gridTextAttempted
+                          : styles.gridText
+                      }
+                    >
+                      {index + 1}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
-            <TouchableOpacity style={styles.closeReviewBtn} onPress={() => setShowReview(false)}>
-              <Text style={styles.closeReviewText}>Back to Exam</Text>
+            <TouchableOpacity
+              style={styles.closeReviewBtn}
+              onPress={() => setShowReview(false)}
+            >
+              <Text style={styles.closeReviewText}>Back to Test</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Result / Scorecard Template Modal */}
+      {/* Scorecard Modal */}
       <Modal visible={showResult} animationType="slide" transparent={true}>
         <View style={styles.resultModalOverlay}>
-          <ScrollView contentContainerStyle={styles.resultModalScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.resultModalScroll}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.certificateCard}>
-              {/* Certificate Decorative Top Ribbon */}
               <View style={styles.certTopRibbon} />
-              
-              {/* Header with Academy Logo & Branding */}
+
               <View style={styles.certHeader}>
-                <View style={styles.certLogoBadge}>
-                  <MaterialIcons name="school" size={26} color={COLORS.primary} />
-                </View>
                 <Text style={styles.certAcademyName}>SPEAK HUB ACADEMY</Text>
-                <Text style={styles.certSubtitle}>Official Exam Scorecard & Report</Text>
+                <Text style={styles.certSubtitle}>
+                  Official Scorecard & Report
+                </Text>
               </View>
 
-              {/* Dynamic Celebration & Bouquet Badge */}
+              {/* Dynamic Celebration */}
               {(() => {
-                const pct = scoreData?.percentage !== undefined ? Number(scoreData.percentage) : (Number(scoreData?.score || 0) / Number(currentExam?.totalMarks || 50)) * 100;
+                const pct = scoreData?.percentage ?? 80;
                 return (
-                  <View style={[
-                    styles.celebrationBanner,
-                    pct >= 80 ? styles.celebrationGold :
-                    pct >= 60 ? styles.celebrationGreen :
-                    pct >= 40 ? styles.celebrationBlue : styles.celebrationAmber
-                  ]}>
+                  <View
+                    style={[
+                      styles.celebrationBanner,
+                      pct >= 80
+                        ? styles.celebrationGold
+                        : pct >= 60
+                        ? styles.celebrationGreen
+                        : styles.celebrationAmber,
+                    ]}
+                  >
                     <Text style={styles.bouquetIcon}>
-                      {pct >= 80 ? '💐 🏆 💐' : pct >= 60 ? '💐 🌟 💐' : pct >= 40 ? '🌸 👍 🌸' : '💐 🌱 💐'}
+                      {pct >= 80 ? "💐 🏆 💐" : pct >= 60 ? "💐 🌟 💐" : "🌸 👍 🌸"}
                     </Text>
                     <Text style={styles.celebrationTitle}>
-                      {pct >= 80 ? 'Outstanding! Congratulations! 🎉' :
-                       pct >= 60 ? 'Great Job! Well Done! 👏' :
-                       pct >= 40 ? 'Well Tried! Keep It Up! 👍' : 'Good Effort! Keep Practicing! 💪'}
-                    </Text>
-                    <Text style={styles.celebrationDesc}>
-                      {pct >= 80 ? 'Brilliant achievement! You mastered this assessment with top excellence!' :
-                       pct >= 60 ? 'Strong score! Your hard work and preparation is shining through.' :
-                       pct >= 40 ? 'Good attempt! Keep reviewing the key topics to aim even higher.' : 'Every test is a learning step. Revise the notes and you will excel next time!'}
+                      {pct >= 80
+                        ? "Outstanding! Brilliant Work! 🎉"
+                        : pct >= 60
+                        ? "Great Job! Well Done! 👏"
+                        : "Good Attempt! Keep Practicing! 💪"}
                     </Text>
                   </View>
                 );
               })()}
 
-              {/* Student & Exam Details Header */}
-              <View style={styles.studentInfoBox}>
-                <View style={styles.studentAvatarPill}>
-                  <Text style={styles.studentAvatarText}>
-                    {(user?.name || 'S').charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.studentNameLabel}>STUDENT NAME</Text>
-                  <Text style={styles.studentNameValue} numberOfLines={1}>{user?.name || 'Student'}</Text>
-                  <Text style={styles.examNameValue} numberOfLines={1}>{currentExam?.title || 'Exam Assessment'}</Text>
-                </View>
-              </View>
-
-              {/* Score Hero with Bouquet Accent */}
               <View style={styles.scoreHeroSection}>
                 <View style={styles.scoreCircle}>
-                  <Text style={styles.scoreHeroValue}>{scoreData?.score ?? 0}</Text>
-                  <Text style={styles.scoreHeroTotal}>/ {currentExam?.totalMarks || 50} Marks</Text>
+                  <Text style={styles.scoreHeroValue}>
+                    {scoreData?.score ?? 0}
+                  </Text>
+                  <Text style={styles.scoreHeroTotal}>
+                    / {currentExam?.totalMarks || 50} Marks
+                  </Text>
                   <View style={styles.percentagePill}>
                     <Text style={styles.percentagePillText}>
-                      {scoreData?.percentage !== undefined ? Math.round(Number(scoreData.percentage)) : Math.round(((scoreData?.score || 0) / (currentExam?.totalMarks || 50)) * 100)}%
+                      {scoreData?.percentage ?? 0}%
                     </Text>
                   </View>
                 </View>
               </View>
 
-              {/* Analytics Breakdown Grid */}
-              <View style={styles.metricsGrid}>
-                <View style={styles.metricItem}>
-                  <MaterialIcons name="military-tech" size={20} color="#eab308" />
-                  <Text style={styles.metricItemValue}>
-                    {scoreData?.rank ? `#${scoreData.rank}` : '#1'}
+              <View style={styles.breakdownRow}>
+                <View style={styles.breakdownItem}>
+                  <Text style={styles.breakdownNumGreen}>
+                    {scoreData?.correctCount ?? 0}
                   </Text>
-                  <Text style={styles.metricItemLabel}>Batch Rank</Text>
+                  <Text style={styles.breakdownLabel}>Correct</Text>
                 </View>
-
-                <View style={styles.metricItem}>
-                  <MaterialIcons name="grade" size={20} color={COLORS.primary} />
-                  <Text style={styles.metricItemValue}>
-                    {scoreData?.grade || (() => {
-                      const pct = scoreData?.percentage !== undefined ? Number(scoreData.percentage) : ((scoreData?.score || 0) / (currentExam?.totalMarks || 50)) * 100;
-                      return pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 60 ? 'B' : pct >= 40 ? 'C' : 'Pass';
-                    })()}
+                <View style={styles.breakdownItem}>
+                  <Text style={styles.breakdownNumRed}>
+                    {scoreData?.wrongCount ?? 0}
                   </Text>
-                  <Text style={styles.metricItemLabel}>Grade</Text>
+                  <Text style={styles.breakdownLabel}>Incorrect</Text>
                 </View>
-
-                <View style={styles.metricItem}>
-                  <MaterialIcons name="check-circle" size={20} color="#16a34a" />
-                  <Text style={styles.metricItemValue}>{scoreData?.correctCount ?? '-'}</Text>
-                  <Text style={styles.metricItemLabel}>Correct Qs</Text>
-                </View>
-
-                <View style={styles.metricItem}>
-                  <MaterialIcons name="timer" size={20} color="#6366f1" />
-                  <Text style={styles.metricItemValue}>
-                    {scoreData?.timeUsed ? `${Math.round(scoreData.timeUsed / 60)}m` : `${currentExam?.duration || 30}m`}
+                <View style={styles.breakdownItem}>
+                  <Text style={styles.breakdownNumGray}>
+                    {scoreData?.unansweredCount ?? 0}
                   </Text>
-                  <Text style={styles.metricItemLabel}>Time Taken</Text>
+                  <Text style={styles.breakdownLabel}>Skipped</Text>
                 </View>
               </View>
 
-              {scoreData?.isSuspicious && (
-                <View style={styles.suspiciousNotice}>
-                  <MaterialIcons name="warning" size={16} color="#dc2626" />
-                  <Text style={styles.suspiciousNoticeText}>Notice: App switches were detected during the exam.</Text>
-                </View>
-              )}
-
-              {/* WhatsApp Share & Action Buttons */}
-              <View style={styles.certActionsWrapper}>
-                <TouchableOpacity style={styles.whatsappBtn} onPress={handleShareWhatsApp} activeOpacity={0.85}>
+              <View style={styles.certActionsRow}>
+                <TouchableOpacity
+                  style={styles.shareWhatsappBtn}
+                  onPress={handleShareWhatsApp}
+                >
                   <MaterialIcons name="share" size={18} color="#ffffff" />
-                  <Text style={styles.whatsappBtnText}>Share on WhatsApp Status</Text>
+                  <Text style={styles.shareWhatsappText}>
+                    Share on WhatsApp
+                  </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.closeScorecardBtn} onPress={() => setShowResult(false)} activeOpacity={0.85}>
-                  <Text style={styles.closeScorecardBtnText}>Close Scorecard</Text>
+                <TouchableOpacity
+                  style={styles.closeCertBtn}
+                  onPress={() => setShowResult(false)}
+                >
+                  <Text style={styles.closeCertText}>Close</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  
-  /* Tabs Segmented Bar */
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  screenHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
+  },
+  drawerButton: {
+    padding: 6,
+    marginRight: 8,
+  },
+  screenTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.3,
+  },
+
+  /* 4 Filter Tabs */
   tabsWrapper: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 10,
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: "#f1f5f9",
   },
   tabsSegment: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 12,
-    padding: 3,
+    flexDirection: "row",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 16,
+    padding: 4,
+    justifyContent: "space-between",
   },
   tabSegmentBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    gap: 4,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
   },
   tabSegmentBtnActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
+    backgroundColor: COLORS.primary,
     elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   tabText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748b",
   },
   activeTabText: {
-    color: COLORS.primary,
-    fontWeight: '800',
-  },
-  tabCountPill: {
-    backgroundColor: '#e2e8f0',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-    minWidth: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabCountPillActive: {
-    backgroundColor: COLORS.primary,
-  },
-  tabCountText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#64748b',
-  },
-  tabCountTextActive: {
-    color: '#ffffff',
+    color: "#ffffff",
+    fontWeight: "800",
   },
 
-  listContent: {
-    padding: 16,
-    gap: 12,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    gap: 8,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#475569',
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#94a3b8',
-    textAlign: 'center',
+  /* Empty State */
+  emptyStateContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 35,
     paddingHorizontal: 20,
   },
+  emptyClockImage: {
+    width: 140,
+    height: 140,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 6,
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 18,
+  },
 
-  /* Card */
+  /* Suggested Mock Tests Section */
+  mockTestsSection: {
+    marginTop: 10,
+    paddingLeft: 16,
+  },
+  mockTestsSectionTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 14,
+    letterSpacing: -0.2,
+  },
+  mockTestsScrollContent: {
+    paddingRight: 16,
+    gap: 14,
+  },
+  mockTestCard: {
+    width: 230,
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+  },
+  mockTestCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  mockTestCardTitle: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  mockTestInstructor: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  batchCodePill: {
+    alignSelf: "flex-start",
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  batchCodePillText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  mockTestIconImage: {
+    width: 58,
+    height: 58,
+  },
+  mockTestLevelRow: {
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  mockLevelPill: {
+    alignSelf: "flex-start",
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  mockLevelPillText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  mockTestFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  mockTestMetaInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  mockTestMetaText: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  startMockBtn: {
+    backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 4,
+  },
+  startMockBtnText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  /* Exam List Cards */
+  examListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    gap: 12,
+  },
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    gap: 10,
+    borderColor: "#e2e8f0",
   },
   cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
   },
   title: {
     fontSize: 15,
-    fontWeight: '800',
-    color: '#1e293b',
+    fontWeight: "800",
+    color: "#0f172a",
     flex: 1,
+    marginRight: 8,
   },
   livePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef2f2',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#fecaca',
+    borderRadius: 8,
+    gap: 5,
   },
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#ef4444',
+    backgroundColor: "#dc2626",
   },
   livePillText: {
     fontSize: 10,
-    fontWeight: '900',
-    color: '#ef4444',
-    letterSpacing: 0.5,
+    fontWeight: "800",
+    color: "#dc2626",
   },
   scorePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primaryLightest,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffe4e6",
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    borderRadius: 8,
     gap: 4,
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
   },
   scorePillText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.primary,
   },
-
   cardMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
     gap: 8,
+    marginBottom: 12,
   },
   metaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
     paddingVertical: 4,
+    paddingHorizontal: 8,
     borderRadius: 8,
     gap: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
   },
   metaBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#475569",
   },
-
   cardFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f8fafc',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
   },
   dateInfoWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
-    flex: 1,
   },
   dateText: {
     fontSize: 11,
-    color: '#64748b',
-    fontWeight: '500',
+    color: "#94a3b8",
   },
-
   startButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 10,
     gap: 4,
   },
   startText: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   viewResultButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primaryLightest,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    backgroundColor: "#ffe4e6",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 10,
     gap: 4,
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
   },
   viewResultText: {
     color: COLORS.primary,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   disabledBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f5f9',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 8,
     gap: 4,
   },
   disabledText: {
+    color: "#64748b",
     fontSize: 11,
-    color: '#64748b',
-    fontWeight: '600',
+    fontWeight: "700",
   },
   missedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef2f2',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 8,
     gap: 4,
   },
   missedText: {
+    color: "#dc2626",
     fontSize: 11,
-    color: '#dc2626',
-    fontWeight: '700',
+    fontWeight: "700",
   },
 
-  /* Live Exam Screen */
+  /* Live Exam Modal */
   examContainer: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    paddingTop: 44,
+    backgroundColor: "#f8fafc",
   },
   examHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    backgroundColor: "#0f172a",
   },
   examTitleText: {
     fontSize: 15,
-    fontWeight: '800',
-    color: '#1e293b',
-    flex: 1,
-    marginRight: 10,
+    fontWeight: "800",
+    color: "#ffffff",
   },
-  timerText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#dc2626',
-    backgroundColor: '#fee2e2',
+  timerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    paddingVertical: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 10,
+    gap: 5,
     marginRight: 8,
   },
+  timerText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
   reviewBtnHeader: {
-    backgroundColor: COLORS.primaryLightest,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
-  },
-  reviewBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  proctorCameraContainer: {
-    height: 90,
-    width: 120,
-    borderRadius: 12,
-    overflow: 'hidden',
-    alignSelf: 'flex-end',
-    marginRight: 16,
-    marginTop: 8,
-    borderWidth: 2,
-    borderColor: '#dc2626',
-  },
-  camera: {
-    flex: 1,
+    padding: 6,
   },
   questionContainer: {
     flex: 1,
     padding: 18,
   },
+  questionProgressRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   questionNumber: {
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: "700",
     color: COLORS.primary,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  },
+  questionMarksBadge: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+    backgroundColor: "#e2e8f0",
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 6,
   },
   questionText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-    lineHeight: 24,
+    fontWeight: "700",
+    color: "#0f172a",
+    lineHeight: 23,
     marginBottom: 20,
   },
   optionButton: {
-    backgroundColor: '#f8fafc',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
   },
   optionButtonSelected: {
-    backgroundColor: COLORS.primaryLightest,
     borderColor: COLORS.primary,
+    backgroundColor: "#fff1f2",
+  },
+  optionRadioCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  optionRadioCircleSelected: {
+    backgroundColor: COLORS.primary,
+  },
+  optionLetter: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  optionLetterSelected: {
+    color: "#ffffff",
   },
   optionText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
+    color: "#334155",
+    fontWeight: "600",
+    flex: 1,
   },
   optionTextSelected: {
-    color: COLORS.primary,
-    fontWeight: '800',
+    color: "#0f172a",
+    fontWeight: "800",
   },
   navigationFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     padding: 16,
+    backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    backgroundColor: '#ffffff',
-    gap: 12,
+    borderTopColor: "#f1f5f9",
   },
   navBtn: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#64748b",
     paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    alignItems: 'center',
   },
   navBtnDisabled: {
     opacity: 0.4,
   },
   navBtnText: {
+    color: "#ffffff",
+    fontWeight: "800",
     fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
   },
   submitBtn: {
-    backgroundColor: '#16a34a',
+    backgroundColor: "#16a34a",
   },
   submitBtnText: {
-    color: '#ffffff',
-    fontWeight: '800',
+    color: "#ffffff",
+    fontWeight: "800",
     fontSize: 14,
   },
 
   /* Modals */
   reviewModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
     padding: 20,
   },
   reviewModalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 20,
     padding: 20,
-    maxHeight: '80%',
   },
-  resultTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#0f172a',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  resultMessage: {
-    fontSize: 13,
-    color: '#475569',
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 14,
-  },
-  finishBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    marginHorizontal: 4,
-  },
-  finishBtnText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-
   reviewTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0f172a",
     marginBottom: 14,
-    textAlign: 'center',
   },
   gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    justifyContent: 'center',
     marginBottom: 16,
   },
   gridItem: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
   gridItemAttempted: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: "#16a34a",
   },
   gridItemUnattempted: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#cbd5e1',
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
   },
   gridText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#64748b',
+    color: "#475569",
+    fontWeight: "700",
   },
   gridTextAttempted: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#ffffff',
+    color: "#ffffff",
+    fontWeight: "800",
   },
   closeReviewBtn: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: COLORS.primary,
     paddingVertical: 11,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   closeReviewText: {
+    color: "#ffffff",
+    fontWeight: "800",
     fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
   },
 
-  /* Certificate / Result Modal */
+  resultTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  resultMessage: {
+    fontSize: 13,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  finishBtn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  finishBtnText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+
+  /* Scorecard */
   resultModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    justifyContent: 'center',
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
     padding: 16,
   },
   resultModalScroll: {
-    paddingVertical: 20,
+    flexGrow: 1,
+    justifyContent: "center",
   },
   certificateCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 8,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    padding: 20,
+    overflow: "hidden",
   },
   certTopRibbon: {
     height: 6,
     backgroundColor: COLORS.primary,
-    width: '100%',
+    borderRadius: 3,
+    marginBottom: 16,
   },
   certHeader: {
-    alignItems: 'center',
-    paddingTop: 18,
-    paddingHorizontal: 16,
-  },
-  certLogoBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.primaryLightest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
+    alignItems: "center",
+    marginBottom: 14,
   },
   certAcademyName: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#1e1b4b',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  certSubtitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#64748b',
-    marginTop: 2,
-    textAlign: 'center',
-  },
-
-  /* Celebration Bouquet & Motivational Banner */
-  celebrationBanner: {
-    marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 16,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  celebrationGold: {
-    backgroundColor: '#fefce8',
-    borderColor: '#fde047',
-  },
-  celebrationGreen: {
-    backgroundColor: '#f0fdf4',
-    borderColor: '#86efac',
-  },
-  celebrationBlue: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#93c5fd',
-  },
-  celebrationAmber: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fcd34d',
-  },
-  bouquetIcon: {
-    fontSize: 22,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  celebrationTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 3,
-  },
-  celebrationDesc: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#475569',
-    textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: 6,
-  },
-
-  /* Student Info Box */
-  studentInfoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-    gap: 12,
-  },
-  studentAvatarPill: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  studentAvatarText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  studentNameLabel: {
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: "900",
     color: COLORS.primary,
     letterSpacing: 0.5,
   },
-  studentNameValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginTop: 1,
+  certSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
   },
-  examNameValue: {
-    fontSize: 11,
-    color: '#64748b',
-    fontWeight: '600',
-    marginTop: 1,
+  celebrationBanner: {
+    borderRadius: 14,
+    padding: 12,
+    alignItems: "center",
+    marginBottom: 16,
   },
-
-  /* Score Hero Section */
+  celebrationGold: {
+    backgroundColor: "#fef3c7",
+  },
+  celebrationGreen: {
+    backgroundColor: "#dcfce7",
+  },
+  celebrationAmber: {
+    backgroundColor: "#fee2e2",
+  },
+  bouquetIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  celebrationTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    textAlign: "center",
+  },
   scoreHeroSection: {
-    alignItems: 'center',
-    marginTop: 14,
-    marginBottom: 10,
+    alignItems: "center",
+    marginBottom: 16,
   },
   scoreCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: COLORS.primaryLightest,
-    borderWidth: 4,
+    backgroundColor: "#fff1f2",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 3,
     borderColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
   },
   scoreHeroValue: {
-    fontSize: 32,
-    fontWeight: '900',
+    fontSize: 28,
+    fontWeight: "900",
     color: COLORS.primary,
-    lineHeight: 36,
   },
   scoreHeroTotal: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-    marginTop: -2,
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
   },
   percentagePill: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    borderRadius: 6,
     marginTop: 4,
   },
   percentagePillText: {
+    color: "#ffffff",
     fontSize: 10,
-    fontWeight: '800',
-    color: '#ffffff',
+    fontWeight: "800",
   },
-
-  /* Metrics Grid */
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: 16,
-    gap: 8,
-    marginTop: 4,
-  },
-  metricItem: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  metricItemValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1e293b',
-    marginTop: 4,
-  },
-  metricItemLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#64748b',
-    marginTop: 1,
-  },
-
-  suspiciousNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginHorizontal: 16,
-    marginTop: 10,
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    padding: 8,
-    borderRadius: 10,
-  },
-  suspiciousNoticeText: {
-    color: '#b91c1c',
-    fontSize: 11,
-    fontWeight: '600',
-    flex: 1,
-  },
-
-  /* Certificate Action Buttons */
-  certActionsWrapper: {
-    padding: 16,
-    gap: 8,
-  },
-  whatsappBtn: {
-    backgroundColor: '#25D366',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    backgroundColor: "#f8fafc",
     borderRadius: 14,
-    gap: 8,
-    shadowColor: '#25D366',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
+    paddingVertical: 12,
+    marginBottom: 18,
   },
-  whatsappBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
+  breakdownItem: {
+    alignItems: "center",
   },
-  closeScorecardBtn: {
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
+  breakdownNumGreen: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#16a34a",
+  },
+  breakdownNumRed: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#dc2626",
+  },
+  breakdownNumGray: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#94a3b8",
+  },
+  breakdownLabel: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  certActionsRow: {
+    gap: 10,
+  },
+  shareWhatsappBtn: {
+    backgroundColor: "#25D366",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+  },
+  shareWhatsappText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  closeCertBtn: {
+    backgroundColor: "#f1f5f9",
     paddingVertical: 11,
     borderRadius: 12,
+    alignItems: "center",
   },
-  closeScorecardBtnText: {
-    color: '#475569',
+  closeCertText: {
+    color: "#475569",
+    fontWeight: "800",
     fontSize: 13,
-    fontWeight: '700',
   },
-
-  /* Access Denied Styles for Inactive Students */
-  accessDeniedContainer: {
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 30,
-  },
-  accessDeniedCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 360,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  accessDeniedIconWrapper: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#fee2e2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  accessDeniedTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#991b1b',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  accessDeniedSubtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  accessDeniedBadge: {
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-  accessDeniedBadgeText: {
-    color: '#dc2626',
-    fontWeight: '800',
-    fontSize: 11,
-    letterSpacing: 0.5,
-  }
 });

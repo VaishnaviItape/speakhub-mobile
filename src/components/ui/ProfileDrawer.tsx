@@ -15,13 +15,14 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
 import { db } from '../../config/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
-const DRAWER_WIDTH = width * 0.8;
+const DRAWER_WIDTH = Math.min(width * 0.72, 300);
 
 interface ProfileDrawerProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ interface ProfileDrawerProps {
 export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [profileData, setProfileData] = useState<any>(null);
   const [batchName, setBatchName] = useState<string>('Unassigned');
@@ -145,18 +147,30 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
         >
           <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
             <View style={styles.menuWrapper}>
-              {/* Top User Info Header */}
-              <View style={styles.userHeaderRow}>
-                <View style={[styles.avatarIconCircle, { backgroundColor: COLORS.primaryLightest }]}>
-                  <MaterialIcons name="person" size={32} color={COLORS.primary} />
+              {/* Top User Info Header with Close Button */}
+              <View style={[styles.userHeaderRow, { paddingTop: Math.max(insets.top, 20) }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                  <View style={[styles.avatarIconCircle, { backgroundColor: COLORS.primaryLightest }]}>
+                    <MaterialIcons name="person" size={28} color={COLORS.primary} />
+                  </View>
+
+                  <View style={styles.userInfoCol}>
+                    <Text style={styles.greetingTitle} numberOfLines={1}>Hi, {name.split(' ')[0]}</Text>
+                    <TouchableOpacity onPress={() => setIsProfileModalOpen(true)}>
+                      <Text style={[styles.viewProfileText, { color: COLORS.primary, fontWeight: '700' }]}>View profile ›</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                <View style={styles.userInfoCol}>
-                  <Text style={styles.greetingTitle}>Hi, {name.split(' ')[0]}</Text>
-                  <TouchableOpacity onPress={() => setIsProfileModalOpen(true)}>
-                    <Text style={[styles.viewProfileText, { color: COLORS.primary, fontWeight: '600' }]}>View profile ›</Text>
-                  </TouchableOpacity>
-                </View>
+                {/* Explicit Close Button */}
+                <TouchableOpacity 
+                  style={styles.closeDrawerButton} 
+                  onPress={onClose}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <MaterialIcons name="close" size={22} color="#64748b" />
+                </TouchableOpacity>
               </View>
 
               {/* Minimalist Developed Icon List Options */}
@@ -295,29 +309,41 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   menuWrapper: {
-    paddingHorizontal: 20,
-    paddingTop: 40,
+    paddingHorizontal: 18,
+    paddingTop: 10,
     paddingBottom: 30,
   },
   userHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 24,
   },
+  closeDrawerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
   avatarIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#dcfce7',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ffe4e6',
     justifyContent: 'center',
     alignItems: 'center',
   },
   userInfoCol: {
-    marginLeft: 14,
+    marginLeft: 12,
+    flex: 1,
   },
   greetingTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '800',
     color: '#0f172a',
   },
   viewProfileText: {

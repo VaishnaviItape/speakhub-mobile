@@ -67,7 +67,9 @@ export default function AppLayout() {
         <Tabs.Screen 
           name="dashboard" 
           options={{ 
+            headerShown: false,
             title: 'Home',
+            tabBarLabel: 'Home',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "home" : "home"} size={23} color={color} />
             )
@@ -76,7 +78,9 @@ export default function AppLayout() {
         <Tabs.Screen 
           name="notes" 
           options={{ 
+            headerShown: false,
             title: 'Notes',
+            tabBarLabel: 'Notes',
             headerTitle: 'Study Notes & Batches',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "menu-book" : "menu-book"} size={23} color={color} />
@@ -86,7 +90,9 @@ export default function AppLayout() {
         <Tabs.Screen 
           name="exams" 
           options={{ 
+            headerShown: false,
             title: 'Exams',
+            tabBarLabel: 'Exams',
             headerTitle: 'Exams & Quizzes',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "assignment" : "assignment"} size={23} color={color} />
@@ -97,7 +103,8 @@ export default function AppLayout() {
           name="profile" 
           options={{ 
             title: 'Profile',
-            headerTitle: 'Student Hub',
+            tabBarLabel: 'Profile',
+            headerTitle: 'Student Profile',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "person" : "person-outline"} size={23} color={color} />
             )
