@@ -933,20 +933,29 @@ export default function ExamsScreen() {
   };
 
   const categorizedExams = () => {
-    const now = new Date().getTime();
+    const now = Date.now();
     const live: any[] = [];
     const upcoming: any[] = [];
     const completed: any[] = [];
     const missed: any[] = [];
 
+    // Helper to check if student already attempted this exam/mock test
+    const findAttempt = (examId: string, title?: string) => {
+      return attempts.find(
+        (a) =>
+          (a.examId && examId && a.examId === examId) ||
+          (a.examTitle && title && a.examTitle.trim().toLowerCase() === title.trim().toLowerCase())
+      );
+    };
+
     // 1. Process all Real Exams from Firestore
     exams.forEach((ex) => {
       const start = ex.startDate ? new Date(ex.startDate).getTime() : 0;
       const end = ex.endDate ? new Date(ex.endDate).getTime() : 0;
-      const attempt = attempts.find((a) => a.examId === ex.id);
+      const attempt = findAttempt(ex.id, ex.title);
 
       if (attempt) {
-        // Handled in completed below
+        // Already completed - NEVER show in missed or live or upcoming
       } else if (start && now < start) {
         upcoming.push(ex);
       } else if (end && now > end) {
@@ -956,9 +965,9 @@ export default function ExamsScreen() {
       }
     });
 
-    // 2. Also add suggested mock tests to Live if not attempted yet
+    // 2. Also add suggested mock tests to Live ONLY if not attempted yet
     SUGGESTED_MOCK_TESTS.forEach((mock) => {
-      const attempt = attempts.find((a) => a.examId === mock.id);
+      const attempt = findAttempt(mock.id, mock.title);
       if (!attempt) {
         live.push(mock);
       }
@@ -967,8 +976,8 @@ export default function ExamsScreen() {
     // 3. Process all Completed attempts (both real exams and mock tests)
     attempts.forEach((att) => {
       const matchingExam =
-        exams.find((e) => e.id === att.examId) ||
-        SUGGESTED_MOCK_TESTS.find((m) => m.id === att.examId);
+        exams.find((e) => e.id === att.examId || (e.title && att.examTitle && e.title.toLowerCase() === att.examTitle.toLowerCase())) ||
+        SUGGESTED_MOCK_TESTS.find((m) => m.id === att.examId || (m.title && att.examTitle && m.title.toLowerCase() === att.examTitle.toLowerCase()));
 
       completed.push({
         id: att.examId || att.id,
@@ -977,7 +986,7 @@ export default function ExamsScreen() {
         numberOfQuestions:
           matchingExam?.numberOfQuestions ||
           (Number(att.correctCount || 0) + Number(att.wrongCount || 0) + Number(att.unansweredCount || 0)) ||
-          15,
+          10,
         totalMarks: att.totalMarks || matchingExam?.totalMarks || 50,
         endDate: att.submittedAt,
         attempt: att,
