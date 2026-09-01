@@ -707,10 +707,6 @@ export default function DashboardScreen() {
     activeBatch?.timeSlot ||
     "April-2026 • Evening (08:00 - 09:30 PM)";
 
-  const unreadCount = notifications.filter(
-    (n) => !readNotifIds.includes(n.id)
-  ).length;
-
   return (
     <View style={[styles.mainScreen, { paddingTop: insets.top }]}>
       {/* In-App Floating Push Notification Banner (styled like OS push notification) */}
