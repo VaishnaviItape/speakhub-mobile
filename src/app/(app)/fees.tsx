@@ -15,6 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
@@ -160,7 +161,37 @@ Thank you!`;
     try {
       const asset = Asset.fromModule(require('../../../assets/images/feeQR.jpeg'));
       await asset.downloadAsync();
-      const localUri = asset.localUri || asset.uri;
+      
+      let localUri = asset.localUri || asset.uri;
+      const targetFileUri = `${FileSystem.cacheDirectory}feeQR.jpeg`;
+
+      if (localUri) {
+        if (localUri.startsWith('http://') || localUri.startsWith('https://')) {
+          const downloadRes = await FileSystem.downloadAsync(localUri, targetFileUri);
+          localUri = downloadRes.uri;
+        } else if (!localUri.startsWith('file://')) {
+          if (localUri.startsWith('/')) {
+            localUri = `file://${localUri}`;
+          } else {
+            try {
+              await FileSystem.copyAsync({
+                from: localUri,
+                to: targetFileUri,
+              });
+              localUri = targetFileUri;
+            } catch {
+              localUri = `file://${localUri}`;
+            }
+          }
+        }
+      } else if (asset.uri) {
+        const downloadRes = await FileSystem.downloadAsync(asset.uri, targetFileUri);
+        localUri = downloadRes.uri;
+      }
+
+      if (!localUri) {
+        throw new Error('Unable to resolve QR code file path');
+      }
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(localUri, {

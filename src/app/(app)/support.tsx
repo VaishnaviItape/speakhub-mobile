@@ -30,7 +30,7 @@ export default function SupportScreen() {
   };
 
   const handleEmail = () => {
-    Linking.openURL("mailto:support@speakhubacademy.com");
+    Linking.openURL("mailto:speakhubacademy26@gmail.com");
   };
 
   const toggleFaq = (index: number) => {
@@ -113,7 +113,7 @@ export default function SupportScreen() {
             </View>
             <View style={styles.emailCardText}>
               <Text style={styles.emailCardTitle}>Send an Email</Text>
-              <Text style={styles.emailCardSub}>support@speakhubacademy.com</Text>
+              <Text style={styles.emailCardSub}>speakhubacademy26@gmail.com</Text>
             </View>
             <MaterialIcons name="arrow-forward-ios" size={16} color={COLORS.textLight} />
           </TouchableOpacity>
