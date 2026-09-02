@@ -23,6 +23,36 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
 const { width } = Dimensions.get('window');
 const DONE_HOMEWORK_KEY = '@speakhub_done_homework_ids';
 
+// Safe Date Helper Functions
+const parseToDate = (val: any): Date => {
+  if (!val) return new Date();
+  if (val instanceof Date) return isNaN(val.getTime()) ? new Date() : val;
+  if (typeof val?.toDate === 'function') {
+    try {
+      const d = val.toDate();
+      if (!isNaN(d.getTime())) return d;
+    } catch {}
+  }
+  if (val?.seconds) {
+    const d = new Date(val.seconds * 1000);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? new Date() : d;
+};
+
+const formatDateSafe = (d: any, fallback: string = 'Recent'): string => {
+  if (!d) return fallback;
+  if (d instanceof Date && !isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  const parsed = parseToDate(d);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  return fallback;
+};
+
 export default function HomeworkScreen() {
   const { user } = useAuth();
   const { showLoader, hideLoader } = useLoader();
@@ -141,21 +171,14 @@ export default function HomeworkScreen() {
 
         if (isAssigned) {
           // Normalize publishDate
-          let pDate: Date = new Date();
-          if (data.publishDate) {
-            pDate = data.publishDate.toDate ? data.publishDate.toDate() : new Date(data.publishDate);
-          } else if (data.createdAt) {
-            pDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-          }
+          let pDate: Date = parseToDate(data.publishDate || data.createdAt);
 
           // Normalize dueDate
-          let dDate: Date = new Date();
-          if (data.dueDate) {
-            dDate = data.dueDate.toDate ? data.dueDate.toDate() : new Date(data.dueDate);
-          }
+          let dDate: Date = parseToDate(data.dueDate);
 
           fetchedList.push({
             id: docSnap.id,
+            ...data,
             title: data.title || 'Daily Speaking & Grammar Practice',
             topic: data.topic || data.partChapter || 'Daily Assignment',
             description: data.description || data.instructions || 'Practice the assigned daily homework task and send your voice note or photo on WhatsApp.',
@@ -168,14 +191,17 @@ export default function HomeworkScreen() {
             dueDateString: !isNaN(dDate.getTime()) ? dDate.toISOString().split('T')[0] : '',
             dueTime: data.dueTime || '11:59 PM',
             courseName: data.courseName || 'Spoken English',
-            batchName: data.batchName || 'General Batch',
-            ...data
+            batchName: data.batchName || 'General Batch'
           });
         }
       });
 
       // Sort by publish date descending (most recent first)
-      fetchedList.sort((a, b) => b.publishDate.getTime() - a.publishDate.getTime());
+      fetchedList.sort((a, b) => {
+        const timeA = a.publishDate instanceof Date ? a.publishDate.getTime() : 0;
+        const timeB = b.publishDate instanceof Date ? b.publishDate.getTime() : 0;
+        return timeB - timeA;
+      });
       setHomeworks(fetchedList);
 
     } catch (e) {
@@ -206,7 +232,7 @@ export default function HomeworkScreen() {
 
   const handleSendOnWhatsApp = (hw: any) => {
     const studentName = user?.name || 'Student';
-    const dateFormatted = hw.publishDate ? hw.publishDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today';
+    const dateFormatted = formatDateSafe(hw.publishDate, 'Today');
     const msg = `*Speak Hub Academy - Homework Submission*\n\n` +
       `👤 *Student Name:* ${studentName}\n` +
       `📚 *Topic:* ${hw.title}\n` +
@@ -214,8 +240,16 @@ export default function HomeworkScreen() {
       `🎓 *Batch:* ${hw.batchName || batchName}\n\n` +
       `_Hello Teacher, I have completed my homework. Please check my attached voice recording / photos / notes!_`;
 
-    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
-      Alert.alert("WhatsApp Not Available", "Could not launch WhatsApp. Please make sure WhatsApp is installed on your device.");
+    const rawPhone = hw.whatsappNumber || hw.teacherPhone || hw.phone || '9970964742';
+    const cleanPhone = String(rawPhone).replace(/[^0-9]/g, '');
+    const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const waUrl = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(msg)}`;
+
+    Linking.openURL(waUrl).catch(() => {
+      // Fallback to whatsapp scheme
+      Linking.openURL(`whatsapp://send?phone=${phoneWithCode}&text=${encodeURIComponent(msg)}`).catch(() => {
+        Alert.alert("WhatsApp Not Available", "Could not launch WhatsApp. Please make sure WhatsApp is installed on your device.");
+      });
     });
   };
 
@@ -249,7 +283,8 @@ export default function HomeworkScreen() {
     }
 
     if (selectedDateFilter === 'week') {
-      return hw.publishDate.getTime() >= oneWeekAgo.getTime();
+      const pTime = hw.publishDate instanceof Date ? hw.publishDate.getTime() : parseToDate(hw.publishDate).getTime();
+      return pTime >= oneWeekAgo.getTime();
     }
 
     if (selectedDateFilter === 'specific') {
@@ -406,8 +441,8 @@ export default function HomeworkScreen() {
         {filteredHomeworks.length > 0 ? (
           filteredHomeworks.map((hw, idx) => {
             const isCompleted = completedHwIds.includes(hw.id);
-            const pubDateStr = hw.publishDate ? hw.publishDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recent';
-            const dueDateStr = hw.dueDate ? hw.dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Flexible';
+            const pubDateStr = formatDateSafe(hw.publishDate, 'Recent');
+            const dueDateStr = formatDateSafe(hw.dueDate, 'Flexible');
             const isDueToday = hw.dueDateString === todayStr || hw.publishDateString === todayStr;
 
             return (
