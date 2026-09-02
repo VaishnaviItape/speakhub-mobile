@@ -5,7 +5,6 @@ import {
   StyleSheet, 
   FlatList, 
   TouchableOpacity, 
-  ActivityIndicator, 
   ScrollView 
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -18,23 +17,33 @@ import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/fire
 interface AttendanceRecord {
   id: string;
   date: string; // YYYY-MM-DD
-  status: 'present' | 'absent' | 'late' | 'leave';
+  status: 'present' | 'absent' | 'late' | 'leave' | 'holiday';
   batchName?: string;
   remarks?: string;
   markedBy?: string;
+  isHoliday?: boolean;
+}
+
+interface HolidayRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  description?: string;
 }
 
 export default function AttendanceScreen() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<AttendanceRecord[]>([]);
+  const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const { showLoader, hideLoader } = useLoader();
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Present' | 'Absent'>('All');
+  const [activeFilter, setActiveFilter] = useState<'All' | 'Present' | 'Absent' | 'Holiday'>('All');
 
   // Calendar State
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date());
   const [selectedDateStr, setSelectedDateStr] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  // ── Fetch Attendance (real-time) ──────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
 
@@ -43,7 +52,6 @@ export default function AttendanceScreen() {
 
     showLoader();
 
-    // REAL-TIME FIRESTORE LISTENER
     const q = query(collection(db, 'attendance'), where('studentId', '==', userId));
     const unsubscribe = onSnapshot(
       q,
@@ -71,7 +79,8 @@ export default function AttendanceScreen() {
             status: data.status || 'present',
             batchName: bName || data.batchId,
             remarks: data.remarks || '',
-            markedBy: data.markedBy || ''
+            markedBy: data.markedBy || '',
+            isHoliday: data.isHoliday || data.status === 'holiday'
           });
         }
 
@@ -88,12 +97,36 @@ export default function AttendanceScreen() {
     return () => unsubscribe();
   }, [user]);
 
-  // Overall Statistics
+  // ── Fetch Holidays (real-time) ────────────────────────────────────────────
+  useEffect(() => {
+    const hq = query(collection(db, 'holidays'));
+    const unsubHolidays = onSnapshot(
+      hq,
+      (snap) => {
+        const list: HolidayRecord[] = [];
+        snap.forEach(d => {
+          list.push({ id: d.id, ...d.data() } as HolidayRecord);
+        });
+        setHolidays(list);
+      },
+      (err) => console.error('Holiday snapshot error:', err)
+    );
+    return () => unsubHolidays();
+  }, []);
+
+  // ── Derived maps ──────────────────────────────────────────────────────────
+  const holidayMap: { [dateStr: string]: HolidayRecord } = {};
+  holidays.forEach(h => { holidayMap[h.date] = h; });
+
+  // Overall Statistics (exclude holidays from rate calc)
   const presentCount = logs.filter(l => l.status === 'present').length;
   const absentCount = logs.filter(l => l.status === 'absent').length;
   const lateCount = logs.filter(l => l.status === 'late' || l.status === 'leave').length;
+  const holidayCount = logs.filter(l => l.status === 'holiday' || l.isHoliday).length;
   const totalCount = logs.length;
-  const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 100;
+  // Attendance rate calculated excluding holiday days
+  const effectiveTotal = totalCount - holidayCount;
+  const attendanceRate = effectiveTotal > 0 ? Math.round((presentCount / effectiveTotal) * 100) : 100;
 
   // Calendar Helpers
   const year = currentMonthDate.getFullYear();
@@ -138,6 +171,7 @@ export default function AttendanceScreen() {
 
   const monthGrid = getMonthDaysGrid();
   const selectedLog = logsByDateMap[selectedDateStr];
+  const selectedHoliday = holidayMap[selectedDateStr];
 
   const monthName = currentMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
   const todayStr = new Date().toISOString().split('T')[0];
@@ -145,29 +179,26 @@ export default function AttendanceScreen() {
   const filteredLogs = logs.filter(item => {
     if (activeFilter === 'Present') return item.status === 'present';
     if (activeFilter === 'Absent') return item.status === 'absent';
+    if (activeFilter === 'Holiday') return item.status === 'holiday' || item.isHoliday;
     return true;
   });
 
-  const renderAttendanceCard = ({ item }: { item: AttendanceRecord }) => {
-    let badgeBg = '#dcfce7';
-    let badgeText = '#15803d';
-    let statusLabel = 'Present';
-
-    if (item.status === 'absent') {
-      badgeBg = '#fee2e2';
-      badgeText = '#b91c1c';
-      statusLabel = 'Absent';
-    } else if (item.status === 'late') {
-      badgeBg = '#fef3c7';
-      badgeText = '#b45309';
-      statusLabel = 'Late';
-    } else if (item.status === 'leave') {
-      badgeBg = '#f3e8ff';
-      badgeText = '#6b21a8';
-      statusLabel = 'Leave';
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'present':  return { bg: '#dcfce7', text: '#15803d', label: 'Present' };
+      case 'absent':   return { bg: '#fee2e2', text: '#b91c1c', label: 'Absent' };
+      case 'late':     return { bg: '#fef3c7', text: '#b45309', label: 'Late' };
+      case 'leave':    return { bg: '#f3e8ff', text: '#6b21a8', label: 'Leave' };
+      case 'holiday':  return { bg: '#fef3c7', text: '#92400e', label: 'Holiday 🎉' };
+      default:         return { bg: '#dcfce7', text: '#15803d', label: 'Present' };
     }
+  };
 
-    const formattedDate = new Date(item.date).toLocaleDateString('en-GB', {
+  const renderAttendanceCard = ({ item }: { item: AttendanceRecord }) => {
+    const { bg, text, label } = getStatusStyle(item.status);
+    const holiday = holidayMap[item.date];
+
+    const formattedDate = new Date(item.date + 'T00:00:00').toLocaleDateString('en-GB', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -175,16 +206,26 @@ export default function AttendanceScreen() {
     });
 
     return (
-      <View style={styles.recordCard}>
+      <View style={[styles.recordCard, (item.status === 'holiday' || item.isHoliday) && styles.holidayCard]}>
         <View style={styles.recordHeader}>
           <View style={styles.dateContainer}>
-            <MaterialIcons name="event" size={18} color={COLORS.primary} />
+            <MaterialIcons name="event" size={18} color={(item.status === 'holiday' || item.isHoliday) ? '#d97706' : COLORS.primary} />
             <Text style={styles.dateText}>{formattedDate}</Text>
           </View>
-          <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-            <Text style={[styles.badgeText, { color: badgeText }]}>{statusLabel}</Text>
+          <View style={[styles.badge, { backgroundColor: bg }]}>
+            <Text style={[styles.badgeText, { color: text }]}>{label}</Text>
           </View>
         </View>
+
+        {/* Holiday name strip */}
+        {(item.status === 'holiday' || item.isHoliday) && holiday && (
+          <View style={styles.holidayNameRow}>
+            <Text style={styles.holidayNameText}>🎉 {holiday.name}</Text>
+            {holiday.description ? (
+              <Text style={styles.holidayDescText}>{holiday.description}</Text>
+            ) : null}
+          </View>
+        )}
 
         {item.batchName ? (
           <Text style={styles.batchText}>Batch: {item.batchName}</Text>
@@ -218,6 +259,13 @@ export default function AttendanceScreen() {
         <View style={styles.statBox}>
           <Text style={[styles.statNumber, { color: '#dc2626' }]}>{absentCount}</Text>
           <Text style={styles.statLabel}>Days Absent</Text>
+        </View>
+
+        <View style={styles.statDivider} />
+
+        <View style={styles.statBox}>
+          <Text style={[styles.statNumber, { color: '#d97706' }]}>{holidayCount}</Text>
+          <Text style={styles.statLabel}>Holidays</Text>
         </View>
       </View>
 
@@ -285,13 +333,18 @@ export default function AttendanceScreen() {
                 }
 
                 const record = logsByDateMap[item.dateStr];
+                const isHolidayDate = !!holidayMap[item.dateStr];
                 const isSelected = selectedDateStr === item.dateStr;
                 const isToday = item.dateStr === todayStr;
 
                 let dotColor = 'transparent';
                 let cellBg = '#ffffff';
 
-                if (record?.status === 'present') {
+                // Holiday takes priority in color coding
+                if (isHolidayDate && !record) {
+                  dotColor = '#f59e0b';
+                  cellBg = '#fffbeb';
+                } else if (record?.status === 'present') {
                   dotColor = '#16a34a';
                   cellBg = '#f0fdf4';
                 } else if (record?.status === 'absent') {
@@ -303,6 +356,9 @@ export default function AttendanceScreen() {
                 } else if (record?.status === 'leave') {
                   dotColor = '#9333ea';
                   cellBg = '#faf5ff';
+                } else if (record?.status === 'holiday' || record?.isHoliday) {
+                  dotColor = '#f59e0b';
+                  cellBg = '#fffbeb';
                 }
 
                 return (
@@ -312,18 +368,22 @@ export default function AttendanceScreen() {
                       styles.dayCell,
                       { backgroundColor: cellBg },
                       isToday && styles.todayCell,
-                      isSelected && styles.selectedCell
+                      isSelected && styles.selectedCell,
+                      isHolidayDate && !isSelected && styles.holidayCell
                     ]}
                     onPress={() => setSelectedDateStr(item.dateStr)}
                   >
                     <Text style={[
                       styles.dayNumberText,
-                      isSelected && { color: '#ffffff', fontWeight: 'bold' }
+                      isSelected && { color: '#ffffff', fontWeight: 'bold' },
+                      isHolidayDate && !isSelected && { color: '#92400e' }
                     ]}>
                       {item.day}
                     </Text>
 
-                    {record ? (
+                    {isHolidayDate && !isSelected ? (
+                      <Text style={styles.holidayDayEmoji}>🎉</Text>
+                    ) : record ? (
                       <View style={[
                         styles.statusDot, 
                         { backgroundColor: isSelected ? '#ffffff' : dotColor }
@@ -350,19 +410,36 @@ export default function AttendanceScreen() {
                 <View style={[styles.legendDot, { backgroundColor: '#d97706' }]} />
                 <Text style={styles.legendText}>Late</Text>
               </View>
+              <View style={styles.legendItem}>
+                <Text style={styles.legendEmoji}>🎉</Text>
+                <Text style={[styles.legendText, { color: '#92400e' }]}>Holiday</Text>
+              </View>
             </View>
           </View>
 
           {/* Selected Date Detail Card */}
-          <View style={styles.detailCard}>
+          <View style={[styles.detailCard, selectedHoliday && styles.holidayDetailCard]}>
             <Text style={styles.detailCardTitle}>
-              {new Date(selectedDateStr).toLocaleDateString('en-GB', {
+              {new Date(selectedDateStr + 'T00:00:00').toLocaleDateString('en-GB', {
                 weekday: 'long',
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric'
               })}
             </Text>
+
+            {/* Holiday Detail Banner */}
+            {selectedHoliday && (
+              <View style={styles.holidayDetailBanner}>
+                <Text style={styles.holidayDetailIcon}>🎉</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.holidayDetailName}>{selectedHoliday.name}</Text>
+                  {selectedHoliday.description ? (
+                    <Text style={styles.holidayDetailDesc}>{selectedHoliday.description}</Text>
+                  ) : null}
+                </View>
+              </View>
+            )}
 
             {selectedLog ? (
               <View style={styles.selectedDetailBody}>
@@ -371,18 +448,16 @@ export default function AttendanceScreen() {
                   <View style={[
                     styles.badge,
                     {
-                      backgroundColor: selectedLog.status === 'present' ? '#dcfce7' : 
-                                       selectedLog.status === 'absent' ? '#fee2e2' : '#fef3c7'
+                      backgroundColor: getStatusStyle(selectedLog.status).bg
                     }
                   ]}>
                     <Text style={[
                       styles.badgeText,
                       {
-                        color: selectedLog.status === 'present' ? '#15803d' : 
-                               selectedLog.status === 'absent' ? '#b91c1c' : '#b45309'
+                        color: getStatusStyle(selectedLog.status).text
                       }
                     ]}>
-                      {selectedLog.status.toUpperCase()}
+                      {getStatusStyle(selectedLog.status).label}
                     </Text>
                   </View>
                 </View>
@@ -401,7 +476,7 @@ export default function AttendanceScreen() {
               </View>
             ) : (
               <Text style={styles.noAttendanceText}>
-                No attendance recorded for this date.
+                {selectedHoliday ? 'No class on this holiday.' : 'No attendance recorded for this date.'}
               </Text>
             )}
           </View>
@@ -411,14 +486,21 @@ export default function AttendanceScreen() {
         <View style={{ flex: 1 }}>
           {/* Filter Tabs */}
           <View style={styles.filterContainer}>
-            {(['All', 'Present', 'Absent'] as const).map(tab => (
+            {(['All', 'Present', 'Absent', 'Holiday'] as const).map(tab => (
               <TouchableOpacity
                 key={tab}
-                style={[styles.filterTab, activeFilter === tab && styles.activeFilterTab]}
+                style={[
+                  styles.filterTab, 
+                  activeFilter === tab && styles.activeFilterTab,
+                  tab === 'Holiday' && activeFilter === tab && styles.activeHolidayFilterTab
+                ]}
                 onPress={() => setActiveFilter(tab)}
               >
-                <Text style={[styles.filterText, activeFilter === tab && styles.activeFilterText]}>
-                  {tab}
+                <Text style={[
+                  styles.filterText, 
+                  activeFilter === tab && styles.activeFilterText
+                ]}>
+                  {tab === 'Holiday' ? '🎉' : ''}{tab}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -453,7 +535,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 18,
+    padding: 14,
     marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -467,15 +549,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.primary || '#4f46e5',
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.textMedium || '#64748b',
     marginTop: 4,
     fontWeight: '600',
+    textAlign: 'center',
   },
   statDivider: {
     width: 1,
@@ -562,6 +645,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginVertical: 2,
   },
+  holidayCell: {
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderStyle: 'dashed',
+  },
   todayCell: {
     borderWidth: 2,
     borderColor: COLORS.primary || '#4f46e5',
@@ -574,6 +662,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textDark || '#0f172a',
   },
+  holidayDayEmoji: {
+    fontSize: 9,
+    marginTop: 1,
+  },
   statusDot: {
     width: 6,
     height: 6,
@@ -583,21 +675,25 @@ const styles = StyleSheet.create({
   legendContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
+    gap: 12,
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
+    flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   legendDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  legendEmoji: {
+    fontSize: 11,
   },
   legendText: {
     fontSize: 11,
@@ -615,12 +711,48 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  holidayDetailCard: {
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    backgroundColor: '#fffdf7',
+  },
   detailCardTitle: {
     fontSize: 14,
     fontWeight: 'bold',
     color: COLORS.textDark || '#0f172a',
     marginBottom: 10,
   },
+
+  // ── Holiday Detail Banner ──────────────────────────────────────────────────
+  holidayDetailBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderLeftWidth: 4,
+    borderLeftColor: '#f59e0b',
+  },
+  holidayDetailIcon: {
+    fontSize: 22,
+    flexShrink: 0,
+  },
+  holidayDetailName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400e',
+    marginBottom: 2,
+  },
+  holidayDetailDesc: {
+    fontSize: 12,
+    color: '#b45309',
+    fontStyle: 'italic',
+  },
+
   selectedDetailBody: {
     gap: 6,
   },
@@ -650,18 +782,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 4,
     marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     alignItems: 'center',
     borderRadius: 8,
   },
   activeFilterTab: {
     backgroundColor: COLORS.primary || '#4f46e5',
   },
+  activeHolidayFilterTab: {
+    backgroundColor: '#f59e0b',
+  },
   filterText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textMedium || '#64748b',
   },
@@ -681,6 +821,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
+  },
+  holidayCard: {
+    backgroundColor: '#fffdf7',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderLeftWidth: 4,
+    borderLeftColor: '#f59e0b',
   },
   recordHeader: {
     flexDirection: 'row',
@@ -707,6 +854,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
+
+  // ── Holiday Name Row inside list card ──────────────────────────────────────
+  holidayNameRow: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  holidayNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  holidayDescText: {
+    fontSize: 11,
+    color: '#b45309',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+
   batchText: {
     fontSize: 12,
     color: COLORS.textMedium || '#64748b',
