@@ -2,8 +2,6 @@ import React from 'react';
 import {
   KeyboardAvoidingView,
   ScrollView,
-  TouchableWithoutFeedback,
-  Keyboard,
   Platform,
   StyleSheet,
   ViewStyle,
@@ -23,12 +21,12 @@ export const KeyboardWrapper: React.FC<KeyboardWrapperProps> = ({
   style,
   contentContainerStyle,
   scrollable = true,
-  keyboardVerticalOffset = Platform.OS === 'ios' ? 40 : 0,
+  keyboardVerticalOffset = Platform.OS === 'ios' ? 20 : 0,
 }) => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, style]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
       {scrollable ? (
@@ -36,17 +34,14 @@ export const KeyboardWrapper: React.FC<KeyboardWrapperProps> = ({
           style={styles.scrollView}
           contentContainerStyle={[styles.contentContainer, contentContainerStyle]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-            {children as any}
-          </TouchableWithoutFeedback>
+          {children}
         </ScrollView>
       ) : (
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          {children as any}
-        </TouchableWithoutFeedback>
+        children
       )}
     </KeyboardAvoidingView>
   );
@@ -61,6 +56,8 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
+    justifyContent: 'center',
+    padding: 16,
   },
 });
 
