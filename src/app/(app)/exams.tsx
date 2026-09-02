@@ -457,6 +457,69 @@ export default function ExamsScreen() {
         },
       ],
     },
+    {
+      id: "mock-test-phonics",
+      isMockTest: true,
+      title: "Phonics & Picture Vocabulary",
+      instructor: "Phonics Teacher",
+      batchBadge: "Phonics",
+      batchBadgeColor: "#FCE7F3",
+      batchBadgeTextColor: "#BE185D",
+      level: "Kids & Phonics",
+      levelColor: "#F3E8FF",
+      levelTextColor: "#7E22CE",
+      duration: 10,
+      numberOfQuestions: 4,
+      totalMarks: 20,
+      marksPerQuestion: 5,
+      negativeMarking: false,
+      questions: [
+        {
+          id: "p_q1",
+          question: "Look at the picture. What is this?",
+          imageUrl: "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=600",
+          questionType: "MCQ",
+          optionA: "That is wall",
+          optionB: "This is ball",
+          optionC: "This is doll",
+          optionD: "That is cell",
+          correctAnswer: "B",
+        },
+        {
+          id: "p_q2",
+          question: "Look at the picture. What is this fruit?",
+          imageUrl: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600",
+          questionType: "MCQ",
+          optionA: "This is an apple",
+          optionB: "That is an orange",
+          optionC: "This is a mango",
+          optionD: "That is a banana",
+          correctAnswer: "A",
+        },
+        {
+          id: "p_q3",
+          question: "Look at the picture. What animal is this?",
+          imageUrl: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600",
+          questionType: "MCQ",
+          optionA: "This is a dog",
+          optionB: "This is a cat",
+          optionC: "That is a rabbit",
+          optionD: "This is a lion",
+          correctAnswer: "B",
+        },
+        {
+          id: "p_q4",
+          question: "Look at the picture. What is this object?",
+          imageUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600",
+          questionType: "MCQ",
+          optionA: "This is a pen",
+          optionB: "That is a table",
+          optionC: "This is a book",
+          optionD: "That is a bag",
+          correctAnswer: "C",
+        },
+      ],
+    },
   ];
 
   useEffect(() => {
@@ -674,6 +737,7 @@ export default function ExamsScreen() {
           id: docSnap.id,
           ...data,
           question: data.question || data.questionText || "",
+          imageUrl: data.imageUrl || data.image || data.imageAttachment || "",
           questionType:
             data.questionType ||
             (data.type === "mcq" ? "MCQ" : data.type) ||
@@ -1512,6 +1576,17 @@ export default function ExamsScreen() {
                 </Text>
               </View>
 
+              {/* Phonics & Picture Question Image */}
+              {!!questions[currentQuestionIndex]?.imageUrl && (
+                <View style={styles.questionImageContainer}>
+                  <Image
+                    source={{ uri: questions[currentQuestionIndex].imageUrl }}
+                    style={styles.questionImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+
               <Text style={styles.questionText}>
                 {questions[currentQuestionIndex]?.question}
               </Text>
@@ -2161,6 +2236,28 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 8,
     borderRadius: 6,
+  },
+  questionImageContainer: {
+    width: "100%",
+    height: 190,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    padding: 8,
+    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  questionImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   questionText: {
     fontSize: 16,
