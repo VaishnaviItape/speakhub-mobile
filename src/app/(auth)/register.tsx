@@ -5,12 +5,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
-  StatusBar
+  StatusBar,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,10 +18,10 @@ import { createUserWithEmailAndPassword, deleteUser, User as FirebaseAuthUser } 
 import { doc, setDoc, addDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { MaterialIcons } from '@expo/vector-icons';
 import { validateName, validatePhoneNumber } from '../../utils/validation';
+import KeyboardWrapper from '../../components/common/KeyboardWrapper';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
-  const [parentName, setParentName] = useState('');
   const [dob, setDob] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -34,7 +33,6 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
 
   // Refs for smooth auto-focus navigation across all inputs
-  const parentNameInputRef = useRef<TextInput>(null);
   const dobInputRef = useRef<TextInput>(null);
   const addressInputRef = useRef<TextInput>(null);
   const phoneInputRef = useRef<TextInput>(null);
@@ -57,21 +55,6 @@ export default function RegisterScreen() {
     if (error) setError('');
   };
 
-  // Auto-suggest Parent Name if user types 3 parts in Full Name (e.g., "Amit Ramesh Sharma" -> "Ramesh Sharma")
-  const handleNameChange = (val: string) => {
-    setName(val);
-    if (error) setError('');
-    
-    const parts = val.trim().split(/\s+/);
-    if (parts.length >= 2 && !parentName) {
-      if (parts.length >= 3) {
-        setParentName(`${parts[1]} ${parts.slice(2).join(' ')}`);
-      } else {
-        setParentName(parts[1]);
-      }
-    }
-  };
-
   const handleRegister = async () => {
     setError('');
 
@@ -81,17 +64,26 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Determine final parent name: user entered OR fallback from name parts
-    let finalParentName = parentName.trim();
-    if (!finalParentName) {
-      const parts = name.trim().split(/\s+/);
-      if (parts.length >= 3) {
-        finalParentName = `${parts[1]} ${parts.slice(2).join(' ')}`;
-      } else if (parts.length >= 2) {
-        finalParentName = parts[1];
-      } else {
-        finalParentName = name.trim();
-      }
+    // Automatically derive first name, parent/guardian name, and last name from entered Full Name
+    // e.g., "Vaishnavi Vishnu Itape" -> firstName: "Vaishnavi", guardian: "Vishnu Itape", lastName: "Itape"
+    const rawTrimmed = name.trim();
+    const parts = rawTrimmed.split(/\s+/);
+    let firstName = parts[0] || rawTrimmed;
+    let lastName = '';
+    let finalParentName = '';
+
+    if (parts.length >= 3) {
+      firstName = parts[0];
+      finalParentName = parts.slice(1).join(' '); // "Vishnu Itape"
+      lastName = parts[parts.length - 1]; // "Itape"
+    } else if (parts.length === 2) {
+      firstName = parts[0];
+      finalParentName = parts[1]; // "Itape"
+      lastName = parts[1];
+    } else {
+      firstName = rawTrimmed;
+      finalParentName = rawTrimmed;
+      lastName = '';
     }
 
     if (!dob.trim()) {
@@ -125,7 +117,7 @@ export default function RegisterScreen() {
     setLoading(true);
     let createdUser: FirebaseAuthUser | null = null;
     try {
-      // Best-effort check if mobile number is already registered in Firestore
+      // Check if mobile number is already registered in Firestore
       try {
         const phoneQuery = query(collection(db, 'users'), where('phone', '==', cleanMobile));
         const phoneSnap = await getDocs(phoneQuery);
@@ -161,7 +153,9 @@ export default function RegisterScreen() {
       const userRef = doc(db, 'users', uid);
       await setDoc(userRef, {
         uid,
-        name: name.trim(),
+        name: rawTrimmed,
+        firstName,
+        lastName,
         parentName: finalParentName,
         parentOrHusbandName: finalParentName,
         mobile: cleanMobile,
@@ -186,8 +180,9 @@ export default function RegisterScreen() {
       await addDoc(collection(db, 'students'), {
         studentCode,
         userId: uid,
-        firstName: name.trim(),
-        lastName: '',
+        firstName,
+        lastName,
+        name: rawTrimmed,
         parentName: finalParentName,
         parentOrHusbandName: finalParentName,
         phone: cleanMobile,
@@ -222,20 +217,11 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-      >
+      <KeyboardWrapper contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
           <Text style={styles.brandTitle}>Speak Hub Academy</Text>
           <Text style={styles.title}>Student Registration</Text>
@@ -248,7 +234,7 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
-          {/* 1. Full Name */}
+          {/* 1. Full Name (e.g. Vaishnavi Vishnu Itape) */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Full Name (Student) *</Text>
             <View style={styles.inputWrapper}>
@@ -258,28 +244,8 @@ export default function RegisterScreen() {
                 placeholder="First Name, Middle Name, Surname"
                 placeholderTextColor={COLORS.textLight}
                 value={name}
-                onChangeText={handleNameChange}
-                returnKeyType="next"
-                onSubmitEditing={() => parentNameInputRef.current?.focus()}
-                blurOnSubmit={false}
-                editable={!loading}
-              />
-            </View>
-          </View>
-
-          {/* 2. Parent / Guardian Name */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Parent / Guardian Name *</Text>
-            <View style={styles.inputWrapper}>
-              <MaterialIcons name="family-restroom" size={20} color={COLORS.textMedium} style={styles.inputIcon} />
-              <TextInput
-                ref={parentNameInputRef}
-                style={styles.input}
-                placeholder="Father / Mother / Guardian Name"
-                placeholderTextColor={COLORS.textLight}
-                value={parentName}
                 onChangeText={(val) => {
-                  setParentName(val);
+                  setName(val);
                   if (error) setError('');
                 }}
                 returnKeyType="next"
@@ -290,7 +256,7 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* 3. Date of Birth */}
+          {/* 2. Date of Birth */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Date of Birth *</Text>
             <View style={styles.inputWrapper}>
@@ -312,7 +278,7 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* 4. Address */}
+          {/* 3. Address */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Address / City *</Text>
             <View style={styles.inputWrapper}>
@@ -335,7 +301,7 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* 5. Mobile Number */}
+          {/* 4. Mobile Number */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Mobile Number (Used for Login) *</Text>
             <View style={styles.inputWrapper}>
@@ -360,7 +326,7 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* 6. Set Password */}
+          {/* 5. Set Password */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Set Password *</Text>
             <View style={styles.inputWrapper}>
@@ -395,7 +361,7 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* 7. Confirm Password */}
+          {/* 6. Confirm Password */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Confirm Password *</Text>
             <View style={styles.inputWrapper}>
@@ -456,14 +422,15 @@ export default function RegisterScreen() {
             <Text style={styles.backText}>Already registered? <Text style={styles.backTextBold}>Login here</Text></Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardWrapper>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
+    backgroundColor: COLORS.primary,
   },
   background: {
     position: 'absolute',
@@ -475,8 +442,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'ios' ? 44 : 26,
-    paddingBottom: 80, // Generous padding so keyboard never blocks bottom fields
+    paddingTop: 16,
+    paddingBottom: 40,
   },
   card: {
     backgroundColor: '#ffffff',

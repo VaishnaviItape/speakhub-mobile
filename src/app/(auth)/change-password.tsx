@@ -5,13 +5,10 @@ import {
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
-  KeyboardAvoidingView, 
-  Platform, 
-  ScrollView, 
-  TouchableWithoutFeedback, 
   Keyboard,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth, db } from '../../config/firebase';
@@ -20,6 +17,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
+import KeyboardWrapper from '../../components/common/KeyboardWrapper';
 
 export default function ChangePasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
@@ -62,79 +60,68 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
       
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          <View style={styles.card}>
-            <Text style={styles.title}>Update Password</Text>
-            <Text style={styles.subtitle}>For security reasons, you must change your default password before continuing.</Text>
+      <KeyboardWrapper contentContainerStyle={styles.scrollContent}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Update Password</Text>
+          <Text style={styles.subtitle}>For security reasons, you must change your default password before continuing.</Text>
 
-            {error ? (
-              <View style={styles.errorContainer}>
-                <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.passwordWrapper}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="New Password (min 6 characters)"
-                placeholderTextColor={COLORS.textLight}
-                secureTextEntry={!showPassword}
-                value={newPassword}
-                onChangeText={(val) => {
-                  setNewPassword(val);
-                  if (error) setError('');
-                }}
-                returnKeyType="done"
-                onSubmitEditing={handleChangePassword}
-                editable={!loading}
-              />
-              <TouchableOpacity 
-                style={styles.eyeButton} 
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                disabled={loading}
-              >
-                <MaterialIcons 
-                  name={showPassword ? "visibility" : "visibility-off"} 
-                  size={22} 
-                  color={COLORS.textMedium} 
-                />
-              </TouchableOpacity>
+          {error ? (
+            <View style={styles.errorContainer}>
+              <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
+              <Text style={styles.errorText}>{error}</Text>
             </View>
+          ) : null}
 
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="New Password (min 6 characters)"
+              placeholderTextColor={COLORS.textLight}
+              secureTextEntry={!showPassword}
+              value={newPassword}
+              onChangeText={(val) => {
+                setNewPassword(val);
+                if (error) setError('');
+              }}
+              returnKeyType="done"
+              onSubmitEditing={handleChangePassword}
+              editable={!loading}
+            />
             <TouchableOpacity 
-              style={[styles.button, (newPassword.length < 6 || loading) && styles.buttonDisabled]} 
-              onPress={handleChangePassword}
-              disabled={newPassword.length < 6 || loading}
-              activeOpacity={0.8}
+              style={styles.eyeButton} 
+              onPress={() => setShowPassword(!showPassword)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              disabled={loading}
             >
-              {loading ? (
-                <View style={styles.buttonLoadingContent}>
-                  <ActivityIndicator size="small" color="#ffffff" />
-                  <Text style={styles.buttonText}>Updating...</Text>
-                </View>
-              ) : (
-                <Text style={styles.buttonText}>Update Password</Text>
-              )}
+              <MaterialIcons 
+                name={showPassword ? "visibility" : "visibility-off"} 
+                size={22} 
+                color={COLORS.textMedium} 
+              />
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]} 
+            onPress={handleChangePassword}
+            activeOpacity={0.85}
+            disabled={loading}
+          >
+            {loading ? (
+              <View style={styles.buttonLoadingContent}>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.buttonText}>Updating...</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>Save & Continue</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardWrapper>
+    </SafeAreaView>
   );
 }
 

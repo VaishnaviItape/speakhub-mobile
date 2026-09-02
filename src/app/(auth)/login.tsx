@@ -6,18 +6,18 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   Image, 
-  KeyboardAvoidingView, 
   Platform, 
-  ScrollView, 
   ActivityIndicator,
   StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 import { MaterialIcons } from '@expo/vector-icons';
 import { validatePhoneNumber } from '../../utils/validation';
+import KeyboardWrapper from '../../components/common/KeyboardWrapper';
 
 export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
@@ -66,20 +66,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
       
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-      >
+      <KeyboardWrapper contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
           <View style={styles.logoContainer}>
             <Image 
@@ -182,8 +173,8 @@ export default function LoginScreen() {
             <Text style={styles.backText}>New student? <Text style={styles.backTextBold}>Register here</Text></Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardWrapper>
+    </SafeAreaView>
   );
 }
 
