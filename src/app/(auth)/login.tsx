@@ -9,9 +9,8 @@ import {
   KeyboardAvoidingView, 
   Platform, 
   ScrollView, 
-  TouchableWithoutFeedback, 
-  Keyboard,
-  ActivityIndicator
+  ActivityIndicator,
+  StatusBar
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,7 +31,6 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const handleLogin = async () => {
-    Keyboard.dismiss();
     setError('');
 
     const mobVal = validatePhoneNumber(mobile, 'Mobile Number');
@@ -73,51 +71,62 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       <LinearGradient colors={[COLORS.gradientStart, COLORS.gradientEnd]} style={styles.background} />
       
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          <View style={styles.card}>
-            <View style={styles.logoContainer}>
-              <Image 
-                source={require('../../../assets/images/logo.png')} 
-                style={styles.logo}
-                resizeMode="contain"
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.card}>
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../../../assets/images/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          
+          <Text style={styles.title}>Speak Hub Academy</Text>
+          <Text style={styles.subtitle}>Enter your mobile number and password</Text>
+
+          {error ? (
+            <View style={styles.errorContainer}>
+              <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Mobile Number *</Text>
+            <View style={styles.inputWrapper}>
+              <MaterialIcons name="phone-android" size={20} color={COLORS.textMedium} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="10-digit Mobile Number"
+                placeholderTextColor={COLORS.textLight}
+                keyboardType="phone-pad"
+                maxLength={10}
+                autoCapitalize="none"
+                value={mobile}
+                onChangeText={(val) => {
+                  setMobile(val.replace(/[^0-9]/g, ''));
+                  if (error) setError('');
+                }}
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
+                blurOnSubmit={false}
+                editable={!loading}
               />
             </View>
-            <Text style={styles.title}>Speak Hub</Text>
-            <Text style={styles.subtitle}>Enter your mobile number and password</Text>
+          </View>
 
-            {error ? (
-              <View style={styles.errorContainer}>
-                <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            <TextInput
-              style={styles.input}
-              placeholder="10-digit Mobile Number"
-              placeholderTextColor={COLORS.textLight}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-              value={mobile}
-              onChangeText={(val) => {
-                setMobile(val);
-                if (error) setError('');
-              }}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
-              blurOnSubmit={false}
-              editable={!loading}
-            />
-
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password *</Text>
             <View style={styles.passwordWrapper}>
+              <MaterialIcons name="lock-outline" size={20} color={COLORS.textMedium} style={styles.inputIcon} />
               <TextInput
                 ref={passwordInputRef}
                 style={styles.passwordInput}
@@ -136,7 +145,7 @@ export default function LoginScreen() {
               <TouchableOpacity 
                 style={styles.eyeButton} 
                 onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 disabled={loading}
               >
                 <MaterialIcons 
@@ -146,33 +155,34 @@ export default function LoginScreen() {
                 />
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity 
-              style={[styles.button, loading && styles.buttonDisabled]} 
-              onPress={handleLogin}
-              activeOpacity={0.8}
-              disabled={loading}
-            >
-              {loading ? (
-                <View style={styles.buttonLoadingContent}>
-                  <ActivityIndicator size="small" color="#ffffff" />
-                  <Text style={styles.buttonText}>Signing in...</Text>
-                </View>
-              ) : (
-                <Text style={styles.buttonText}>Login</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              onPress={() => router.push('/(auth)/register')} 
-              style={styles.backButton}
-              disabled={loading}
-            >
-              <Text style={styles.backText}>New student? Register here</Text>
-            </TouchableOpacity>
           </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]} 
+            onPress={handleLogin}
+            activeOpacity={0.85}
+            disabled={loading}
+          >
+            {loading ? (
+              <View style={styles.buttonLoadingContent}>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.buttonText}>Signing in...</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>Login</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => router.push('/(auth)/register')} 
+            style={styles.backButton}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backText}>New student? <Text style={styles.backTextBold}>Register here</Text></Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -185,38 +195,54 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 36,
+    paddingTop: Platform.OS === 'ios' ? 40 : 30,
+    paddingBottom: 40,
   },
   background: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
-    height: '100%',
+    bottom: 0,
   },
   card: {
     backgroundColor: '#ffffff',
-    paddingHorizontal: 24,
-    paddingVertical: 28,
+    paddingHorizontal: 22,
+    paddingVertical: 26,
     borderRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
     elevation: 6,
   },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  logo: {
+    width: 220,
+    height: 72,
+  },
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.textDark,
-    marginBottom: 6,
+    color: '#1e293b',
+    marginBottom: 4,
     textAlign: 'center',
+    letterSpacing: 0.8,
+    fontFamily: Platform.select({
+      ios: 'Georgia',
+      android: 'serif',
+      default: 'serif',
+    }),
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: COLORS.textMedium,
-    marginBottom: 20,
+    marginBottom: 18,
     textAlign: 'center',
+    lineHeight: 18,
   },
   errorContainer: {
     flexDirection: 'row',
@@ -224,7 +250,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 16,
@@ -235,43 +261,59 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  inputContainer: {
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.2,
+    borderColor: '#e2e8f0',
     borderRadius: 12,
-    marginBottom: 16,
-    fontSize: 15,
-    backgroundColor: COLORS.surface,
-    color: COLORS.textDark,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 13,
+    fontSize: 14.5,
+    color: '#0f172a',
   },
   passwordWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderWidth: 1.2,
+    borderColor: '#e2e8f0',
     borderRadius: 12,
-    marginBottom: 20,
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
   },
   passwordInput: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: COLORS.textDark,
+    paddingVertical: 13,
+    fontSize: 14.5,
+    color: '#0f172a',
   },
   eyeButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    padding: 6,
   },
   button: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 15,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 8,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -279,7 +321,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   buttonDisabled: {
-    opacity: 0.75,
+    opacity: 0.7,
   },
   buttonLoadingContent: {
     flexDirection: 'row',
@@ -288,25 +330,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buttonText: {
-    color: COLORS.textInverse,
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   backButton: {
     marginTop: 18,
     alignItems: 'center',
+    paddingVertical: 4,
   },
   backText: {
+    color: COLORS.textMedium,
+    fontSize: 13.5,
+  },
+  backTextBold: {
     color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  logo: {
-    width: 220,
-    height: 70,
-  }
 });
