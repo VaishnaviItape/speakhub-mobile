@@ -9,11 +9,11 @@ import {
   Platform, 
   ScrollView, 
   TouchableWithoutFeedback, 
-  Keyboard 
+  Keyboard,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLoader } from '../../contexts/LoaderContext';
 import { auth, db } from '../../config/firebase';
 import { updatePassword } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -24,23 +24,26 @@ import { MaterialIcons } from '@expo/vector-icons';
 export default function ChangePasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { showLoader, hideLoader } = useLoader();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const { user } = useAuth();
   const router = useRouter();
 
   const handleChangePassword = async () => {
     Keyboard.dismiss();
+    setError('');
+
     if (newPassword.length < 6) {
-      alert("Password must be at least 6 characters.");
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     if (!auth.currentUser || !user) {
-      alert("You must be logged in to change your password.");
+      setError("You must be logged in to change your password.");
       return;
     }
 
-    showLoader();
+    setLoading(true);
     try {
       // Update Auth Password
       await updatePassword(auth.currentUser, newPassword);
@@ -49,13 +52,12 @@ export default function ChangePasswordScreen() {
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, { forcePasswordChange: false });
 
-      hideLoader();
-      alert("Password updated successfully!");
+      setLoading(false);
       router.replace('/(app)/dashboard');
-    } catch (error: any) {
-      console.error(error);
-      hideLoader();
-      alert("Failed to update password. You may need to log out and log back in to verify your credentials.");
+    } catch (err: any) {
+      console.error(err);
+      setLoading(false);
+      setError(err?.message || "Failed to update password. Please try logging in again.");
     }
   };
 
@@ -78,6 +80,13 @@ export default function ChangePasswordScreen() {
             <Text style={styles.title}>Update Password</Text>
             <Text style={styles.subtitle}>For security reasons, you must change your default password before continuing.</Text>
 
+            {error ? (
+              <View style={styles.errorContainer}>
+                <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
             <View style={styles.passwordWrapper}>
               <TextInput
                 style={styles.passwordInput}
@@ -85,14 +94,19 @@ export default function ChangePasswordScreen() {
                 placeholderTextColor={COLORS.textLight}
                 secureTextEntry={!showPassword}
                 value={newPassword}
-                onChangeText={setNewPassword}
+                onChangeText={(val) => {
+                  setNewPassword(val);
+                  if (error) setError('');
+                }}
                 returnKeyType="done"
                 onSubmitEditing={handleChangePassword}
+                editable={!loading}
               />
               <TouchableOpacity 
                 style={styles.eyeButton} 
                 onPress={() => setShowPassword(!showPassword)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                disabled={loading}
               >
                 <MaterialIcons 
                   name={showPassword ? "visibility" : "visibility-off"} 
@@ -103,12 +117,19 @@ export default function ChangePasswordScreen() {
             </View>
 
             <TouchableOpacity 
-              style={styles.button} 
+              style={[styles.button, (newPassword.length < 6 || loading) && styles.buttonDisabled]} 
               onPress={handleChangePassword}
-              disabled={newPassword.length < 6}
+              disabled={newPassword.length < 6 || loading}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Update Password</Text>
+              {loading ? (
+                <View style={styles.buttonLoadingContent}>
+                  <ActivityIndicator size="small" color="#ffffff" />
+                  <Text style={styles.buttonText}>Updating...</Text>
+                </View>
+              ) : (
+                <Text style={styles.buttonText}>Update Password</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -181,13 +202,40 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: COLORS.primary,
-    padding: 15,
-    borderRadius: 10,
+    paddingVertical: 15,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
+  buttonLoadingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   buttonText: {
     color: COLORS.textInverse,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   }
 });

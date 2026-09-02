@@ -9,11 +9,11 @@ import {
   KeyboardAvoidingView, 
   Platform, 
   TouchableWithoutFeedback, 
-  Keyboard 
+  Keyboard,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLoader } from '../../contexts/LoaderContext';
 import { COLORS } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { auth, db } from '../../config/firebase';
@@ -32,7 +32,7 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [address, setAddress] = useState('');
   const [dob, setDob] = useState('');
-  const { showLoader, hideLoader } = useLoader();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const router = useRouter();
@@ -70,7 +70,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    showLoader();
+    setLoading(true);
     let createdUser: FirebaseAuthUser | null = null;
     try {
       // Best-effort check if mobile number is already registered in Firestore
@@ -78,7 +78,7 @@ export default function RegisterScreen() {
         const phoneQuery = query(collection(db, 'users'), where('phone', '==', cleanMobile));
         const phoneSnap = await getDocs(phoneQuery);
         if (!phoneSnap.empty) {
-          hideLoader();
+          setLoading(false);
           setError("This mobile number is already registered to another user. Each mobile number must be unique.");
           return;
         }
@@ -86,7 +86,7 @@ export default function RegisterScreen() {
         const mobileQuery = query(collection(db, 'users'), where('mobile', '==', cleanMobile));
         const mobileSnap = await getDocs(mobileQuery);
         if (!mobileSnap.empty) {
-          hideLoader();
+          setLoading(false);
           setError("This mobile number is already registered to another user. Each mobile number must be unique.");
           return;
         }
@@ -146,8 +146,7 @@ export default function RegisterScreen() {
         status: 'active'
       });
 
-      hideLoader();
-      alert("🎉 Registration Successful! Welcome to Speak Hub Academy. You can now explore courses, watch video lessons, and access study materials.");
+      setLoading(false);
       router.replace('/(app)/dashboard');
     } catch (err: any) {
       console.error(err);
@@ -160,7 +159,7 @@ export default function RegisterScreen() {
         }
       }
 
-      hideLoader();
+      setLoading(false);
       if (err.code === 'auth/email-already-in-use') {
         setError('This mobile number is already registered to another user. Each mobile number must be unique.');
       } else {
@@ -188,7 +187,12 @@ export default function RegisterScreen() {
             <Text style={styles.title}>Student Registration</Text>
             <Text style={styles.subtitle}>Create your free account to access courses & lessons</Text>
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? (
+              <View style={styles.errorContainer}>
+                <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
 
             <Text style={styles.label}>Full Name *</Text>
             <TextInput
@@ -282,13 +286,26 @@ export default function RegisterScreen() {
             />
 
             <TouchableOpacity 
-              style={styles.button} 
+              style={[styles.button, loading && styles.buttonDisabled]} 
               onPress={handleRegister}
+              disabled={loading}
+              activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Register Now</Text>
+              {loading ? (
+                <View style={styles.buttonLoadingContent}>
+                  <ActivityIndicator size="small" color="#ffffff" />
+                  <Text style={styles.buttonText}>Creating Account...</Text>
+                </View>
+              ) : (
+                <Text style={styles.buttonText}>Register Now</Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push('/(auth)/login')} style={styles.backButton}>
+            <TouchableOpacity 
+              onPress={() => router.push('/(auth)/login')} 
+              style={styles.backButton}
+              disabled={loading}
+            >
               <Text style={styles.backText}>Already registered? Login here</Text>
             </TouchableOpacity>
           </View>
@@ -373,21 +390,42 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: COLORS.primary,
-    padding: 15,
+    paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 10,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonLoadingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   buttonText: {
     color: COLORS.textInverse,
     fontSize: 16,
     fontWeight: 'bold',
   },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
   errorText: {
     color: COLORS.error,
-    marginBottom: 15,
-    textAlign: 'center',
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
   backButton: {
     marginTop: 20,

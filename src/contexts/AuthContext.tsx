@@ -217,20 +217,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setLoading(false);
         }
       } else {
-        // If Firebase says no user and we have no cached user, clear
-        try {
-          const cachedUser = await AsyncStorage.getItem(AUTH_USER_KEY);
-          if (!cachedUser) {
-            setUser(null);
-            setToken(null);
-          } else {
-            const parsed = JSON.parse(cachedUser) as User;
-            setUser(parsed);
-            fetchAndSetUserData(parsed.documentId || parsed.id || parsed.uid || '', parsed.email || parsed.phone || '').catch(() => {});
-          }
-        } catch (e) {
-          // ignore
-        }
+        setUser(null);
+        setToken(null);
+        clearAuthSession();
         setLoading(false);
       }
     });

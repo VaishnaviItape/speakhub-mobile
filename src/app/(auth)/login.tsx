@@ -10,11 +10,11 @@ import {
   Platform, 
   ScrollView, 
   TouchableWithoutFeedback, 
-  Keyboard 
+  Keyboard,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLoader } from '../../contexts/LoaderContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -24,7 +24,7 @@ export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { showLoader, hideLoader } = useLoader();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const passwordInputRef = useRef<TextInput>(null);
 
@@ -33,9 +33,11 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     Keyboard.dismiss();
+    setError('');
+
     const mobVal = validatePhoneNumber(mobile, 'Mobile Number');
     if (!mobVal.isValid) {
-      setError(mobVal.error || 'Please enter a valid mobile number.');
+      setError(mobVal.error || 'Please enter a valid 10-digit mobile number.');
       return;
     }
 
@@ -44,20 +46,24 @@ export default function LoginScreen() {
       return;
     }
     
-    showLoader();
-    setError('');
+    setLoading(true);
     
-    const result = await loginWithEmail(mobile.trim(), password);
-    hideLoader();
-    
-    if (result.success) {
-      if (result.forcePasswordChange) {
-        router.push('/(auth)/change-password');
+    try {
+      const result = await loginWithEmail(mobile.trim(), password);
+      
+      if (result.success) {
+        if (result.forcePasswordChange) {
+          router.push('/(auth)/change-password');
+        } else {
+          router.replace('/(app)/dashboard');
+        }
       } else {
-        // Layout will automatically redirect to dashboard once user state is populated
+        setLoading(false);
+        setError(result.error || 'Invalid mobile number or password. Please try again.');
       }
-    } else {
-      setError(result.error || 'Failed to login. Please check your credentials.');
+    } catch (err: any) {
+      setLoading(false);
+      setError(err?.message || 'Login failed. Please check your connection and try again.');
     }
   };
 
@@ -87,7 +93,12 @@ export default function LoginScreen() {
             <Text style={styles.title}>Speak Hub</Text>
             <Text style={styles.subtitle}>Enter your mobile number and password</Text>
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? (
+              <View style={styles.errorContainer}>
+                <MaterialIcons name="error-outline" size={18} color={COLORS.error} style={{ marginRight: 6 }} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
 
             <TextInput
               style={styles.input}
@@ -96,10 +107,14 @@ export default function LoginScreen() {
               keyboardType="phone-pad"
               autoCapitalize="none"
               value={mobile}
-              onChangeText={setMobile}
+              onChangeText={(val) => {
+                setMobile(val);
+                if (error) setError('');
+              }}
               returnKeyType="next"
               onSubmitEditing={() => passwordInputRef.current?.focus()}
               blurOnSubmit={false}
+              editable={!loading}
             />
 
             <View style={styles.passwordWrapper}>
@@ -110,14 +125,19 @@ export default function LoginScreen() {
                 placeholderTextColor={COLORS.textLight}
                 secureTextEntry={!showPassword}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(val) => {
+                  setPassword(val);
+                  if (error) setError('');
+                }}
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
+                editable={!loading}
               />
               <TouchableOpacity 
                 style={styles.eyeButton} 
                 onPress={() => setShowPassword(!showPassword)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                disabled={loading}
               >
                 <MaterialIcons 
                   name={showPassword ? "visibility" : "visibility-off"} 
@@ -128,14 +148,26 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity 
-              style={styles.button} 
+              style={[styles.button, loading && styles.buttonDisabled]} 
               onPress={handleLogin}
               activeOpacity={0.8}
+              disabled={loading}
             >
-              <Text style={styles.buttonText}>Login</Text>
+              {loading ? (
+                <View style={styles.buttonLoadingContent}>
+                  <ActivityIndicator size="small" color="#ffffff" />
+                  <Text style={styles.buttonText}>Signing in...</Text>
+                </View>
+              ) : (
+                <Text style={styles.buttonText}>Login</Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')} style={styles.backButton}>
+            <TouchableOpacity 
+              onPress={() => router.push('/(auth)/register')} 
+              style={styles.backButton}
+              disabled={loading}
+            >
               <Text style={styles.backText}>New student? Register here</Text>
             </TouchableOpacity>
           </View>
@@ -183,8 +215,25 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: COLORS.textMedium,
-    marginBottom: 24,
+    marginBottom: 20,
     textAlign: 'center',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
   input: {
     borderWidth: 1,
@@ -222,22 +271,26 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
   },
+  buttonDisabled: {
+    opacity: 0.75,
+  },
+  buttonLoadingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   buttonText: {
     color: COLORS.textInverse,
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  errorText: {
-    color: COLORS.error,
-    marginBottom: 14,
-    textAlign: 'center',
-    fontSize: 13,
   },
   backButton: {
     marginTop: 18,
