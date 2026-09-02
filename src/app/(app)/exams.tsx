@@ -31,6 +31,7 @@ import { COLORS } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLoader } from "../../contexts/LoaderContext";
 import { db } from "../../config/firebase";
+import { formatGoogleDriveImageUrl } from "../../utils/imageUrl";
 import ProfileDrawer from "../../components/ui/ProfileDrawer";
 
 export default function ExamsScreen() {
@@ -733,11 +734,12 @@ export default function ExamsScreen() {
       const qList: any[] = [];
       snap.forEach((docSnap) => {
         const data = docSnap.data();
+        const rawImg = data.imageUrl || data.image || data.imageAttachment || "";
         const normalizedData = {
           id: docSnap.id,
           ...data,
           question: data.question || data.questionText || "",
-          imageUrl: data.imageUrl || data.image || data.imageAttachment || "",
+          imageUrl: formatGoogleDriveImageUrl(rawImg),
           questionType:
             data.questionType ||
             (data.type === "mcq" ? "MCQ" : data.type) ||
@@ -1580,7 +1582,7 @@ export default function ExamsScreen() {
               {!!questions[currentQuestionIndex]?.imageUrl && (
                 <View style={styles.questionImageContainer}>
                   <Image
-                    source={{ uri: questions[currentQuestionIndex].imageUrl }}
+                    source={{ uri: formatGoogleDriveImageUrl(questions[currentQuestionIndex].imageUrl) }}
                     style={styles.questionImage}
                     resizeMode="contain"
                   />
