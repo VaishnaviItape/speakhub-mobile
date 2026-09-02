@@ -223,7 +223,7 @@ export default function RegisterScreen() {
 
       <KeyboardWrapper contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
-          <Text style={styles.brandTitle}>Speak Hub Academy</Text>
+          <Text style={styles.brandTitle}>SPEAK HUB ACADEMY</Text>
           <Text style={styles.title}>Student Registration</Text>
           <Text style={styles.subtitle}>Create your free account to access courses & lessons</Text>
 

@@ -80,7 +80,7 @@ export default function LoginScreen() {
             />
           </View>
           
-          <Text style={styles.title}>Speak Hub Academy</Text>
+          <Text style={styles.title}>SPEAK HUB ACADEMY</Text>
           <Text style={styles.subtitle}>Enter your mobile number and password</Text>
 
           {error ? (
