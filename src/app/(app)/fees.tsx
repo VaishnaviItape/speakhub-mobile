@@ -15,13 +15,14 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
 import { COLORS } from '../../constants/theme';
+import { QR_CODE_BASE64 } from '../../constants/qrBase64';
 
 export default function FeesScreen() {
   const { user } = useAuth();
@@ -159,49 +160,31 @@ Thank you!`;
 
   const downloadQRCode = async () => {
     try {
-      const asset = Asset.fromModule(require('../../../assets/images/feeQR.jpeg'));
-      await asset.downloadAsync();
-      
-      let localUri = asset.localUri || asset.uri;
-      const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
-      const targetFileUri = `${cacheDir}feeQR.jpeg`;
-
-      if (localUri) {
-        if (localUri.startsWith('http://') || localUri.startsWith('https://')) {
-          const downloadRes = await FileSystem.downloadAsync(localUri, targetFileUri);
-          localUri = downloadRes.uri;
-        } else if (!localUri.startsWith('file://')) {
-          if (localUri.startsWith('/')) {
-            localUri = `file://${localUri}`;
-          } else {
-            try {
-              await FileSystem.copyAsync({
-                from: localUri,
-                to: targetFileUri,
-              });
-              localUri = targetFileUri;
-            } catch {
-              localUri = `file://${localUri}`;
-            }
-          }
-        }
-      } else if (asset.uri) {
-        const downloadRes = await FileSystem.downloadAsync(asset.uri, targetFileUri);
-        localUri = downloadRes.uri;
+      const cacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      if (!cacheDir) {
+        throw new Error('Storage directory not available on device');
       }
 
-      if (!localUri) {
-        throw new Error('Unable to resolve QR code file path');
+      const targetFileUri = `${cacheDir}speakhub_payment_qr.jpg`;
+
+      // Write QR image directly to cache directory so FileProvider has full access
+      await FileSystem.writeAsStringAsync(targetFileUri, QR_CODE_BASE64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const fileInfo = await FileSystem.getInfoAsync(targetFileUri);
+      if (!fileInfo.exists) {
+        throw new Error('Unable to create QR code file on device');
       }
 
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(localUri, {
+        await Sharing.shareAsync(targetFileUri, {
           mimeType: 'image/jpeg',
-          dialogTitle: 'Download Speak Hub QR Code Scanner',
+          dialogTitle: 'Speak Hub Payment QR Code',
           UTI: 'public.jpeg',
         });
       } else {
-        Alert.alert("Success", "QR Code image is ready.");
+        Alert.alert("Success", "QR Code image saved successfully.");
       }
     } catch (e: any) {
       console.error("Error downloading QR Code:", e);

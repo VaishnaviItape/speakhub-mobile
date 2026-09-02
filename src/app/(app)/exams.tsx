@@ -558,9 +558,33 @@ export default function ExamsScreen() {
             const bId = data.batchId;
             const cId = data.courseId;
 
+            // 1. Check explicit batch visibility toggle if configured for student's batch
+            const studentDirectBatchIds = studentBatchKeys.filter((k) => k !== "all");
+            let isExplicitlyDisabled = false;
+            let isExplicitlyEnabled = false;
+
+            if (data.batchVisibility && typeof data.batchVisibility === "object") {
+              for (const sBid of studentDirectBatchIds) {
+                if (data.batchVisibility[sBid] === false) {
+                  isExplicitlyDisabled = true;
+                }
+                if (data.batchVisibility[sBid] === true) {
+                  isExplicitlyEnabled = true;
+                }
+              }
+            }
+
+            if (isExplicitlyDisabled) {
+              return; // hidden from student's batch via toggle switch
+            }
+
             const isBatchMatch =
+              isExplicitlyEnabled ||
               !bId ||
               bId === "all" ||
+              (Array.isArray(data.batchIds) && data.batchIds.includes("all")) ||
+              (Array.isArray(data.batchIds) &&
+                data.batchIds.some((id: string) => studentBatchKeys.includes(id))) ||
               !hasSpecificBatch ||
               studentBatchKeys.includes(bId) ||
               (data.batchName &&
