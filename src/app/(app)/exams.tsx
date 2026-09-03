@@ -686,10 +686,14 @@ export default function ExamsScreen() {
         const attemptsQ = query(collection(db, "exam_attempts"));
         unsubAttempts = onSnapshot(attemptsQ, (snapshot) => {
           const attemptsList: any[] = [];
+          const seenAttemptIds = new Set<string>();
           const userPhone = user?.phone || user?.mobile || studentData?.phone || studentData?.mobile || "";
           const cleanPhone = String(userPhone).replace(/[^0-9]/g, "").slice(-10);
 
           snapshot.forEach((d) => {
+            if (seenAttemptIds.has(d.id)) return;
+            seenAttemptIds.add(d.id);
+
             const aData = d.data();
             const isStudentMatch =
               aData.studentId === user.id ||
@@ -1001,10 +1005,20 @@ export default function ExamsScreen() {
 
     try {
       const docRef = await addDoc(collection(db, "exam_attempts"), attemptData);
-      setAttempts((prev) => [...prev, { id: docRef.id, ...attemptData }]);
+      setAttempts((prev) => {
+        const filtered = prev.filter(
+          (a) => a.id !== docRef.id && a.examId !== attemptData.examId && (!a.examTitle || a.examTitle.toLowerCase() !== attemptData.examTitle?.toLowerCase())
+        );
+        return [...filtered, { id: docRef.id, ...attemptData }];
+      });
     } catch (e: any) {
       console.warn("Could not save attempt to DB:", e);
-      setAttempts((prev) => [...prev, attemptData]);
+      setAttempts((prev) => {
+        const filtered = prev.filter(
+          (a) => a.examId !== attemptData.examId && (!a.examTitle || a.examTitle.toLowerCase() !== attemptData.examTitle?.toLowerCase())
+        );
+        return [...filtered, attemptData];
+      });
     }
 
     setScoreData(attemptData);
@@ -1088,7 +1102,6 @@ export default function ExamsScreen() {
     const now = Date.now();
     const live: any[] = [];
     const upcoming: any[] = [];
-    const completed: any[] = [];
     const missed: any[] = [];
 
     // Helper to check if student already attempted this exam/mock test
@@ -1100,8 +1113,13 @@ export default function ExamsScreen() {
       );
     };
 
+    const seenLiveKeys = new Set<string>();
+    const seenUpcomingKeys = new Set<string>();
+    const seenMissedKeys = new Set<string>();
+
     // 1. Process all Real Exams from Firestore
     exams.forEach((ex) => {
+      const key = (ex.id || ex.title || "").trim().toLowerCase();
       const start = ex.startDate ? new Date(ex.startDate).getTime() : 0;
       const end = ex.endDate ? new Date(ex.endDate).getTime() : 0;
       const attempt = findAttempt(ex.id, ex.title);
@@ -1109,42 +1127,70 @@ export default function ExamsScreen() {
       if (attempt) {
         // Already completed - NEVER show in missed or live or upcoming
       } else if (start && now < start) {
-        upcoming.push(ex);
+        if (!seenUpcomingKeys.has(key)) {
+          seenUpcomingKeys.add(key);
+          upcoming.push(ex);
+        }
       } else if (end && now > end) {
-        missed.push(ex);
+        if (!seenMissedKeys.has(key)) {
+          seenMissedKeys.add(key);
+          missed.push(ex);
+        }
       } else {
-        live.push(ex);
+        if (!seenLiveKeys.has(key)) {
+          seenLiveKeys.add(key);
+          live.push(ex);
+        }
       }
     });
 
     // 2. Also add suggested mock tests to Live ONLY if not attempted yet
     SUGGESTED_MOCK_TESTS.forEach((mock) => {
+      const key = (mock.id || mock.title || "").trim().toLowerCase();
       const attempt = findAttempt(mock.id, mock.title);
-      if (!attempt) {
+      if (!attempt && !seenLiveKeys.has(key)) {
+        seenLiveKeys.add(key);
         live.push(mock);
       }
     });
 
-    // 3. Process all Completed attempts (both real exams and mock tests)
-    attempts.forEach((att) => {
+    // 3. Process all Completed attempts (deduplicated so each exam only appears ONCE)
+    const completedMap = new Map<string, any>();
+
+    // Sort attempts by submittedAt descending so latest attempt is considered first
+    const sortedAttempts = [...attempts].sort((a, b) => {
+      const timeA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+      const timeB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    sortedAttempts.forEach((att) => {
       const matchingExam =
         exams.find((e) => e.id === att.examId || (e.title && att.examTitle && e.title.toLowerCase() === att.examTitle.toLowerCase())) ||
         SUGGESTED_MOCK_TESTS.find((m) => m.id === att.examId || (m.title && att.examTitle && m.title.toLowerCase() === att.examTitle.toLowerCase()));
 
-      completed.push({
-        id: att.examId || att.id,
-        title: att.examTitle || matchingExam?.title || "Exam Assessment",
-        duration: matchingExam?.duration || 15,
-        numberOfQuestions:
-          matchingExam?.numberOfQuestions ||
-          (Number(att.correctCount || 0) + Number(att.wrongCount || 0) + Number(att.unansweredCount || 0)) ||
-          10,
-        totalMarks: att.totalMarks || matchingExam?.totalMarks || 50,
-        endDate: att.submittedAt,
-        attempt: att,
-        isCompleted: true,
-      });
+      const examKey = (att.examId || matchingExam?.id || att.examTitle || matchingExam?.title || att.id || "").trim().toLowerCase();
+      if (!examKey) return;
+
+      // Only add ONCE per exam
+      if (!completedMap.has(examKey)) {
+        completedMap.set(examKey, {
+          id: att.examId || matchingExam?.id || att.id,
+          title: att.examTitle || matchingExam?.title || "Exam Assessment",
+          duration: matchingExam?.duration || 15,
+          numberOfQuestions:
+            matchingExam?.numberOfQuestions ||
+            (Number(att.correctCount || 0) + Number(att.wrongCount || 0) + Number(att.unansweredCount || 0)) ||
+            10,
+          totalMarks: att.totalMarks || matchingExam?.totalMarks || 50,
+          endDate: att.submittedAt || matchingExam?.endDate,
+          attempt: att,
+          isCompleted: true,
+        });
+      }
     });
+
+    const completed = Array.from(completedMap.values());
 
     return {
       Live: live,

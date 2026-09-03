@@ -1121,12 +1121,14 @@ export default function DashboardScreen() {
               contentContainerStyle={styles.coursesHorizontalScroll}
             >
               {filteredCourses.map((course: any, index: number) => {
-                const badgeLabel = course.modeBadge || "ONLINE";
-                const durationLabel = course.duration ? `${course.duration}` : null;
+                const badgeLabel = course.modeBadge || course.mode || "ONLINE";
+                let durationLabel = null;
+                if (course.duration) {
+                  const durStr = String(course.duration).trim();
+                  durationLabel = /^\d+$/.test(durStr) ? `${durStr} Months` : durStr;
+                }
                 const subtitle = course.instructor
                   ? `Instructor: ${course.instructor}`
-                  : course.duration
-                  ? `${course.duration} Program`
                   : (course.description || "Speak Hub Course");
 
                 return (
@@ -1207,9 +1209,32 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalCourseName}>
-              Course: {selectedCourseForBooking?.courseName}
-            </Text>
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.modalCourseName}>
+                {selectedCourseForBooking?.courseName || selectedCourseForBooking?.name || "Course"}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <View style={[styles.levelBadgePill, { paddingVertical: 2, paddingHorizontal: 6 }]}>
+                  <Text style={[styles.levelBadgeText, { fontSize: 10 }]}>
+                    {selectedCourseForBooking?.modeBadge || selectedCourseForBooking?.mode || "ONLINE"}
+                  </Text>
+                </View>
+                {selectedCourseForBooking?.duration ? (
+                  <View style={[styles.levelBadgePill, { backgroundColor: "#f1f5f9", paddingVertical: 2, paddingHorizontal: 6 }]}>
+                    <Text style={[styles.levelBadgeText, { color: "#475569", fontSize: 10 }]}>
+                      {/^\d+$/.test(String(selectedCourseForBooking.duration).trim())
+                        ? `${selectedCourseForBooking.duration} Months`
+                        : selectedCourseForBooking.duration}
+                    </Text>
+                  </View>
+                ) : null}
+                {selectedCourseForBooking?.monthlyFee !== undefined && (
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.primary, marginLeft: "auto" }}>
+                    ₹{selectedCourseForBooking.monthlyFee}/mo
+                  </Text>
+                )}
+              </View>
+            </View>
 
             <Text style={styles.inputLabel}>Your Name *</Text>
             <TextInput
@@ -1886,6 +1911,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   suggestedCourseBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   levelBadgePill: {
