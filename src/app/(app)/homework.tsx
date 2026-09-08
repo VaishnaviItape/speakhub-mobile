@@ -10,6 +10,7 @@ import {
   Linking,
   Alert,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
 import { db } from '../../config/firebase';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import MarkdownRenderer from '../../components/common/MarkdownRenderer';
 
 const { width } = Dimensions.get('window');
 const DONE_HOMEWORK_KEY = '@speakhub_done_homework_ids';
@@ -69,6 +71,7 @@ export default function HomeworkScreen() {
   // Student marked completed/sent IDs
   const [completedHwIds, setCompletedHwIds] = useState<string[]>([]);
   const [batchName, setBatchName] = useState<string>('My Batch');
+  const [selectedWorksheet, setSelectedWorksheet] = useState<any | null>(null);
 
   useEffect(() => {
     loadCompletedIds();
@@ -492,12 +495,29 @@ export default function HomeworkScreen() {
                   </View>
                 </View>
 
-                {/* Instructions / Description Body */}
+                {/* Instructions / Description Body with Markdown Renderer */}
                 <View style={styles.instructionsContainer}>
-                  <Text style={styles.instructionsLabel}>Instructions / Task Details:</Text>
-                  <Text style={styles.instructionsText}>
-                    {hw.instructions || hw.description || 'Practice speaking this topic out loud and send your voice note on WhatsApp.'}
-                  </Text>
+                  <View style={styles.instructionsHeaderRow}>
+                    <View style={styles.instructionsHeaderLeft}>
+                      <MaterialIcons name="assignment" size={15} color={COLORS.primary} />
+                      <Text style={styles.instructionsLabel}>Worksheet Tasks & Details</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.openFullscreenBtn}
+                      onPress={() => setSelectedWorksheet(hw)}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialIcons name="fullscreen" size={15} color={COLORS.primary} />
+                      <Text style={styles.openFullscreenText}>Full Screen</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.markdownWrapper}>
+                    <MarkdownRenderer
+                      content={hw.instructions || hw.description || 'Practice speaking this topic out loud and send your voice note on WhatsApp.'}
+                      baseFontSize={13.5}
+                    />
+                  </View>
                 </View>
 
                 {/* Material Attachment / Video Lesson Link */}
@@ -570,6 +590,125 @@ export default function HomeworkScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Fullscreen Interactive Homework / Worksheet Reader Modal */}
+      <Modal
+        visible={!!selectedWorksheet}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedWorksheet(null)}
+      >
+        <View style={styles.modalContainer}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <View style={{ flex: 1 }}>
+              <View style={styles.modalBadgeRow}>
+                <View style={styles.modalTopicBadge}>
+                  <Text style={styles.modalTopicBadgeText}>
+                    {selectedWorksheet?.topic ? selectedWorksheet.topic.toUpperCase() : 'HOMEWORK WORKSHEET'}
+                  </Text>
+                </View>
+                <Text style={styles.modalBatchText}>
+                  {selectedWorksheet?.batchName || batchName}
+                </Text>
+              </View>
+              <Text style={styles.modalTitle} numberOfLines={2}>
+                {selectedWorksheet?.title}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setSelectedWorksheet(null)}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="close" size={22} color="#475569" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Modal Content */}
+          <ScrollView
+            style={styles.modalScrollView}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            {/* Meta Info Box */}
+            <View style={styles.modalMetaCard}>
+              <View style={styles.modalMetaCol}>
+                <Text style={styles.modalMetaLabel}>ASSIGNED DATE</Text>
+                <Text style={styles.modalMetaVal}>
+                  {formatDateSafe(selectedWorksheet?.publishDate, 'Recent')}
+                </Text>
+              </View>
+              <View style={styles.modalMetaDivider} />
+              <View style={styles.modalMetaCol}>
+                <Text style={styles.modalMetaLabel}>DUE DATE & TIME</Text>
+                <Text style={styles.modalMetaVal}>
+                  {formatDateSafe(selectedWorksheet?.dueDate, 'Flexible')} ({selectedWorksheet?.dueTime || '11:59 PM'})
+                </Text>
+              </View>
+            </View>
+
+            {/* Formatted Markdown Content */}
+            <View style={styles.modalWorksheetCard}>
+              <MarkdownRenderer
+                content={selectedWorksheet?.instructions || selectedWorksheet?.description || ''}
+                baseFontSize={14.5}
+              />
+            </View>
+
+            {/* Attachments if any */}
+            {(selectedWorksheet?.attachmentUrl || selectedWorksheet?.videoUrl) && (
+              <View style={[styles.attachmentsRow, { marginTop: 14 }]}>
+                {selectedWorksheet?.attachmentUrl ? (
+                  <TouchableOpacity
+                    style={styles.attachmentBtn}
+                    onPress={() => handleOpenLink(selectedWorksheet.attachmentUrl)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="picture-as-pdf" size={16} color="#dc2626" />
+                    <Text style={styles.attachmentBtnText} numberOfLines={1}>Open PDF Worksheet</Text>
+                    <MaterialIcons name="open-in-new" size={13} color="#dc2626" />
+                  </TouchableOpacity>
+                ) : null}
+
+                {selectedWorksheet?.videoUrl ? (
+                  <TouchableOpacity
+                    style={styles.videoBtn}
+                    onPress={() => handleOpenLink(selectedWorksheet.videoUrl)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="play-circle-fill" size={16} color="#2563eb" />
+                    <Text style={styles.videoBtnText} numberOfLines={1}>Watch Reference Video</Text>
+                    <MaterialIcons name="open-in-new" size={13} color="#2563eb" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Modal Footer */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalSubmitBtn}
+              onPress={() => {
+                if (selectedWorksheet) handleSendOnWhatsApp(selectedWorksheet);
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#25D366', '#128C7E']}
+                style={styles.modalSubmitGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <MaterialIcons name="chat" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.modalSubmitBtnText}>Submit Homework on WhatsApp 💬</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -848,24 +987,185 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   instructionsContainer: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
     marginBottom: 12,
   },
+  instructionsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  instructionsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   instructionsLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  openFullscreenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#fff1f2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ffe4e6',
+  },
+  openFullscreenText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textMedium,
-    marginBottom: 4,
+    color: COLORS.primary,
+  },
+  markdownWrapper: {
+    marginTop: 2,
   },
   instructionsText: {
     fontSize: 13,
     color: COLORS.textDark,
     lineHeight: 18,
     fontWeight: '500',
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  modalBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  modalTopicBadge: {
+    backgroundColor: '#fff1f2',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ffe4e6',
+  },
+  modalTopicBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  modalBatchText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6366f1',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0f172a',
+    lineHeight: 22,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  modalScrollView: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  modalMetaCard: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 14,
+  },
+  modalMetaCol: {
+    flex: 1,
+  },
+  modalMetaDivider: {
+    width: 1,
+    backgroundColor: '#e2e8f0',
+    marginHorizontal: 12,
+  },
+  modalMetaLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  modalMetaVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalWorksheetCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  modalFooter: {
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  modalSubmitBtn: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalSubmitGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  modalSubmitBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ffffff',
   },
   attachmentsRow: {
     flexDirection: 'row',
