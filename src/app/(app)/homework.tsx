@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,13 @@ import {
   Alert,
   Dimensions,
   Modal,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,12 +39,15 @@ const parseToDate = (val: any): Date => {
       if (!isNaN(d.getTime())) return d;
     } catch {}
   }
-  if (val?.seconds) {
+  if (typeof val?.seconds === 'number') {
     const d = new Date(val.seconds * 1000);
     if (!isNaN(d.getTime())) return d;
   }
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? new Date() : d;
+  if (typeof val === 'string' || typeof val === 'number') {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date();
 };
 
 const formatDateSafe = (d: any, fallback: string = 'Recent'): string => {
@@ -55,11 +62,21 @@ const formatDateSafe = (d: any, fallback: string = 'Recent'): string => {
   return fallback;
 };
 
+// Start of local day (midnight)
+const getStartOfDay = (date: Date): number => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
 export default function HomeworkScreen() {
   const { user } = useAuth();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { showLoader, hideLoader } = useLoader();
 
   const [homeworks, setHomeworks] = useState<any[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -104,80 +121,162 @@ export default function HomeworkScreen() {
     }
   };
 
-  const fetchHomeworks = async () => {
-    if (!user) {
-      hideLoader();
-      return;
-    }
-    showLoader();
+  const fetchHomeworks = useCallback(async () => {
     try {
       let studentData: any = {};
-      if (user.id || user.uid) {
-        try {
-          const uSnap = await getDoc(doc(db, 'users', user.id || user.uid!));
-          if (uSnap.exists()) {
-            studentData = uSnap.data();
-          }
-        } catch (e) { }
-      }
+      const studentBatchKeys: Set<string> = new Set(['all', 'everyone']);
+      const studentCourseKeys: Set<string> = new Set();
 
-      // Collect all student batch identifiers
-      const studentBatchKeys: string[] = ['all'];
-      if (Array.isArray(studentData.batchIds)) studentBatchKeys.push(...studentData.batchIds);
-      if (Array.isArray(studentData.batches)) studentBatchKeys.push(...studentData.batches);
-      if (studentData.batchId) studentBatchKeys.push(studentData.batchId);
-      if (studentData.batchName) studentBatchKeys.push(studentData.batchName);
-      if (Array.isArray(user.batchIds)) studentBatchKeys.push(...user.batchIds);
-      if (user.batchId) studentBatchKeys.push(user.batchId);
-      if (user.batchName) studentBatchKeys.push(user.batchName);
+      if (user) {
+        // 1. Fetch user document
+        const uid = user.id || user.uid;
+        if (uid) {
+          try {
+            const uSnap = await getDoc(doc(db, 'users', uid));
+            if (uSnap.exists()) {
+              studentData = uSnap.data();
+            }
+          } catch (e) { }
+        }
 
-      // Collect all student course identifiers
-      const studentCourseKeys: string[] = [];
-      if (Array.isArray(studentData.courseIds)) studentCourseKeys.push(...studentData.courseIds);
-      if (Array.isArray(studentData.courses)) studentCourseKeys.push(...studentData.courses);
-      if (studentData.courseId) studentCourseKeys.push(studentData.courseId);
-      if (studentData.courseName) studentCourseKeys.push(studentData.courseName);
-      if (Array.isArray(user.courses)) studentCourseKeys.push(...user.courses);
-      if (Array.isArray(user.courseIds)) studentCourseKeys.push(...user.courseIds);
-      if (user.courseId) studentCourseKeys.push(user.courseId);
-      if (user.courseName) studentCourseKeys.push(user.courseName);
-
-      // Fetch all batches to resolve names and document IDs
-      const bSnap = await getDocs(collection(db, 'batches'));
-      const targetBatchIdentifiers: string[] = [...studentBatchKeys];
-      bSnap.forEach(d => {
-        const bData = d.data();
-        if (studentBatchKeys.includes(d.id) || (bData.batchName && studentBatchKeys.includes(bData.batchName))) {
-          targetBatchIdentifiers.push(d.id);
-          if (bData.batchName) {
-            targetBatchIdentifiers.push(bData.batchName);
-            setBatchName(bData.batchName);
+        // 2. Phone fallback search in users collection
+        const userPhone = user.phone || user.mobile || studentData.phone || studentData.mobile;
+        if (userPhone) {
+          const cleanPhone = String(userPhone).replace(/[^0-9]/g, '');
+          if (cleanPhone.length >= 10) {
+            const last10 = cleanPhone.slice(-10);
+            try {
+              const qPhone = query(collection(db, 'users'), where('phone', '==', last10));
+              const pSnap = await getDocs(qPhone);
+              if (!pSnap.empty) {
+                studentData = { ...studentData, ...pSnap.docs[0].data() };
+              } else {
+                const qMobile = query(collection(db, 'users'), where('mobile', '==', last10));
+                const mSnap = await getDocs(qMobile);
+                if (!mSnap.empty) {
+                  studentData = { ...studentData, ...mSnap.docs[0].data() };
+                }
+              }
+            } catch (e) { }
           }
         }
-      });
 
-      // Fetch all Homeworks
+        // 3. Fallback to students collection
+        try {
+          if (uid) {
+            const sq = query(collection(db, 'students'), where('userId', '==', uid));
+            const sSnap = await getDocs(sq);
+            if (!sSnap.empty) {
+              const sData = sSnap.docs[0].data();
+              if (Array.isArray(sData.batchIds)) sData.batchIds.forEach((b: string) => studentBatchKeys.add(String(b).toLowerCase()));
+              if (sData.batchId) studentBatchKeys.add(String(sData.batchId).toLowerCase());
+              if (sData.batchName) studentBatchKeys.add(String(sData.batchName).toLowerCase());
+              if (Array.isArray(sData.courseIds)) sData.courseIds.forEach((c: string) => studentCourseKeys.add(String(c).toLowerCase()));
+              if (sData.courseId) studentCourseKeys.add(String(sData.courseId).toLowerCase());
+            }
+          }
+        } catch (sErr) { }
+
+        // Collect all student batch identifiers
+        if (Array.isArray(studentData.batchIds)) studentData.batchIds.forEach((b: string) => studentBatchKeys.add(String(b).toLowerCase()));
+        if (Array.isArray(studentData.batches)) studentData.batches.forEach((b: string) => studentBatchKeys.add(String(b).toLowerCase()));
+        if (studentData.batchId) studentBatchKeys.add(String(studentData.batchId).toLowerCase());
+        if (studentData.batchName) studentBatchKeys.add(String(studentData.batchName).toLowerCase());
+        if (studentData.batch) studentBatchKeys.add(String(studentData.batch).toLowerCase());
+        if (Array.isArray(user.batchIds)) user.batchIds.forEach((b: string) => studentBatchKeys.add(String(b).toLowerCase()));
+        if (user.batchId) studentBatchKeys.add(String(user.batchId).toLowerCase());
+        if (user.batchName) studentBatchKeys.add(String(user.batchName).toLowerCase());
+
+        // Collect all student course identifiers
+        if (Array.isArray(studentData.courseIds)) studentData.courseIds.forEach((c: string) => studentCourseKeys.add(String(c).toLowerCase()));
+        if (Array.isArray(studentData.courses)) studentData.courses.forEach((c: string) => studentCourseKeys.add(String(c).toLowerCase()));
+        if (studentData.courseId) studentCourseKeys.add(String(studentData.courseId).toLowerCase());
+        if (studentData.courseName) studentCourseKeys.add(String(studentData.courseName).toLowerCase());
+        if (Array.isArray(user.courses)) user.courses.forEach((c: string) => studentCourseKeys.add(String(c).toLowerCase()));
+        if (Array.isArray(user.courseIds)) user.courseIds.forEach((c: string) => studentCourseKeys.add(String(c).toLowerCase()));
+        if (user.courseId) studentCourseKeys.add(String(user.courseId).toLowerCase());
+        if (user.courseName) studentCourseKeys.add(String(user.courseName).toLowerCase());
+      }
+
+      // Fetch all batches to resolve names and document IDs
+      try {
+        const bSnap = await getDocs(collection(db, 'batches'));
+        bSnap.forEach(d => {
+          const bData = d.data();
+          const docIdLower = d.id.toLowerCase();
+          const bNameLower = (bData.batchName || '').toLowerCase();
+          
+          if (studentBatchKeys.has(docIdLower) || (bNameLower && studentBatchKeys.has(bNameLower))) {
+            studentBatchKeys.add(docIdLower);
+            if (bNameLower) {
+              studentBatchKeys.add(bNameLower);
+              setBatchName(bData.batchName);
+            }
+          }
+        });
+      } catch (bErr) {
+        console.warn('Batches lookup warning:', bErr);
+      }
+
+      // Fetch all Homeworks from Firestore
       const hwSnap = await getDocs(collection(db, 'homeworks'));
       const fetchedList: any[] = [];
+      const nowTimestamp = Date.now();
+
+      // Check whether user has specific batches assigned (more than just 'all' / 'everyone')
+      const hasSpecificBatch = Array.from(studentBatchKeys).some(k => k !== 'all' && k !== 'everyone');
 
       hwSnap.forEach(docSnap => {
         const data = docSnap.data();
-        // Exclude drafts
-        if (data.status === 'draft') return;
+        const hwStatus = String(data.status || 'published').toLowerCase().trim();
 
-        const isAssigned =
-          !data.batchId ||
-          data.batchId === 'all' ||
-          targetBatchIdentifiers.includes(data.batchId) ||
-          (data.batchName && targetBatchIdentifiers.includes(data.batchName)) ||
-          (data.courseId && studentCourseKeys.includes(data.courseId));
+        // 1. Exclude drafts
+        if (hwStatus === 'draft') return;
+
+        // 2. Handle scheduled homework
+        if (hwStatus === 'scheduled') {
+          const pDateParsed = parseToDate(data.publishDate || data.createdAt);
+          if (pDateParsed.getTime() > nowTimestamp) {
+            // Scheduled for the future, skip
+            return;
+          }
+        }
+
+        // 3. Batch & Course Assignment Matching
+        const hwBatchIdLower = String(data.batchId || '').toLowerCase().trim();
+        const hwBatchNameLower = String(data.batchName || '').toLowerCase().trim();
+        const hwCourseIdLower = String(data.courseId || '').toLowerCase().trim();
+
+        const isUniversal = !hwBatchIdLower || hwBatchIdLower === 'all' || hwBatchIdLower === 'everyone';
+        
+        let isAssigned = isUniversal;
+
+        if (!isAssigned) {
+          if (studentBatchKeys.has(hwBatchIdLower)) isAssigned = true;
+          if (hwBatchNameLower && studentBatchKeys.has(hwBatchNameLower)) isAssigned = true;
+          if (hwCourseIdLower && studentCourseKeys.has(hwCourseIdLower)) isAssigned = true;
+          if (Array.isArray(data.batchIds)) {
+            isAssigned = data.batchIds.some((b: string) => studentBatchKeys.has(String(b).toLowerCase()));
+          }
+        }
+
+        // FALLBACK: If student has no specific batch assigned yet, show all active homework so mobile never gets stuck empty
+        if (!hasSpecificBatch && !isAssigned) {
+          isAssigned = true;
+        }
 
         if (isAssigned) {
           // Normalize publishDate
-          let pDate: Date = parseToDate(data.publishDate || data.createdAt);
-
+          const pDate: Date = parseToDate(data.publishDate || data.createdAt);
           // Normalize dueDate
-          let dDate: Date = parseToDate(data.dueDate);
+          const dDate: Date = parseToDate(data.dueDate);
+
+          const localPubStr = !isNaN(pDate.getTime()) 
+            ? `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}-${String(pDate.getDate()).padStart(2, '0')}`
+            : '';
+          const localDueStr = !isNaN(dDate.getTime()) 
+            ? `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}-${String(dDate.getDate()).padStart(2, '0')}`
+            : '';
 
           fetchedList.push({
             id: docSnap.id,
@@ -189,9 +288,9 @@ export default function HomeworkScreen() {
             attachmentUrl: data.attachmentUrl || data.pdfLink || data.fileUrl || '',
             videoUrl: data.youtubeLink || data.externalVideoLink || data.videoUrl || '',
             publishDate: pDate,
-            publishDateString: !isNaN(pDate.getTime()) ? pDate.toISOString().split('T')[0] : '',
+            publishDateString: localPubStr,
             dueDate: dDate,
-            dueDateString: !isNaN(dDate.getTime()) ? dDate.toISOString().split('T')[0] : '',
+            dueDateString: localDueStr,
             dueTime: data.dueTime || '11:59 PM',
             courseName: data.courseName || 'Spoken English',
             batchName: data.batchName || 'General Batch'
@@ -205,14 +304,15 @@ export default function HomeworkScreen() {
         const timeB = b.publishDate instanceof Date ? b.publishDate.getTime() : 0;
         return timeB - timeA;
       });
-      setHomeworks(fetchedList);
 
+      setHomeworks(fetchedList);
     } catch (e) {
       console.error("Error fetching homeworks:", e);
     } finally {
+      setLoadingInitial(false);
       hideLoader();
     }
-  };
+  }, [user]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -227,7 +327,9 @@ export default function HomeworkScreen() {
       if (!target.startsWith('http://') && !target.startsWith('https://')) {
         target = 'https://' + target;
       }
-      Linking.openURL(target);
+      Linking.openURL(target).catch((err) => {
+        Alert.alert("Cannot open link", err.message || "Please verify the link.");
+      });
     } catch (e: any) {
       Alert.alert("Cannot open link", e.message);
     }
@@ -256,14 +358,14 @@ export default function HomeworkScreen() {
     });
   };
 
-  // Filter Computation
+  // Filter Computation based on local Day Start Timestamps
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const startToday = getStartOfDay(now);
+  const startTomorrow = startToday + 24 * 60 * 60 * 1000;
+  const startYesterday = startToday - 24 * 60 * 60 * 1000;
+  const startOneWeekAgo = startToday - 7 * 24 * 60 * 60 * 1000;
 
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const filteredHomeworks = homeworks.filter(hw => {
     // 1. Text Search Filter
@@ -276,18 +378,24 @@ export default function HomeworkScreen() {
       if (!matchTitle && !matchDesc && !matchTopic && !matchDate) return false;
     }
 
+    const pTime = hw.publishDate instanceof Date ? hw.publishDate.getTime() : parseToDate(hw.publishDate).getTime();
+    const dTime = hw.dueDate instanceof Date ? hw.dueDate.getTime() : parseToDate(hw.dueDate).getTime();
+
     // 2. Date-wise filter
     if (selectedDateFilter === 'today') {
-      return hw.publishDateString === todayStr || hw.dueDateString === todayStr;
+      const isPubToday = pTime >= startToday && pTime < startTomorrow;
+      const isDueToday = dTime >= startToday && dTime < startTomorrow;
+      return isPubToday || isDueToday || hw.publishDateString === todayStr || hw.dueDateString === todayStr;
     }
 
     if (selectedDateFilter === 'yesterday') {
-      return hw.publishDateString === yesterdayStr || hw.dueDateString === yesterdayStr;
+      const isPubYesterday = pTime >= startYesterday && pTime < startToday;
+      const isDueYesterday = dTime >= startYesterday && dTime < startToday;
+      return isPubYesterday || isDueYesterday;
     }
 
     if (selectedDateFilter === 'week') {
-      const pTime = hw.publishDate instanceof Date ? hw.publishDate.getTime() : parseToDate(hw.publishDate).getTime();
-      return pTime >= oneWeekAgo.getTime();
+      return pTime >= startOneWeekAgo || dTime >= startOneWeekAgo;
     }
 
     if (selectedDateFilter === 'specific') {
@@ -297,10 +405,40 @@ export default function HomeworkScreen() {
     return true;
   });
 
-  const todayHomeworkCount = homeworks.filter(h => h.publishDateString === todayStr || h.dueDateString === todayStr).length;
+  const todayHomeworkCount = homeworks.filter(hw => {
+    const pTime = hw.publishDate instanceof Date ? hw.publishDate.getTime() : parseToDate(hw.publishDate).getTime();
+    const dTime = hw.dueDate instanceof Date ? hw.dueDate.getTime() : parseToDate(hw.dueDate).getTime();
+    return (pTime >= startToday && pTime < startTomorrow) || (dTime >= startToday && dTime < startTomorrow) || hw.publishDateString === todayStr || hw.dueDateString === todayStr;
+  }).length;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 8 : 0) }]}>
+      {/* Top Custom Bar with Back Button */}
+      <View style={styles.navBar}>
+        <TouchableOpacity
+          style={styles.navBackBtn}
+          onPress={() => router.push('/(app)/dashboard')}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
+        </TouchableOpacity>
+        
+        <View style={styles.navTitleBox}>
+          <Text style={styles.navTitleText}>Homework & Diary</Text>
+          <Text style={styles.navSubtitleText}>{batchName}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.navRefreshBtn}
+          onPress={onRefresh}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialIcons name="refresh" size={22} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
       {/* Top Banner Alert / Stats */}
       <View style={styles.topSummaryCard}>
         <LinearGradient
@@ -350,7 +488,7 @@ export default function HomeworkScreen() {
             onPress={() => { setSelectedDateFilter('all'); setShowDatePickerInput(false); }}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="list-alt" size={15} color={selectedDateFilter === 'all' ? '#ffffff' : COLORS.textDark} />
+            <MaterialIcons name="list-alt" size={15} color={selectedDateFilter === 'all' ? '#ffffff' : '#1e293b'} />
             <Text style={[styles.filterPillText, selectedDateFilter === 'all' && styles.filterPillTextActive]}>
               All ({homeworks.length})
             </Text>
@@ -361,7 +499,7 @@ export default function HomeworkScreen() {
             onPress={() => { setSelectedDateFilter('today'); setShowDatePickerInput(false); }}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="today" size={15} color={selectedDateFilter === 'today' ? '#ffffff' : COLORS.textDark} />
+            <MaterialIcons name="today" size={15} color={selectedDateFilter === 'today' ? '#ffffff' : '#1e293b'} />
             <Text style={[styles.filterPillText, selectedDateFilter === 'today' && styles.filterPillTextActive]}>
               Today ({todayHomeworkCount})
             </Text>
@@ -372,7 +510,7 @@ export default function HomeworkScreen() {
             onPress={() => { setSelectedDateFilter('yesterday'); setShowDatePickerInput(false); }}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="history" size={15} color={selectedDateFilter === 'yesterday' ? '#ffffff' : COLORS.textDark} />
+            <MaterialIcons name="history" size={15} color={selectedDateFilter === 'yesterday' ? '#ffffff' : '#1e293b'} />
             <Text style={[styles.filterPillText, selectedDateFilter === 'yesterday' && styles.filterPillTextActive]}>
               Yesterday
             </Text>
@@ -383,7 +521,7 @@ export default function HomeworkScreen() {
             onPress={() => { setSelectedDateFilter('week'); setShowDatePickerInput(false); }}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="date-range" size={15} color={selectedDateFilter === 'week' ? '#ffffff' : COLORS.textDark} />
+            <MaterialIcons name="date-range" size={15} color={selectedDateFilter === 'week' ? '#ffffff' : '#1e293b'} />
             <Text style={[styles.filterPillText, selectedDateFilter === 'week' && styles.filterPillTextActive]}>
               This Week
             </Text>
@@ -394,7 +532,7 @@ export default function HomeworkScreen() {
             onPress={() => { setSelectedDateFilter('specific'); setShowDatePickerInput(true); }}
             activeOpacity={0.8}
           >
-            <MaterialIcons name="event" size={15} color={selectedDateFilter === 'specific' ? '#ffffff' : COLORS.textDark} />
+            <MaterialIcons name="event" size={15} color={selectedDateFilter === 'specific' ? '#ffffff' : '#1e293b'} />
             <Text style={[styles.filterPillText, selectedDateFilter === 'specific' && styles.filterPillTextActive]}>
               Filter by Date 📅
             </Text>
@@ -419,17 +557,17 @@ export default function HomeworkScreen() {
 
         {/* Search Bar */}
         <View style={styles.searchBarBox}>
-          <MaterialIcons name="search" size={20} color={COLORS.textLight} />
+          <MaterialIcons name="search" size={20} color="#64748b" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search homework topic, instructions..."
-            placeholderTextColor={COLORS.textLight}
+            placeholderTextColor="#94a3b8"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialIcons name="close" size={18} color={COLORS.textLight} />
+              <MaterialIcons name="close" size={18} color="#64748b" />
             </TouchableOpacity>
           )}
         </View>
@@ -438,10 +576,16 @@ export default function HomeworkScreen() {
       {/* Main Homework Cards List */}
       <ScrollView
         style={styles.cardsScroll}
-        contentContainerStyle={styles.cardsScrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={[styles.cardsScrollContent, { paddingBottom: Math.max(insets.bottom + 40, 60) }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       >
-        {filteredHomeworks.length > 0 ? (
+        {loadingInitial ? (
+          <View style={styles.emptyStateContainer}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={[styles.emptyStateTitle, { marginTop: 14, fontSize: 16 }]}>Loading Homework...</Text>
+          </View>
+        ) : filteredHomeworks.length > 0 ? (
           filteredHomeworks.map((hw, idx) => {
             const isCompleted = completedHwIds.includes(hw.id);
             const pubDateStr = formatDateSafe(hw.publishDate, 'Recent');
@@ -454,7 +598,7 @@ export default function HomeworkScreen() {
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.cardHeaderLeft}>
                     <View style={styles.topicBadge}>
-                      <Text style={styles.topicBadgeText}>{hw.topic ? hw.topic.toUpperCase() : 'SPEAKING TASK'}</Text>
+                      <Text style={styles.topicBadgeText}>{hw.topic ? String(hw.topic).toUpperCase() : 'SPEAKING TASK'}</Text>
                     </View>
                     {isDueToday && (
                       <View style={styles.dueTodayBadge}>
@@ -471,7 +615,7 @@ export default function HomeworkScreen() {
                     <MaterialIcons
                       name={isCompleted ? "check-circle" : "radio-button-unchecked"}
                       size={18}
-                      color={isCompleted ? "#15803d" : COLORS.textLight}
+                      color={isCompleted ? "#15803d" : "#64748b"}
                     />
                     <Text style={[styles.statusToggleText, isCompleted && styles.statusToggleTextDone]}>
                       {isCompleted ? "Completed" : "Mark Done"}
@@ -486,12 +630,12 @@ export default function HomeworkScreen() {
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <MaterialIcons name="calendar-today" size={13} color={COLORS.primary} />
-                    <Text style={styles.metaText}>Assigned: <Text style={{ fontWeight: '700', color: COLORS.textDark }}>{pubDateStr}</Text></Text>
+                    <Text style={styles.metaText}>Assigned: <Text style={{ fontWeight: '700', color: '#0f172a' }}>{pubDateStr}</Text></Text>
                   </View>
 
                   <View style={styles.metaItem}>
                     <MaterialIcons name="schedule" size={13} color="#b45309" />
-                    <Text style={styles.metaText}>Due: <Text style={{ fontWeight: '700', color: COLORS.textDark }}>{dueDateStr} ({hw.dueTime})</Text></Text>
+                    <Text style={styles.metaText}>Due: <Text style={{ fontWeight: '700', color: '#0f172a' }}>{dueDateStr} ({hw.dueTime})</Text></Text>
                   </View>
                 </View>
 
@@ -595,17 +739,19 @@ export default function HomeworkScreen() {
       <Modal
         visible={!!selectedWorksheet}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={true}
         onRequestClose={() => setSelectedWorksheet(null)}
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 36 : 16) }]}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
               <View style={styles.modalBadgeRow}>
                 <View style={styles.modalTopicBadge}>
+                  <MaterialIcons name="assignment" size={12} color={COLORS.primary} style={{ marginRight: 3 }} />
                   <Text style={styles.modalTopicBadgeText}>
-                    {selectedWorksheet?.topic ? selectedWorksheet.topic.toUpperCase() : 'HOMEWORK WORKSHEET'}
+                    {selectedWorksheet?.topic ? String(selectedWorksheet.topic).toUpperCase() : 'HOMEWORK WORKSHEET'}
                   </Text>
                 </View>
                 <Text style={styles.modalBatchText}>
@@ -621,8 +767,9 @@ export default function HomeworkScreen() {
               style={styles.modalCloseBtn}
               onPress={() => setSelectedWorksheet(null)}
               activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <MaterialIcons name="close" size={22} color="#475569" />
+              <MaterialIcons name="close" size={22} color="#0f172a" />
             </TouchableOpacity>
           </View>
 
@@ -688,7 +835,7 @@ export default function HomeworkScreen() {
           </ScrollView>
 
           {/* Modal Footer */}
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <TouchableOpacity
               style={styles.modalSubmitBtn}
               onPress={() => {
@@ -718,9 +865,54 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  navBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  navTitleBox: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  navTitleText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  navSubtitleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    marginTop: 1,
+  },
+  navRefreshBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF1F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FFE4E6',
+  },
   topSummaryCard: {
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 10,
     marginBottom: 8,
     borderRadius: 16,
     overflow: 'hidden',
@@ -804,7 +996,7 @@ const styles = StyleSheet.create({
   },
   filterSection: {
     paddingHorizontal: 16,
-    marginTop: 6,
+    marginTop: 4,
     marginBottom: 6,
   },
   filterPillsContainer: {
@@ -830,7 +1022,7 @@ const styles = StyleSheet.create({
   filterPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.textDark,
+    color: '#334155',
   },
   filterPillTextActive: {
     color: '#ffffff',
@@ -849,7 +1041,7 @@ const styles = StyleSheet.create({
   specificDateLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.textMedium,
+    color: '#475569',
   },
   specificDateInput: {
     flex: 1,
@@ -859,7 +1051,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     fontSize: 13,
     fontWeight: '700',
-    color: COLORS.textDark,
+    color: '#0f172a',
     borderWidth: 1,
     borderColor: '#cbd5e1',
   },
@@ -878,13 +1070,14 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 13,
-    color: COLORS.textDark,
+    color: '#0f172a',
     fontWeight: '500',
   },
   cardsScroll: {
     flex: 1,
   },
   cardsScrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 6,
     paddingBottom: 40,
@@ -917,6 +1110,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
+    flex: 1,
   },
   topicBadge: {
     backgroundColor: '#FFF1F2',
@@ -959,7 +1154,7 @@ const styles = StyleSheet.create({
   statusToggleText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textMedium,
+    color: '#475569',
   },
   statusToggleTextDone: {
     color: '#15803d',
@@ -967,7 +1162,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: COLORS.textDark,
+    color: '#0f172a',
     marginBottom: 8,
   },
   metaRow: {
@@ -983,7 +1178,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: COLORS.textMedium,
+    color: '#64748b',
     fontWeight: '500',
   },
   instructionsContainer: {
@@ -1034,7 +1229,7 @@ const styles = StyleSheet.create({
   },
   instructionsText: {
     fontSize: 13,
-    color: COLORS.textDark,
+    color: '#0f172a',
     lineHeight: 18,
     fontWeight: '500',
   },
@@ -1242,12 +1437,12 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.textDark,
+    color: '#0f172a',
     marginBottom: 6,
   },
   emptyStateSubtitle: {
     fontSize: 13,
-    color: COLORS.textMedium,
+    color: '#64748b',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 16,

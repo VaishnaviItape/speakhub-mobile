@@ -897,6 +897,36 @@ export default function DashboardScreen() {
             </View>
           </View>
 
+          {/* Daily Homework & Tasks Hero Card */}
+          <TouchableOpacity
+            style={styles.homeworkHeroCard}
+            onPress={() => router.push("/(app)/homework")}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#FFF1F2', '#FFE4E6']}
+              style={styles.homeworkHeroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <View style={styles.homeworkHeroLeft}>
+                <View style={styles.homeworkHeroIconCircle}>
+                  <MaterialIcons name="assignment" size={24} color={COLORS.primary} />
+                </View>
+                <View style={styles.homeworkHeroTextBox}>
+                  <View style={styles.homeworkHeroBadgeRow}>
+                    <Text style={styles.homeworkHeroBadge}>TODAY'S TASKS</Text>
+                  </View>
+                  <Text style={styles.homeworkHeroTitle}>Daily Homework & Diary</Text>
+                  <Text style={styles.homeworkHeroSubtitle}>View worksheets, practice & submit via WhatsApp</Text>
+                </View>
+              </View>
+              <View style={styles.homeworkHeroArrow}>
+                <MaterialIcons name="arrow-forward-ios" size={15} color={COLORS.primary} />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
           {/* 4 Quick Action Pastel Cards */}
           <View style={styles.quickActionsGrid}>
             {/* 1. My Schedule */}
@@ -2282,5 +2312,78 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 9.5,
     fontWeight: "900",
+  },
+  /* Homework Hero Card */
+  homeworkHeroCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+    elevation: 2,
+    shadowColor: "#E11D48",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+  },
+  homeworkHeroGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  homeworkHeroLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  homeworkHeroIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+  },
+  homeworkHeroTextBox: {
+    flex: 1,
+  },
+  homeworkHeroBadgeRow: {
+    flexDirection: "row",
+    marginBottom: 2,
+  },
+  homeworkHeroBadge: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#BE123C",
+    backgroundColor: "#FFE4E6",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    letterSpacing: 0.5,
+  },
+  homeworkHeroTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 1,
+  },
+  homeworkHeroSubtitle: {
+    fontSize: 11,
+    color: "#475569",
+    fontWeight: "500",
+  },
+  homeworkHeroArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
   },
 });
