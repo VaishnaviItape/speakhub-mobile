@@ -7,6 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../constants/theme';
 import { DashboardSkeleton } from '../components/common/SkeletonLoader';
+import { LaunchSplash } from '../components/common/LaunchSplash';
 import { 
   registerForPushNotificationsAsync, 
   setupNotificationChannels,
@@ -112,6 +113,9 @@ function RootLayoutNav() {
   }, [isAuthenticated, loading, segments, isReady, hasSeenOnboarding]);
 
   if (!isReady || loading) {
+    if (!isReady || !isAuthenticated) {
+      return <LaunchSplash />;
+    }
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
         <DashboardSkeleton />
