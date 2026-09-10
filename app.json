@@ -32,7 +32,13 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
-      "package": "com.vaishnaviitape.speakhubmobile"
+      "package": "com.vaishnaviitape.speakhubmobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "output": "static",
@@ -73,8 +79,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "59f15f23-7541-47c9-8fec-f26062f0e27a"
+        "projectId": "6b551522-49b6-4e8c-9edf-2e1b802b0354"
       }
-    }
+    },
+    "owner": "itapevaishnavis-team"
   }
 }

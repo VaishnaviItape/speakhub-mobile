@@ -140,6 +140,13 @@ export default function AppLayout() {
             title: 'Help & Support'
           }} 
         />
+        <Tabs.Screen 
+          name="notifications" 
+          options={{ 
+            href: null,
+            title: 'Notifications'
+          }} 
+        />
       </Tabs>
       
       {/* Global Drawer Overlay */}

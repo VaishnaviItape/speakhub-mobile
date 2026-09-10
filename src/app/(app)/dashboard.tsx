@@ -37,6 +37,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useLoader } from "../../contexts/LoaderContext";
 import { getYouTubeThumbnail } from "../../utils/youtube";
 import ProfileDrawer from "../../components/ui/ProfileDrawer";
+import { subscribeToUserNotifications } from "../../utils/notificationService";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -52,6 +53,7 @@ export default function DashboardScreen() {
 
   // Notifications & Fee State
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
   const [readNotifIds, setReadNotifIds] = useState<string[]>([]);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [feeDueDate, setFeeDueDate] = useState<string>("");
@@ -205,6 +207,19 @@ export default function DashboardScreen() {
 
     return () => unsubscribe();
   }, [user, activeBatch, readNotifIds]);
+
+  // Realtime subscription for unread notifications count
+  useEffect(() => {
+    const uId = user?.id || user?.documentId;
+    if (uId) {
+      const unsub = subscribeToUserNotifications(uId, (_list, unread) => {
+        setUnreadNotifsCount(unread);
+      });
+      return () => {
+        if (unsub) unsub();
+      };
+    }
+  }, [user?.id, user?.documentId]);
 
   // Auto-hide floating banner after 7 seconds
   useEffect(() => {
@@ -810,7 +825,7 @@ export default function DashboardScreen() {
 
           <TouchableOpacity
             style={[styles.headerIconButton, { marginLeft: 8 }]}
-            onPress={() => setShowNotificationsModal(true)}
+            onPress={() => router.push('/(app)/notifications' as any)}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -819,10 +834,10 @@ export default function DashboardScreen() {
               size={26}
               color="#0f172a"
             />
-            {unreadCount > 0 && (
+            {unreadNotifsCount > 0 && (
               <View style={styles.notifBadgePill}>
                 <Text style={styles.notifBadgePillText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {unreadNotifsCount > 9 ? "9+" : unreadNotifsCount}
                 </Text>
               </View>
             )}
