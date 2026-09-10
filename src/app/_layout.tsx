@@ -11,7 +11,8 @@ import { LaunchSplash } from '../components/common/LaunchSplash';
 import { 
   registerForPushNotificationsAsync, 
   setupNotificationChannels,
-  subscribeToStudentBatchNotifications 
+  subscribeToStudentBatchNotifications,
+  markNotificationAsRead
 } from '../utils/notificationService';
 import '../global.css';
 
@@ -35,7 +36,7 @@ function RootLayoutNav() {
       registerForPushNotificationsAsync(user.id || user.documentId);
       
       const primaryBatchId = (user.batchIds && user.batchIds[0]) || user.batchId;
-      const unsubscribe = subscribeToStudentBatchNotifications(primaryBatchId);
+      const unsubscribe = subscribeToStudentBatchNotifications(primaryBatchId, user.id || user.documentId);
       
       return () => {
         if (unsubscribe) unsubscribe();
@@ -51,8 +52,16 @@ function RootLayoutNav() {
     });
 
     // 2. Triggered when user TAPS on the notification bar banner
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(async (response) => {
       const data = response.notification.request.content.data;
+      const notifId = data?.notificationId || data?.id;
+      if (typeof notifId === 'string' && notifId) {
+        try {
+          await markNotificationAsRead(notifId);
+        } catch (err) {
+          console.log('Error marking notification read on tap:', err);
+        }
+      }
       if (data && data.screen) {
         try {
           router.push(data.screen as any);

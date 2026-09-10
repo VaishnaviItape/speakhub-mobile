@@ -425,7 +425,7 @@ export default function HomeworkScreen() {
         </TouchableOpacity>
         
         <View style={styles.navTitleBox}>
-          <Text style={styles.navTitleText}>Homework & Diary</Text>
+          <Text style={styles.navTitleText}>Homework</Text>
           <Text style={styles.navSubtitleText}>{batchName}</Text>
         </View>
 
@@ -451,7 +451,7 @@ export default function HomeworkScreen() {
             <View style={{ flex: 1 }}>
               <View style={styles.tagBadge}>
                 <MaterialIcons name="assignment" size={14} color="#ffffff" />
-                <Text style={styles.tagBadgeText}>HOMEWORK DIARY</Text>
+                <Text style={styles.tagBadgeText}>HOMEWORK</Text>
               </View>
               <Text style={styles.summaryTitle}>Daily Homework & Tasks</Text>
               <Text style={styles.summarySubtitle}>

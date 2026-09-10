@@ -5,12 +5,12 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
   StatusBar,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -46,6 +46,13 @@ export default function NotificationCenterScreen() {
       setUnreadCount(unread);
       setLoading(false);
       setRefreshing(false);
+
+      // When the user views this notifications screen, mark all as read so the badge clears
+      if (unread > 0) {
+        setTimeout(() => {
+          markAllNotificationsAsRead(userId);
+        }, 1200);
+      }
     });
 
     return () => {
@@ -61,7 +68,11 @@ export default function NotificationCenterScreen() {
 
   const handleNotificationPress = async (item: AppNotification) => {
     if (!item.read) {
-      await markNotificationAsRead(item.id);
+      markNotificationAsRead(item.id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
     }
 
     // Determine target route based on notification data or type

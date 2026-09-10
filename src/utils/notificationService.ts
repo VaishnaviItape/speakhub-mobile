@@ -43,19 +43,20 @@ Notifications.setNotificationHandler({
 });
 
 /**
- * Configure Android Notification Channels with High Priority (Heads-Up Banner)
+ * Configure Android Notification Channels with High Priority (Heads-Up Banner like Meesho/WhatsApp)
  */
 export async function setupNotificationChannels() {
   if (Platform.OS === 'android') {
     // Channel 1: Fee Alerts & Receipts
     await Notifications.setNotificationChannelAsync('fees', {
-      name: 'Fee Alerts & Dues',
+      name: 'Fee Alerts & Receipts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#e11d48',
       sound: 'default',
       enableVibrate: true,
       showBadge: true,
+      enableLights: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
 
@@ -68,18 +69,21 @@ export async function setupNotificationChannels() {
       sound: 'default',
       enableVibrate: true,
       showBadge: true,
+      enableLights: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
 
     // Channel 3: Homework & Study Notes
     await Notifications.setNotificationChannelAsync('study', {
       name: 'Homework & Notes',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 200, 200, 200],
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
       lightColor: '#6366f1',
       sound: 'default',
       enableVibrate: true,
       showBadge: true,
+      enableLights: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
 
     // Channel 4: Batches & Announcements
@@ -91,17 +95,21 @@ export async function setupNotificationChannels() {
       sound: 'default',
       enableVibrate: true,
       showBadge: true,
+      enableLights: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
 
     // Channel 5: General Updates
     await Notifications.setNotificationChannelAsync('default', {
       name: 'General Updates',
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#e11d48',
       sound: 'default',
       enableVibrate: true,
       showBadge: true,
+      enableLights: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   }
 }
@@ -195,6 +203,8 @@ export async function displaySystemNotification({
         badge: badgeCount,
         categoryIdentifier: channelId,
         color: '#e11d48',
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        vibrate: [0, 250, 250, 250],
         ...(Platform.OS === 'android' ? { channelId } : {}),
       },
       trigger: null, // Trigger immediately

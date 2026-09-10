@@ -37,7 +37,11 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useLoader } from "../../contexts/LoaderContext";
 import { getYouTubeThumbnail } from "../../utils/youtube";
 import ProfileDrawer from "../../components/ui/ProfileDrawer";
-import { subscribeToUserNotifications } from "../../utils/notificationService";
+import { 
+  subscribeToUserNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead 
+} from "../../utils/notificationService";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -239,6 +243,8 @@ export default function DashboardScreen() {
         "@speakhub_read_notifications",
         JSON.stringify(updated)
       );
+      // Sync with Firestore
+      await markNotificationAsRead(notifId);
     } catch (e) {
       console.warn("Error marking notification as read:", e);
     }
@@ -258,6 +264,10 @@ export default function DashboardScreen() {
         "@speakhub_read_notifications",
         JSON.stringify(updated)
       );
+      const uId = user?.id || user?.documentId;
+      if (uId) {
+        await markAllNotificationsAsRead(uId);
+      }
     } catch (e) {
       console.warn("Error marking all as read:", e);
     }
@@ -825,7 +835,13 @@ export default function DashboardScreen() {
 
           <TouchableOpacity
             style={[styles.headerIconButton, { marginLeft: 8 }]}
-            onPress={() => router.push('/(app)/notifications' as any)}
+            onPress={() => {
+              const uId = user?.id || user?.documentId;
+              if (uId && unreadNotifsCount > 0) {
+                markAllNotificationsAsRead(uId);
+              }
+              router.push('/(app)/notifications' as any);
+            }}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >

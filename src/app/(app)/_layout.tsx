@@ -115,6 +115,7 @@ export default function AppLayout() {
         <Tabs.Screen 
           name="homework" 
           options={{ 
+            headerShown: false,
             href: null,
             title: 'Homework'
           }} 
@@ -143,6 +144,7 @@ export default function AppLayout() {
         <Tabs.Screen 
           name="notifications" 
           options={{ 
+            headerShown: false,
             href: null,
             title: 'Notifications'
           }} 
