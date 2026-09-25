@@ -742,6 +742,7 @@ export default function ExamsScreen() {
         const normalizedData = {
           id: docSnap.id,
           ...data,
+          marks: Number(exam.marksPerQuestion) || Number(data.marks) || (exam.totalMarks && exam.numberOfQuestions ? Number(exam.totalMarks) / Number(exam.numberOfQuestions) : 1),
           question: data.question || data.questionText || "",
           imageUrl: formatGoogleDriveImageUrl(rawImg),
           questionType:
@@ -965,13 +966,16 @@ export default function ExamsScreen() {
       score = 0,
       unansweredCount = 0;
 
+    const examMarksPerQ = Number(currentExam.marksPerQuestion) || (currentExam.totalMarks && questions.length > 0 ? Number(currentExam.totalMarks) / questions.length : 0);
+
     questions.forEach((q) => {
       const studentAns = answers[q.id];
+      const qMark = examMarksPerQ > 0 ? examMarksPerQ : (Number(q.marks) || 1);
       if (!studentAns) {
         unansweredCount++;
       } else if (studentAns === q.correctAnswer) {
         correctCount++;
-        score += Number(q.marks || currentExam.marksPerQuestion || 3.33);
+        score += qMark;
       } else {
         wrongCount++;
         if (currentExam.negativeMarking) score -= 0.5;
@@ -1620,7 +1624,7 @@ export default function ExamsScreen() {
                   Question {currentQuestionIndex + 1} of {questions.length}
                 </Text>
                 <Text style={styles.questionMarksBadge}>
-                  {currentExam?.marksPerQuestion || 3} Marks
+                  {questions[currentQuestionIndex]?.marks || currentExam?.marksPerQuestion || 1} Marks
                 </Text>
               </View>
 
