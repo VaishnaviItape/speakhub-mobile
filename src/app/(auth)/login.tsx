@@ -172,6 +172,17 @@ export default function LoginScreen() {
           >
             <Text style={styles.backText}>New student? <Text style={styles.backTextBold}>Register here</Text></Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/privacy' as any)}
+            style={{ marginTop: 14, alignItems: 'center' }}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 11.5, color: '#94A3B8', textAlign: 'center' }}>
+              By logging in, you agree to our <Text style={{ color: COLORS.primary, fontWeight: '600' }}>Privacy Policy & Terms</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </KeyboardWrapper>
     </SafeAreaView>

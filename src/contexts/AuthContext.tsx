@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect, type ReactNode }
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../config/firebase';
-import { signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser, deleteUser } from 'firebase/auth';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 
 export interface User {
   id: string;
@@ -46,6 +46,7 @@ interface AuthContextType {
   token: string | null;
   loginWithEmail: (identifier: string, password: string) => Promise<{ success: boolean; forcePasswordChange?: boolean; error?: string }>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
   registerUser: (userData: Partial<User>) => Promise<boolean>;
   refreshUserData: () => Promise<void>;
 }
@@ -452,8 +453,49 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const deleteAccount = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const currentUser = auth.currentUser;
+      const currentUserId = user?.id || user?.uid || user?.documentId;
+
+      if (currentUserId) {
+        try {
+          const userRef = doc(db, 'users', currentUserId);
+          await updateDoc(userRef, {
+            status: 'deleted',
+            deletedAt: new Date().toISOString(),
+          });
+        } catch (dbErr) {
+          console.warn('Could not mark user as deleted in Firestore:', dbErr);
+        }
+      }
+
+      if (currentUser) {
+        await deleteUser(currentUser);
+      }
+
+      await clearAuthSession();
+      setUser(null);
+      setToken(null);
+      router.replace('/(auth)/login');
+      return { success: true };
+    } catch (error: any) {
+      console.error('Account deletion error:', error);
+      if (error?.code === 'auth/requires-recent-login') {
+        return {
+          success: false,
+          error: 'For security reasons, please log out and log back in before deleting your account.',
+        };
+      }
+      return {
+        success: false,
+        error: error?.message || 'Failed to delete account. Please try again or contact support.',
+      };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, token, loginWithEmail, logout, registerUser, refreshUserData }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, token, loginWithEmail, logout, deleteAccount, registerUser, refreshUserData }}>
       {children}
     </AuthContext.Provider>
   );

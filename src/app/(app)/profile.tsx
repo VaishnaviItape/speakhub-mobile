@@ -26,7 +26,7 @@ import {
 } from 'firebase/firestore';
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const router = useRouter();
 
   const { showLoader, hideLoader } = useLoader();
@@ -178,6 +178,44 @@ export default function ProfileScreen() {
               await logout();
             } catch (e) {}
             router.replace('/(auth)/login');
+          },
+        },
+      ]
+    );
+  };
+
+  // --------------------------------------------------
+  // PRIVACY POLICY & ACCOUNT DELETION (PLAY STORE COMPLIANCE)
+  // --------------------------------------------------
+
+  const handleOpenPrivacyPolicy = () => {
+    router.push('/(app)/privacy' as any);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This will permanently erase your profile, course progress, batch access, attendance records, and exam results. This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              showLoader();
+              const result = await deleteAccount();
+              hideLoader();
+              if (!result.success && result.error) {
+                Alert.alert('Unable to Delete', result.error);
+              }
+            } catch (err: any) {
+              hideLoader();
+              Alert.alert('Error', err?.message || 'Could not delete account.');
+            }
           },
         },
       ]
@@ -488,6 +526,40 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         {/* ==========================================
+            PRIVACY POLICY & TERMS (PLAY STORE COMPLIANCE)
+        ========================================== */}
+
+        <TouchableOpacity
+          style={styles.supportCard}
+          activeOpacity={0.7}
+          onPress={handleOpenPrivacyPolicy}
+        >
+          <View style={[styles.supportIcon, { backgroundColor: '#F0FDF4' }]}>
+            <MaterialIcons
+              name="privacy-tip"
+              size={22}
+              color="#16A34A"
+            />
+          </View>
+
+          <View style={styles.supportContent}>
+            <Text style={styles.supportTitle}>
+              Privacy Policy & Terms
+            </Text>
+
+            <Text style={styles.supportSubtitle}>
+              Data safety, permissions & policies
+            </Text>
+          </View>
+
+          <MaterialIcons
+            name="chevron-right"
+            size={24}
+            color="#9CA3AF"
+          />
+        </TouchableOpacity>
+
+        {/* ==========================================
             LOGOUT
         ========================================== */}
 
@@ -504,6 +576,26 @@ export default function ProfileScreen() {
 
           <Text style={styles.logoutText}>
             Sign Out
+          </Text>
+        </TouchableOpacity>
+
+        {/* ==========================================
+            DELETE ACCOUNT (GOOGLE PLAY POLICY REQUIREMENT)
+        ========================================== */}
+
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          activeOpacity={0.7}
+          onPress={handleDeleteAccount}
+        >
+          <MaterialIcons
+            name="delete-outline"
+            size={18}
+            color="#9CA3AF"
+          />
+
+          <Text style={styles.deleteAccountText}>
+            Delete Account & Personal Data
           </Text>
         </TouchableOpacity>
 
@@ -907,6 +999,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#DC2626',
     marginLeft: 8,
+  },
+
+  /* -----------------------------------------------
+     DELETE ACCOUNT
+  ----------------------------------------------- */
+
+  deleteAccountButton: {
+    marginHorizontal: 18,
+    marginTop: 12,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  deleteAccountText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginLeft: 6,
   },
 
   /* -----------------------------------------------

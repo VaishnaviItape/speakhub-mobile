@@ -52,9 +52,18 @@ export default function ExamsScreen() {
   const [currentExam, setCurrentExam] = useState<any>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<{ [key: string]: string }>({});
+  const [reviewMarks, setReviewMarks] = useState<{ [key: string]: boolean }>({});
+  const [bookmarkedQuestions, setBookmarkedQuestions] = useState<{ [key: string]: boolean }>({});
+  const [paletteFilter, setPaletteFilter] = useState<
+    "all" | "review" | "bookmarked" | "answered" | "unanswered"
+  >("all");
   const [showReview, setShowReview] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [scoreData, setScoreData] = useState<any>(null);
+  const [showSolutionReview, setShowSolutionReview] = useState(false);
+  const [solutionFilter, setSolutionFilter] = useState<
+    "all" | "incorrect" | "bookmarked"
+  >("all");
 
   // Anti-Cheat State
   const [showConsent, setShowConsent] = useState(false);
@@ -917,6 +926,9 @@ export default function ExamsScreen() {
     setTimeLeft((currentExam.duration || 15) * 60);
     setCurrentQuestionIndex(0);
     setAnswers({});
+    setReviewMarks({});
+    setBookmarkedQuestions({});
+    setPaletteFilter("all");
 
     setAppSwitchCount(0);
     setTotalExitDuration(0);
@@ -926,11 +938,37 @@ export default function ExamsScreen() {
 
     setShowReview(false);
     setShowResult(false);
+    setShowSolutionReview(false);
     setExamStarted(true);
   };
 
   const handleSelectOption = (questionId: string, answer: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }));
+  };
+
+  const toggleMarkForReview = (questionId: string) => {
+    if (!questionId) return;
+    setReviewMarks((prev) => ({
+      ...prev,
+      [questionId]: !prev[questionId],
+    }));
+  };
+
+  const toggleBookmark = (questionId: string) => {
+    if (!questionId) return;
+    setBookmarkedQuestions((prev) => ({
+      ...prev,
+      [questionId]: !prev[questionId],
+    }));
+  };
+
+  const handleClearOption = (questionId: string) => {
+    if (!questionId) return;
+    setAnswers((prev) => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
   };
 
   const forceSubmitExam = async (
@@ -986,6 +1024,13 @@ export default function ExamsScreen() {
     const totalMarks = currentExam.totalMarks || 50;
     const percentage = Math.min(100, Math.round((score / Number(totalMarks)) * 100));
 
+    const markedReviewCount = Object.keys(reviewMarks).filter(
+      (k) => reviewMarks[k]
+    ).length;
+    const bookmarkCount = Object.keys(bookmarkedQuestions).filter(
+      (k) => bookmarkedQuestions[k]
+    ).length;
+
     const attemptData = {
       examId: currentExam.id,
       examTitle: currentExam.title,
@@ -993,6 +1038,10 @@ export default function ExamsScreen() {
       studentName: user?.name || "Student",
       studentPhone: user?.phone || user?.mobile || "",
       answers,
+      reviewMarks,
+      bookmarkedQuestions,
+      markedReviewCount,
+      bookmarkCount,
       score,
       totalMarks,
       percentage,
@@ -1029,9 +1078,17 @@ export default function ExamsScreen() {
     setShowResult(true);
   };
 
-  const viewLeaderboard = (exam: any, attempt: any) => {
+  const viewLeaderboard = async (exam: any, attempt: any) => {
     setCurrentExam(exam);
     setScoreData(attempt);
+    setAnswers(attempt?.answers || {});
+    setBookmarkedQuestions(attempt?.bookmarkedQuestions || {});
+    setReviewMarks(attempt?.reviewMarks || {});
+    if (exam?.questions && exam.questions.length > 0) {
+      setQuestions(exam.questions);
+    } else {
+      await fetchQuestionsForExam(exam);
+    }
     setShowResult(true);
   };
 
@@ -1619,78 +1676,155 @@ export default function ExamsScreen() {
               style={styles.questionContainer}
               contentContainerStyle={{ paddingBottom: 30 }}
             >
-              <View style={styles.questionProgressRow}>
-                <Text style={styles.questionNumber}>
-                  Question {currentQuestionIndex + 1} of {questions.length}
-                </Text>
-                <Text style={styles.questionMarksBadge}>
-                  {questions[currentQuestionIndex]?.marks || currentExam?.marksPerQuestion || 1} Marks
-                </Text>
-              </View>
+              {(() => {
+                const currentQ = questions[currentQuestionIndex];
+                const isMarked = !!reviewMarks[currentQ?.id];
+                const isBookmarked = !!bookmarkedQuestions[currentQ?.id];
 
-              {/* Phonics & Picture Question Image */}
-              {!!questions[currentQuestionIndex]?.imageUrl && (
-                <View style={styles.questionImageContainer}>
-                  <Image
-                    source={{ uri: formatGoogleDriveImageUrl(questions[currentQuestionIndex].imageUrl) }}
-                    style={styles.questionImage}
-                    resizeMode="contain"
-                  />
-                </View>
-              )}
+                return (
+                  <>
+                    <View style={styles.questionProgressRow}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 }}>
+                        <Text style={styles.questionNumber}>
+                          Question {currentQuestionIndex + 1} of {questions.length}
+                        </Text>
+                        {isMarked && (
+                          <View style={styles.reviewBadgeActive}>
+                            <MaterialIcons name="flag" size={11} color="#9333ea" />
+                            <Text style={styles.reviewBadgeText}>Review</Text>
+                          </View>
+                        )}
+                        {isBookmarked && (
+                          <View style={styles.bookmarkBadgeActive}>
+                            <MaterialIcons name="bookmark" size={11} color="#d97706" />
+                            <Text style={styles.bookmarkBadgeText}>Saved</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.questionMarksBadge}>
+                        {currentQ?.marks || currentExam?.marksPerQuestion || 1} Marks
+                      </Text>
+                    </View>
 
-              <Text style={styles.questionText}>
-                {questions[currentQuestionIndex]?.question}
-              </Text>
-
-              {questions[currentQuestionIndex]?.questionType === "MCQ" &&
-                ["A", "B", "C", "D"].map((opt) => {
-                  const val =
-                    questions[currentQuestionIndex][`option${opt}`];
-                  if (!val) return null;
-                  const isSelected =
-                    answers[questions[currentQuestionIndex].id] === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      style={[
-                        styles.optionButton,
-                        isSelected && styles.optionButtonSelected,
-                      ]}
-                      onPress={() =>
-                        handleSelectOption(
-                          questions[currentQuestionIndex].id,
-                          opt
-                        )
-                      }
-                      activeOpacity={0.8}
-                    >
-                      <View
+                    {/* Question Action Controls: Mark for Review, Bookmark & Clear */}
+                    <View style={styles.questionActionsBar}>
+                      <TouchableOpacity
                         style={[
-                          styles.optionRadioCircle,
-                          isSelected && styles.optionRadioCircleSelected,
+                          styles.actionPillBtn,
+                          isMarked && styles.actionPillBtnReviewActive,
                         ]}
+                        onPress={() => toggleMarkForReview(currentQ?.id)}
+                        activeOpacity={0.7}
                       >
+                        <MaterialIcons
+                          name={isMarked ? "flag" : "outlined-flag"}
+                          size={16}
+                          color={isMarked ? "#9333ea" : "#64748b"}
+                        />
                         <Text
                           style={[
-                            styles.optionLetter,
-                            isSelected && styles.optionLetterSelected,
+                            styles.actionPillText,
+                            isMarked && styles.actionPillTextReviewActive,
                           ]}
                         >
-                          {opt}
+                          {isMarked ? "Marked for Review" : "Mark for Review"}
                         </Text>
-                      </View>
-                      <Text
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
                         style={[
-                          styles.optionText,
-                          isSelected && styles.optionTextSelected,
+                          styles.actionPillBtn,
+                          isBookmarked && styles.actionPillBtnBookmarkActive,
                         ]}
+                        onPress={() => toggleBookmark(currentQ?.id)}
+                        activeOpacity={0.7}
                       >
-                        {val}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <MaterialIcons
+                          name={isBookmarked ? "bookmark" : "bookmark-border"}
+                          size={16}
+                          color={isBookmarked ? "#d97706" : "#64748b"}
+                        />
+                        <Text
+                          style={[
+                            styles.actionPillText,
+                            isBookmarked && styles.actionPillTextBookmarkActive,
+                          ]}
+                        >
+                          {isBookmarked ? "Bookmarked" : "Bookmark"}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {!!answers[currentQ?.id] && (
+                        <TouchableOpacity
+                          style={styles.actionPillBtnClear}
+                          onPress={() => handleClearOption(currentQ?.id)}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="close" size={14} color="#64748b" />
+                          <Text style={styles.actionPillClearText}>Clear</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Phonics & Picture Question Image */}
+                    {!!currentQ?.imageUrl && (
+                      <View style={styles.questionImageContainer}>
+                        <Image
+                          source={{ uri: formatGoogleDriveImageUrl(currentQ.imageUrl) }}
+                          style={styles.questionImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    )}
+
+                    <Text style={styles.questionText}>
+                      {currentQ?.question}
+                    </Text>
+
+                    {currentQ?.questionType === "MCQ" &&
+                      ["A", "B", "C", "D"].map((opt) => {
+                        const val = currentQ[`option${opt}`];
+                        if (!val) return null;
+                        const isSelected = answers[currentQ.id] === opt;
+                        return (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[
+                              styles.optionButton,
+                              isSelected && styles.optionButtonSelected,
+                            ]}
+                            onPress={() => handleSelectOption(currentQ.id, opt)}
+                            activeOpacity={0.8}
+                          >
+                            <View
+                              style={[
+                                styles.optionRadioCircle,
+                                isSelected && styles.optionRadioCircleSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.optionLetter,
+                                  isSelected && styles.optionLetterSelected,
+                                ]}
+                              >
+                                {opt}
+                              </Text>
+                            </View>
+                            <Text
+                              style={[
+                                styles.optionText,
+                                isSelected && styles.optionTextSelected,
+                              ]}
+                            >
+                              {val}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </>
+                );
+              })()}
             </ScrollView>
           )}
 
@@ -1729,47 +1863,262 @@ export default function ExamsScreen() {
         </View>
       </Modal>
 
-      {/* Review Grid Modal */}
+      {/* Review Grid & Question Palette Modal */}
       <Modal visible={showReview} animationType="fade" transparent={true}>
         <View style={styles.reviewModalOverlay}>
           <View style={styles.reviewModalContent}>
-            <Text style={styles.reviewTitle}>Questions Palette</Text>
-            <View style={styles.gridContainer}>
-              {questions.map((q, index) => {
-                const isAttempted = !!answers[q.id];
-                return (
-                  <TouchableOpacity
-                    key={q.id}
-                    style={[
-                      styles.gridItem,
-                      isAttempted
-                        ? styles.gridItemAttempted
-                        : styles.gridItemUnattempted,
-                    ]}
-                    onPress={() => {
-                      setCurrentQuestionIndex(index);
-                      setShowReview(false);
-                    }}
-                  >
-                    <Text
-                      style={
-                        isAttempted
-                          ? styles.gridTextAttempted
-                          : styles.gridText
-                      }
-                    >
-                      {index + 1}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={styles.reviewHeaderRow}>
+              <View>
+                <Text style={styles.reviewTitle}>Questions Palette</Text>
+                <Text style={styles.reviewSubtitle}>
+                  Tap any number to navigate instantly
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowReview(false)}
+                style={styles.reviewCloseIconBtn}
+              >
+                <MaterialIcons name="close" size={20} color="#64748b" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.closeReviewBtn}
-              onPress={() => setShowReview(false)}
+
+            {/* Quick Status Counters */}
+            <View style={styles.paletteStatsRow}>
+              <View
+                style={[
+                  styles.paletteStatCard,
+                  { backgroundColor: "#f0fdf4", borderColor: "#86efac" },
+                ]}
+              >
+                <Text style={[styles.paletteStatNumber, { color: "#16a34a" }]}>
+                  {questions.filter((q) => !!answers[q.id]).length}
+                </Text>
+                <Text style={styles.paletteStatLabel}>Answered</Text>
+              </View>
+
+              <View
+                style={[
+                  styles.paletteStatCard,
+                  { backgroundColor: "#f8fafc", borderColor: "#cbd5e1" },
+                ]}
+              >
+                <Text style={[styles.paletteStatNumber, { color: "#64748b" }]}>
+                  {questions.filter((q) => !answers[q.id]).length}
+                </Text>
+                <Text style={styles.paletteStatLabel}>Unanswered</Text>
+              </View>
+
+              <View
+                style={[
+                  styles.paletteStatCard,
+                  { backgroundColor: "#faf5ff", borderColor: "#d8b4fe" },
+                ]}
+              >
+                <Text style={[styles.paletteStatNumber, { color: "#9333ea" }]}>
+                  {questions.filter((q) => !!reviewMarks[q.id]).length}
+                </Text>
+                <Text style={styles.paletteStatLabel}>Review</Text>
+              </View>
+
+              <View
+                style={[
+                  styles.paletteStatCard,
+                  { backgroundColor: "#fffbeb", borderColor: "#fde68a" },
+                ]}
+              >
+                <Text style={[styles.paletteStatNumber, { color: "#d97706" }]}>
+                  {questions.filter((q) => !!bookmarkedQuestions[q.id]).length}
+                </Text>
+                <Text style={styles.paletteStatLabel}>Saved</Text>
+              </View>
+            </View>
+
+            {/* Quick Filter Chips */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.paletteFilterScroll}
+              contentContainerStyle={styles.paletteFilterContainer}
             >
-              <Text style={styles.closeReviewText}>Back to Test</Text>
-            </TouchableOpacity>
+              {[
+                { key: "all", label: `All (${questions.length})` },
+                {
+                  key: "review",
+                  label: `Review (${
+                    questions.filter((q) => !!reviewMarks[q.id]).length
+                  })`,
+                },
+                {
+                  key: "bookmarked",
+                  label: `Saved (${
+                    questions.filter((q) => !!bookmarkedQuestions[q.id]).length
+                  })`,
+                },
+                {
+                  key: "unanswered",
+                  label: `Unanswered (${
+                    questions.filter((q) => !answers[q.id]).length
+                  })`,
+                },
+                {
+                  key: "answered",
+                  label: `Answered (${
+                    questions.filter((q) => !!answers[q.id]).length
+                  })`,
+                },
+              ].map((f) => (
+                <TouchableOpacity
+                  key={f.key}
+                  style={[
+                    styles.paletteFilterChip,
+                    paletteFilter === f.key && styles.paletteFilterChipActive,
+                  ]}
+                  onPress={() => setPaletteFilter(f.key as any)}
+                >
+                  <Text
+                    style={[
+                      styles.paletteFilterChipText,
+                      paletteFilter === f.key &&
+                        styles.paletteFilterChipTextActive,
+                    ]}
+                  >
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Questions Grid */}
+            <ScrollView
+              style={{ maxHeight: 220 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.gridContainer}>
+                {questions
+                  .map((q, index) => ({ q, index }))
+                  .filter(({ q }) => {
+                    if (paletteFilter === "review") return !!reviewMarks[q.id];
+                    if (paletteFilter === "bookmarked")
+                      return !!bookmarkedQuestions[q.id];
+                    if (paletteFilter === "answered") return !!answers[q.id];
+                    if (paletteFilter === "unanswered") return !answers[q.id];
+                    return true;
+                  })
+                  .map(({ q, index }) => {
+                    const isAttempted = !!answers[q.id];
+                    const isMarked = !!reviewMarks[q.id];
+                    const isBookmarked = !!bookmarkedQuestions[q.id];
+                    const isCurrent = index === currentQuestionIndex;
+
+                    let bgStyle: any = styles.gridItemUnattempted;
+                    let textStyle: any = styles.gridText;
+
+                    if (isMarked && isAttempted) {
+                      bgStyle = styles.gridItemReviewAnswered;
+                      textStyle = styles.gridTextWhite;
+                    } else if (isMarked) {
+                      bgStyle = styles.gridItemReviewOnly;
+                      textStyle = styles.gridTextWhite;
+                    } else if (isAttempted) {
+                      bgStyle = styles.gridItemAttempted;
+                      textStyle = styles.gridTextAttempted;
+                    }
+
+                    return (
+                      <TouchableOpacity
+                        key={q.id}
+                        style={[
+                          styles.gridItem,
+                          bgStyle,
+                          isCurrent && styles.gridItemCurrent,
+                        ]}
+                        onPress={() => {
+                          setCurrentQuestionIndex(index);
+                          setShowReview(false);
+                        }}
+                      >
+                        <Text style={textStyle}>{index + 1}</Text>
+                        {isBookmarked && (
+                          <View style={styles.gridBookmarkBadge}>
+                            <MaterialIcons
+                              name="bookmark"
+                              size={10}
+                              color="#fbbf24"
+                            />
+                          </View>
+                        )}
+                        {isMarked && isAttempted && (
+                          <View style={styles.gridAnsweredDot} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            </ScrollView>
+
+            {/* Legend Bar */}
+            <View style={styles.paletteLegendRow}>
+              <View style={styles.legendItem}>
+                <View
+                  style={[styles.legendDot, { backgroundColor: "#16a34a" }]}
+                />
+                <Text style={styles.legendText}>Answered</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View
+                  style={[styles.legendDot, { backgroundColor: "#9333ea" }]}
+                />
+                <Text style={styles.legendText}>Review</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View
+                  style={[styles.legendDot, { backgroundColor: "#cbd5e1" }]}
+                />
+                <Text style={styles.legendText}>Unanswered</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <MaterialIcons name="bookmark" size={13} color="#d97706" />
+                <Text style={styles.legendText}>Saved</Text>
+              </View>
+            </View>
+
+            {/* Bottom Actions */}
+            <View style={styles.paletteActionsRow}>
+              <TouchableOpacity
+                style={styles.closeReviewBtn}
+                onPress={() => setShowReview(false)}
+              >
+                <Text style={styles.closeReviewText}>Back to Test</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitReviewBtn}
+                onPress={() => {
+                  setShowReview(false);
+                  Alert.alert(
+                    "Submit Exam?",
+                    `You have answered ${
+                      questions.filter((q) => !!answers[q.id]).length
+                    } of ${questions.length} questions.${
+                      questions.filter((q) => !!reviewMarks[q.id]).length > 0
+                        ? `\n\nNotice: ${
+                            questions.filter((q) => !!reviewMarks[q.id]).length
+                          } question(s) are marked for review.`
+                        : ""
+                    }`,
+                    [
+                      { text: "Continue Test", style: "cancel" },
+                      {
+                        text: "Submit Now",
+                        style: "destructive",
+                        onPress: submitExam,
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.submitReviewText}>Submit Now</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1858,6 +2207,19 @@ export default function ExamsScreen() {
 
               <View style={styles.certActionsRow}>
                 <TouchableOpacity
+                  style={styles.reviewSolutionsBtn}
+                  onPress={() => {
+                    setSolutionFilter("all");
+                    setShowSolutionReview(true);
+                  }}
+                >
+                  <MaterialIcons name="fact-check" size={18} color="#ffffff" />
+                  <Text style={styles.reviewSolutionsText}>
+                    Review Questions & Answers
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={styles.shareWhatsappBtn}
                   onPress={handleShareWhatsApp}
                 >
@@ -1876,6 +2238,270 @@ export default function ExamsScreen() {
               </View>
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Post-Exam Question & Solutions Review Modal */}
+      <Modal visible={showSolutionReview} animationType="slide">
+        <View
+          style={[
+            styles.solutionsModalContainer,
+            { paddingTop: insets.top },
+          ]}
+        >
+          <View style={styles.solutionsHeader}>
+            <TouchableOpacity
+              onPress={() => setShowSolutionReview(false)}
+              style={styles.solutionsBackBtn}
+            >
+              <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.solutionsHeaderTitle} numberOfLines={1}>
+                {currentExam?.title || "Exam"} - Solutions
+              </Text>
+              <Text style={styles.solutionsHeaderSubtitle}>
+                Score: {scoreData?.score ?? 0}/{currentExam?.totalMarks || 50}{" "}
+                Marks ({scoreData?.percentage ?? 0}%)
+              </Text>
+            </View>
+          </View>
+
+          {/* Filter Pills for Solutions Review */}
+          <View style={styles.solutionFilterRow}>
+            {[
+              { key: "all", label: `All (${questions.length})` },
+              {
+                key: "incorrect",
+                label: `Incorrect / Skipped (${
+                  questions.filter(
+                    (q) => answers[q.id] !== q.correctAnswer
+                  ).length
+                })`,
+              },
+              {
+                key: "bookmarked",
+                label: `Bookmarked (${
+                  questions.filter((q) => !!bookmarkedQuestions[q.id]).length
+                })`,
+              },
+            ].map((f) => (
+              <TouchableOpacity
+                key={f.key}
+                style={[
+                  styles.solutionFilterBtn,
+                  solutionFilter === f.key && styles.solutionFilterBtnActive,
+                ]}
+                onPress={() => setSolutionFilter(f.key as any)}
+              >
+                <Text
+                  style={[
+                    styles.solutionFilterText,
+                    solutionFilter === f.key &&
+                      styles.solutionFilterTextActive,
+                  ]}
+                >
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <FlatList
+            data={questions.filter((q) => {
+              if (solutionFilter === "incorrect") {
+                return answers[q.id] !== q.correctAnswer;
+              }
+              if (solutionFilter === "bookmarked") {
+                return !!bookmarkedQuestions[q.id];
+              }
+              return true;
+            })}
+            keyExtractor={(q, idx) => q.id || idx.toString()}
+            contentContainerStyle={styles.solutionsListContent}
+            ListEmptyComponent={
+              <View style={styles.emptySolutionsContainer}>
+                <MaterialIcons name="check-circle" size={48} color="#16a34a" />
+                <Text style={styles.emptySolutionsTitle}>
+                  No Questions Found
+                </Text>
+                <Text style={styles.emptySolutionsText}>
+                  {solutionFilter === "incorrect"
+                    ? "Fantastic! You did not get any questions incorrect."
+                    : "No questions match the selected filter."}
+                </Text>
+              </View>
+            }
+            renderItem={({ item: q }) => {
+              const studentAnswer = answers[q.id];
+              const isCorrect = studentAnswer === q.correctAnswer;
+              const isSkipped = !studentAnswer;
+              const isBookmarked = !!bookmarkedQuestions[q.id];
+
+              return (
+                <View style={styles.solutionCard}>
+                  <View style={styles.solutionCardHeader}>
+                    <View style={styles.solutionIndexBadge}>
+                      <Text style={styles.solutionIndexText}>
+                        Q{questions.findIndex((orig) => orig.id === q.id) + 1}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.solutionStatusPill,
+                        isCorrect
+                          ? styles.statusPillCorrect
+                          : isSkipped
+                            ? styles.statusPillSkipped
+                            : styles.statusPillWrong,
+                      ]}
+                    >
+                      <MaterialIcons
+                        name={
+                          isCorrect
+                            ? "check-circle"
+                            : isSkipped
+                              ? "help-outline"
+                              : "cancel"
+                        }
+                        size={14}
+                        color={
+                          isCorrect
+                            ? "#16a34a"
+                            : isSkipped
+                              ? "#64748b"
+                              : "#dc2626"
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.statusPillText,
+                          isCorrect
+                            ? { color: "#16a34a" }
+                            : isSkipped
+                              ? { color: "#64748b" }
+                              : { color: "#dc2626" },
+                        ]}
+                      >
+                        {isCorrect
+                          ? "Correct"
+                          : isSkipped
+                            ? "Skipped"
+                            : "Incorrect"}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.solutionBookmarkBtn}
+                      onPress={() => toggleBookmark(q.id)}
+                    >
+                      <MaterialIcons
+                        name={isBookmarked ? "bookmark" : "bookmark-border"}
+                        size={22}
+                        color={isBookmarked ? "#d97706" : "#94a3b8"}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {!!q.imageUrl && (
+                    <Image
+                      source={{
+                        uri: formatGoogleDriveImageUrl(q.imageUrl),
+                      }}
+                      style={styles.solutionQuestionImage}
+                      resizeMode="contain"
+                    />
+                  )}
+
+                  <Text style={styles.solutionQuestionText}>{q.question}</Text>
+
+                  {/* Options with visual correctness feedback */}
+                  <View style={styles.solutionOptionsList}>
+                    {["A", "B", "C", "D"].map((opt) => {
+                      const val = q[`option${opt}`];
+                      if (!val) return null;
+                      const isOptionCorrect = q.correctAnswer === opt;
+                      const isOptionSelected = studentAnswer === opt;
+
+                      let optBoxStyle = styles.solutionOptionBox;
+                      if (isOptionCorrect) {
+                        optBoxStyle = styles.solutionOptionCorrect;
+                      } else if (isOptionSelected && !isCorrect) {
+                        optBoxStyle = styles.solutionOptionWrong;
+                      }
+
+                      return (
+                        <View
+                          key={opt}
+                          style={[styles.solutionOptionBase, optBoxStyle]}
+                        >
+                          <View
+                            style={[
+                              styles.solutionOptionBadge,
+                              isOptionCorrect && {
+                                backgroundColor: "#16a34a",
+                              },
+                              isOptionSelected &&
+                                !isCorrect && { backgroundColor: "#dc2626" },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.solutionOptionLetter,
+                                (isOptionCorrect ||
+                                  (isOptionSelected && !isCorrect)) && {
+                                  color: "#ffffff",
+                                },
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.solutionOptionText,
+                              isOptionCorrect && {
+                                color: "#15803d",
+                                fontWeight: "700",
+                              },
+                              isOptionSelected &&
+                                !isCorrect && { color: "#b91c1c" },
+                            ]}
+                          >
+                            {val}
+                          </Text>
+                          {isOptionCorrect && (
+                            <View style={styles.correctIndicator}>
+                              <MaterialIcons
+                                name="check"
+                                size={14}
+                                color="#16a34a"
+                              />
+                              <Text style={styles.correctIndicatorText}>
+                                Correct
+                              </Text>
+                            </View>
+                          )}
+                          {isOptionSelected && !isOptionCorrect && (
+                            <View style={styles.wrongIndicator}>
+                              <MaterialIcons
+                                name="close"
+                                size={14}
+                                color="#dc2626"
+                              />
+                              <Text style={styles.wrongIndicatorText}>
+                                Your Choice
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            }}
+          />
         </View>
       </Modal>
     </View>
@@ -2393,7 +3019,99 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  /* Modals */
+  /* Question Badge Indicators */
+  reviewBadgeActive: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#f3e8ff",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#d8b4fe",
+  },
+  reviewBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#7e22ce",
+  },
+  bookmarkBadgeActive: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  bookmarkBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#b45309",
+  },
+
+  /* Question Action Bar: Mark for Review & Bookmark */
+  questionActionsBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  actionPillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  actionPillBtnReviewActive: {
+    backgroundColor: "#f3e8ff",
+    borderColor: "#a855f7",
+  },
+  actionPillBtnBookmarkActive: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+  },
+  actionPillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  actionPillTextReviewActive: {
+    color: "#7e22ce",
+    fontWeight: "800",
+  },
+  actionPillTextBookmarkActive: {
+    color: "#b45309",
+    fontWeight: "800",
+  },
+  actionPillBtnClear: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    marginLeft: "auto",
+  },
+  actionPillClearText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+
+  /* Questions Palette Modal */
   reviewModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -2403,34 +3121,123 @@ const styles = StyleSheet.create({
   reviewModalContent: {
     backgroundColor: "#ffffff",
     borderRadius: 20,
-    padding: 20,
+    padding: 18,
+    maxHeight: "85%",
+  },
+  reviewHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
   },
   reviewTitle: {
     fontSize: 17,
     fontWeight: "800",
     color: "#0f172a",
-    marginBottom: 14,
+  },
+  reviewSubtitle: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  reviewCloseIconBtn: {
+    padding: 4,
+  },
+  paletteStatsRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 12,
+  },
+  paletteStatCard: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 6,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  paletteStatNumber: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  paletteStatLabel: {
+    fontSize: 10,
+    color: "#64748b",
+    fontWeight: "600",
+    marginTop: 1,
+  },
+  paletteFilterScroll: {
+    marginBottom: 10,
+  },
+  paletteFilterContainer: {
+    gap: 6,
+    paddingVertical: 2,
+  },
+  paletteFilterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  paletteFilterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  paletteFilterChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  paletteFilterChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "800",
   },
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 14,
+    paddingVertical: 4,
   },
   gridItem: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
   },
   gridItemAttempted: {
     backgroundColor: "#16a34a",
+  },
+  gridItemReviewOnly: {
+    backgroundColor: "#9333ea",
+  },
+  gridItemReviewAnswered: {
+    backgroundColor: "#7e22ce",
   },
   gridItemUnattempted: {
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#cbd5e1",
+  },
+  gridItemCurrent: {
+    borderWidth: 2.5,
+    borderColor: COLORS.primary,
+  },
+  gridBookmarkBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+  },
+  gridAnsweredDot: {
+    position: "absolute",
+    bottom: 3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4ade80",
   },
   gridText: {
     color: "#475569",
@@ -2440,13 +3247,59 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "800",
   },
+  gridTextWhite: {
+    color: "#ffffff",
+    fontWeight: "800",
+  },
+  paletteLegendRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    padding: 8,
+    borderRadius: 10,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
+  legendText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  paletteActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
   closeReviewBtn: {
-    backgroundColor: COLORS.primary,
+    flex: 1,
+    backgroundColor: "#f1f5f9",
     paddingVertical: 11,
     borderRadius: 12,
     alignItems: "center",
   },
   closeReviewText: {
+    color: "#475569",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  submitReviewBtn: {
+    flex: 1,
+    backgroundColor: "#16a34a",
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  submitReviewText: {
     color: "#ffffff",
     fontWeight: "800",
     fontSize: 13,
@@ -2634,5 +3487,242 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "800",
     fontSize: 13,
+  },
+
+  /* Post-Exam Solutions Review Modal */
+  reviewSolutionsBtn: {
+    backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  reviewSolutionsText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  solutionsModalContainer: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  solutionsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  solutionsBackBtn: {
+    padding: 6,
+    marginRight: 8,
+  },
+  solutionsHeaderTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  solutionsHeaderSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  solutionFilterRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  solutionFilterBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  solutionFilterBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  solutionFilterText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  solutionFilterTextActive: {
+    color: "#ffffff",
+    fontWeight: "800",
+  },
+  solutionsListContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  solutionCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  solutionCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  solutionIndexBadge: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  solutionIndexText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  solutionStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusPillCorrect: {
+    backgroundColor: "#dcfce7",
+  },
+  statusPillSkipped: {
+    backgroundColor: "#f1f5f9",
+  },
+  statusPillWrong: {
+    backgroundColor: "#fee2e2",
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  solutionBookmarkBtn: {
+    marginLeft: "auto",
+    padding: 4,
+  },
+  solutionQuestionImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: 10,
+    marginBottom: 10,
+    backgroundColor: "#f8fafc",
+  },
+  solutionQuestionText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  solutionOptionsList: {
+    gap: 8,
+  },
+  solutionOptionBase: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  solutionOptionBox: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#e2e8f0",
+  },
+  solutionOptionCorrect: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#16a34a",
+    borderWidth: 1.5,
+  },
+  solutionOptionWrong: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#dc2626",
+    borderWidth: 1.5,
+  },
+  solutionOptionBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  solutionOptionLetter: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#475569",
+  },
+  solutionOptionText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#334155",
+    fontWeight: "600",
+  },
+  correctIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  correctIndicatorText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#16a34a",
+  },
+  wrongIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  wrongIndicatorText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#dc2626",
+  },
+  emptySolutionsContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptySolutionsTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginTop: 12,
+  },
+  emptySolutionsText: {
+    fontSize: 13,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 6,
+    paddingHorizontal: 20,
   },
 });
