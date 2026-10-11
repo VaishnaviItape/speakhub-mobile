@@ -23,10 +23,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
 import { COLORS } from '../../constants/theme';
 import { QR_CODE_BASE64 } from '../../constants/qrBase64';
+import TeacherDuesView from '../../components/fees/TeacherDuesView';
 
 export default function FeesScreen() {
   const { user } = useAuth();
   const { showLoader, hideLoader } = useLoader();
+
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
   
   const [refreshing, setRefreshing] = useState(false);
   const [courseInfo, setCourseInfo] = useState<any>(null);
@@ -36,7 +39,7 @@ export default function FeesScreen() {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || isTeacher) {
       hideLoader();
       return;
     }
@@ -548,6 +551,10 @@ Thank you!`;
   };
 
   const totalPaidSum = transactions.reduce((acc, curr) => acc + (Number(curr.amountPaid) || 0), 0);
+
+  if (isTeacher) {
+    return <TeacherDuesView />;
+  }
 
   return (
     <ScrollView 

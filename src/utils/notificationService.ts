@@ -14,7 +14,9 @@ import {
   limit, 
   onSnapshot,
   getDocs,
-  writeBatch
+  writeBatch,
+  addDoc,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -285,6 +287,254 @@ export async function deleteNotification(notificationId: string) {
   } catch (e) {
     console.error('Error deleting notification:', e);
   }
+}
+
+export interface ExpoPushMessage {
+  to: string | string[];
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+  sound?: string;
+  channelId?: string;
+  priority?: 'default' | 'normal' | 'high';
+  badge?: number;
+}
+
+export interface PushNotificationPayload {
+  title: string;
+  body: string;
+  type: NotificationType;
+  data?: Record<string, any>;
+  channelId?: 'fees' | 'exams' | 'study' | 'batches' | 'default';
+  sound?: 'default';
+  badge?: number;
+}
+
+/**
+ * Low-level sender to Expo Push Notification API
+ */
+export async function sendExpoPushNotification(messages: ExpoPushMessage[]): Promise<{ success: boolean; error?: any }> {
+  if (!messages || messages.length === 0) return { success: true };
+
+  const validMessages = messages.filter(m => {
+    if (Array.isArray(m.to)) return m.to.length > 0;
+    return Boolean(m.to && m.to.startsWith('ExponentPushToken'));
+  });
+
+  if (validMessages.length === 0) return { success: true };
+
+  try {
+    const chunkSize = 100;
+    for (let i = 0; i < validMessages.length; i += chunkSize) {
+      const chunk = validMessages.slice(i, i + chunkSize);
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send push notifications via Expo:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * Fetch registered push tokens for user IDs
+ */
+export async function getPushTokensForUsers(userIds: string[]): Promise<Map<string, string[]>> {
+  const tokenMap = new Map<string, string[]>();
+  if (!userIds || userIds.length === 0) return tokenMap;
+
+  userIds.forEach(id => tokenMap.set(id, []));
+
+  try {
+    for (const uId of userIds) {
+      try {
+        const uSnap = await getDoc(doc(db, 'users', uId));
+        if (uSnap.exists()) {
+          const uData = uSnap.data();
+          if (uData.pushToken && typeof uData.pushToken === 'string') {
+            const list = tokenMap.get(uId) || [];
+            if (!list.includes(uData.pushToken)) {
+              list.push(uData.pushToken);
+              tokenMap.set(uId, list);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Error fetching user token for ${uId}:`, err);
+      }
+    }
+
+    try {
+      const tokensSnap = await getDocs(collection(db, 'notification_tokens'));
+      tokensSnap.forEach(d => {
+        const data = d.data();
+        if (data.userId && data.token && userIds.includes(data.userId)) {
+          const list = tokenMap.get(data.userId) || [];
+          if (!list.includes(data.token)) {
+            list.push(data.token);
+            tokenMap.set(data.userId, list);
+          }
+        }
+      });
+    } catch {}
+  } catch (globalErr) {
+    console.error('Error fetching push tokens:', globalErr);
+  }
+
+  return tokenMap;
+}
+
+/**
+ * Send notification to a single user + create database record
+ */
+export async function sendNotificationToUser(
+  userId: string,
+  payload: PushNotificationPayload
+): Promise<boolean> {
+  if (!userId) return false;
+
+  try {
+    // 1. Create Notification Record in Firestore
+    const notifRef = await addDoc(collection(db, 'notifications'), {
+      userId,
+      title: payload.title,
+      body: payload.body,
+      type: payload.type,
+      data: payload.data || {},
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+
+    // 2. Fetch Device Tokens and send push
+    const tokenMap = await getPushTokensForUsers([userId]);
+    const tokens = tokenMap.get(userId) || [];
+
+    if (tokens.length > 0) {
+      const messages: ExpoPushMessage[] = tokens.map(token => ({
+        to: token,
+        title: payload.title,
+        body: payload.body,
+        data: {
+          ...payload.data,
+          type: payload.type,
+          notificationId: notifRef.id,
+        },
+        sound: 'default',
+        priority: 'high',
+        channelId: payload.channelId || 'default',
+        badge: 1,
+      }));
+
+      await sendExpoPushNotification(messages);
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`Error sending notification to user ${userId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Send Fee Due notification to a student with duplicate check
+ */
+export async function sendFeeDueNotification({
+  studentId,
+  studentName,
+  monthlyFee,
+  dueDate,
+  force = false,
+}: {
+  studentId: string;
+  studentName: string;
+  monthlyFee: number;
+  dueDate: string;
+  force?: boolean;
+}): Promise<{ success: boolean; message: string }> {
+  if (!studentId) return { success: false, message: 'Invalid student ID' };
+
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Check if already notified today unless forced
+    if (!force) {
+      const uSnap = await getDoc(doc(db, 'users', studentId));
+      if (uSnap.exists()) {
+        const uData = uSnap.data();
+        if (uData.lastFeeNotificationDate === todayStr) {
+          return { success: false, message: 'Fee notification already sent to this student today.' };
+        }
+      }
+    }
+
+    const title = '💰 Fee Due Reminder';
+    const body = `Dear ${studentName || 'Student'}, your monthly fee of ₹${monthlyFee || 800} is due on ${dueDate || 'upcoming date'}. Please make the payment.`;
+
+    const sent = await sendNotificationToUser(studentId, {
+      title,
+      body,
+      type: 'FEE_DUE',
+      channelId: 'fees',
+      data: {
+        screen: '/(app)/fees',
+        studentId,
+        amount: monthlyFee,
+        dueDate,
+      },
+    });
+
+    if (sent) {
+      await updateDoc(doc(db, 'users', studentId), {
+        lastFeeNotificationDate: todayStr,
+        lastFeeNotificationSentAt: serverTimestamp(),
+      });
+      return { success: true, message: `Fee due notification sent to ${studentName} successfully.` };
+    }
+
+    return { success: false, message: 'Failed to deliver notification.' };
+  } catch (error: any) {
+    console.error('Error sending fee due notification:', error);
+    return { success: false, message: error?.message || 'Error occurred.' };
+  }
+}
+
+/**
+ * Bulk send Fee Due notifications to multiple students
+ */
+export async function sendFeeDueNotificationsBulk(
+  students: Array<{ studentId: string; studentName: string; monthlyFee: number; dueDate: string }>
+): Promise<{ total: number; sent: number; failed: number }> {
+  let sent = 0;
+  let failed = 0;
+
+  for (const s of students) {
+    try {
+      const res = await sendFeeDueNotification({
+        studentId: s.studentId,
+        studentName: s.studentName,
+        monthlyFee: s.monthlyFee,
+        dueDate: s.dueDate,
+        force: true, // forced bulk send
+      });
+      if (res.success) {
+        sent++;
+      } else {
+        failed++;
+      }
+    } catch {
+      failed++;
+    }
+  }
+
+  return { total: students.length, sent, failed };
 }
 
 /**

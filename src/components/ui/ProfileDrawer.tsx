@@ -210,8 +210,10 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
               {/* Minimalist Developed Icon List Options */}
               <View style={styles.menuList}>
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/fees')}>
-                  <MaterialIcons name="receipt-long" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>My Purchases & Receipts</Text>
+                  <MaterialIcons name={user?.role === 'teacher' || user?.role === 'admin' ? "account-balance-wallet" : "receipt-long"} size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>
+                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Student Fee Dues & Reminders' : 'My Purchases & Receipts'}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/homework')}>

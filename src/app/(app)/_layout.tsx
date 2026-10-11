@@ -6,9 +6,13 @@ import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProfileDrawer from '../../components/ui/ProfileDrawer';
 
+import { useAuth } from '../../contexts/AuthContext';
+
 export default function AppLayout() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
   // Common Header Left Component for the Hamburger Menu
   const DrawerButton = () => (
@@ -104,7 +108,7 @@ export default function AppLayout() {
           options={{ 
             title: 'Profile',
             tabBarLabel: 'Profile',
-            headerTitle: 'Student Profile',
+            headerTitle: isTeacher ? 'Teacher Profile' : 'Student Profile',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "person" : "person-outline"} size={23} color={color} />
             )
@@ -124,7 +128,8 @@ export default function AppLayout() {
           name="fees" 
           options={{ 
             href: null,
-            title: 'Fee Receipts'
+            title: isTeacher ? 'Student Fee Dues' : 'Fee Receipts',
+            headerTitle: isTeacher ? 'Student Fee Dues & Reminders' : 'Fee Receipts',
           }} 
         />
         <Tabs.Screen 

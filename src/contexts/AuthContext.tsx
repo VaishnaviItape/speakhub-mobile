@@ -18,7 +18,7 @@ export interface User {
   lastName?: string;
   parentName?: string;
   parentOrHusbandName?: string;
-  role: 'student';
+  role: 'student' | 'teacher' | 'admin' | string;
   status: string;
   dob?: any;
   dateOfBirth?: any;

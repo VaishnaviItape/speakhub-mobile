@@ -1042,7 +1042,9 @@ export default function DashboardScreen() {
                 />
               </View>
               <Text style={styles.quickActionLabel}>
-                Payment & Subscription
+                {user?.role === 'teacher' || user?.role === 'admin'
+                  ? 'Student Fee Dues'
+                  : 'Payment & Subscription'}
               </Text>
             </TouchableOpacity>
           </View>
