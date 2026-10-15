@@ -19,7 +19,7 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
-      "package": "com.vaishnaviitape.speakhubmobile",
+      "package": "com.vishnusoftware.speakhub",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
@@ -69,6 +69,6 @@
         "projectId": "6b551522-49b6-4e8c-9edf-2e1b802b0354"
       }
     },
-    "owner": "VISHNU Software Solutions"
+    "owner": "itapevaishnavis-team"
   }
 }
