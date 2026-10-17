@@ -9,6 +9,7 @@
     "expo": "~57.0.8",
     "expo-asset": "~57.0.7",
     "expo-audio": "~57.0.3",
+    "expo-build-properties": "~57.0.22",
     "expo-camera": "~57.0.3",
     "expo-constants": "~57.0.3",
     "expo-dev-client": "~57.0.9",
@@ -54,7 +55,8 @@
     "lint": "expo lint",
     "build:apk": "eas build -p android --profile preview-arm64",
     "build:apk-all": "eas build -p android --profile preview",
-    "build:aab": "eas build -p android --profile production"
+    "build:aab": "eas build -p android --profile production",
+    "generate:icons": "node ./scripts/generate-icons.js"
   },
   "private": true
 }
