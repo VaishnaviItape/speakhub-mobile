@@ -202,7 +202,10 @@ Thank you!`;
       const pDateStr = isNaN(pDate.getTime()) ? 'N/A' : `${pDate.getDate()}/${pDate.getMonth() + 1}/${pDate.getFullYear()}`;
       
       let nDueStr = '-';
-      if (t.nextDueDate) {
+      const isTxNoDues = typeof t.nextDueDate === 'string' && (t.nextDueDate.toUpperCase() === 'NO_DUES' || t.nextDueDate.toLowerCase() === 'no dues');
+      if (isTxNoDues) {
+        nDueStr = 'No Dues';
+      } else if (t.nextDueDate) {
         const nd = t.nextDueDate?.toDate ? t.nextDueDate.toDate() : new Date(t.nextDueDate);
         if (!isNaN(nd.getTime())) {
           nDueStr = nd.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -462,7 +465,7 @@ Thank you!`;
               </div>
 
               <div class="receipt-banner-navy-address">
-                Address- Omkar Apartment, Shop No- 6 &amp; 7, Near Canara Bank, NDA Road, Warje-Malwadi, Pune -58.
+                Address- Omkar Apartment, Shop No- 6 &amp; 7, Near Canara Bank, NDA Road, Warje-Malwadi, Pune -58. &nbsp;|&nbsp; Contact: 9970964742, 8999080975
               </div>
 
               <div class="receipt-banner-navy-title">
@@ -603,17 +606,31 @@ Thank you!`;
 
       {/* Latest Next Due Date Callout */}
       {latestNextDueDate ? (
-        <View style={styles.dueAlertCard}>
-          <View style={styles.dueIconCircle}>
-            <MaterialIcons name="event" size={22} color={COLORS.primary} />
+        (latestNextDueDate.toUpperCase() === 'NO_DUES' || latestNextDueDate.toLowerCase() === 'no dues') ? (
+          <View style={[styles.dueAlertCard, { backgroundColor: '#f0fdf4', borderColor: '#86efac' }]}>
+            <View style={[styles.dueIconCircle, { backgroundColor: '#dcfce7' }]}>
+              <MaterialIcons name="check-circle" size={22} color="#16a34a" />
+            </View>
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={[styles.dueAlertTitle, { color: '#15803d' }]}>Fee Status: No Dues</Text>
+              <Text style={[styles.dueAlertText, { color: '#166534' }]}>
+                Congratulations! Your full course fees are fully paid. There are no pending fee dues.
+              </Text>
+            </View>
           </View>
-          <View style={{ marginLeft: 12, flex: 1 }}>
-            <Text style={styles.dueAlertTitle}>Next Fee Due Date</Text>
-            <Text style={styles.dueAlertText}>
-              Your next fee installment is scheduled for <Text style={{ fontWeight: '800', color: COLORS.primary }}>{formatDateDisplay(latestNextDueDate)}</Text>.
-            </Text>
+        ) : (
+          <View style={styles.dueAlertCard}>
+            <View style={styles.dueIconCircle}>
+              <MaterialIcons name="event" size={22} color={COLORS.primary} />
+            </View>
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={styles.dueAlertTitle}>Next Fee Due Date</Text>
+              <Text style={styles.dueAlertText}>
+                Your next fee installment is scheduled for <Text style={{ fontWeight: '800', color: COLORS.primary }}>{formatDateDisplay(latestNextDueDate)}</Text>.
+              </Text>
+            </View>
           </View>
-        </View>
+        )
       ) : null}
 
       {/* Fee Payment Transactions List */}

@@ -79,7 +79,31 @@ export default function TeacherDuesView() {
   // 1. Fetch Students, Courses, Batches & Realtime Transactions
   const fetchAllData = useCallback(async () => {
     try {
-      // A. Fetch active students
+      const isTeacher = user?.role === 'teacher';
+
+      // A. Fetch batches (including inactive to identify inactive-batch students)
+      let allBatches: any[] = [];
+      let batchList: any[] = [];
+      try {
+        const bSnap = await getDocs(collection(db, 'batches'));
+        allBatches = bSnap.docs.map((d) => ({ id: d.id, documentId: d.id, ...d.data() }));
+        const activeBatches = allBatches.filter((b: any) => b.status === 'active' || !b.status);
+
+        if (isTeacher) {
+          batchList = activeBatches.filter((b: any) => 
+            b.teacherId === user?.id || 
+            b.teacherId === (user as any)?.uid ||
+            (user as any)?.batchIds?.includes(b.id || b.documentId)
+          );
+        } else {
+          batchList = activeBatches;
+        }
+        setBatches(batchList);
+      } catch (e) {
+        console.warn('Could not fetch batches:', e);
+      }
+
+      // B. Fetch active students
       const uSnap = await getDocs(
         query(
           collection(db, 'users'),
@@ -87,27 +111,40 @@ export default function TeacherDuesView() {
           where('status', '==', 'active')
         )
       );
-      const studentList = uSnap.docs.map((d) => ({
+      let studentList = uSnap.docs.map((d) => ({
         id: d.id,
         documentId: d.id,
         ...d.data(),
       }));
+
+      // Exclude students whose assigned batch is inactive or completed
+      studentList = studentList.filter((s: any) => {
+        const sBatchId = s.batchIds?.[0] || s.batchId;
+        if (sBatchId) {
+          const matched = allBatches.find((b: any) => (b.id || b.documentId) === sBatchId);
+          if (matched && matched.status && matched.status !== 'active') {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // If teacher: strictly filter to students belonging to assigned batches
+      if (isTeacher) {
+        const teacherBatchIds = new Set(batchList.map((b: any) => b.id || b.documentId));
+        studentList = studentList.filter((s: any) => {
+          const sBatches = s.batchIds || (s.batchId ? [s.batchId] : []);
+          return sBatches.some((bId: string) => teacherBatchIds.has(bId));
+        });
+      }
       setStudents(studentList);
 
-      // B. Fetch courses
+      // C. Fetch courses
       try {
         const cSnap = await getDocs(collection(db, 'courses'));
         setCourses(cSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (e) {
         console.warn('Could not fetch courses:', e);
-      }
-
-      // C. Fetch batches
-      try {
-        const bSnap = await getDocs(collection(db, 'batches'));
-        setBatches(bSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        console.warn('Could not fetch batches:', e);
       }
     } catch (err) {
       console.error('Error fetching teacher dues data:', err);
@@ -115,7 +152,7 @@ export default function TeacherDuesView() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchAllData();
@@ -194,21 +231,27 @@ export default function TeacherDuesView() {
 
       // Determine Due Date
       let dueDateObj: Date | null = null;
-      if (s.feeDueDate) {
-        dueDateObj = parseDate(s.feeDueDate);
-      } else if (lastTx?.nextDueDate) {
-        dueDateObj = parseDate(lastTx.nextDueDate);
-      } else if (s.joiningDate || s.createdAt) {
-        dueDateObj = parseDate(s.joiningDate || s.createdAt);
-      } else {
-        // Fallback to 1st of current month
-        dueDateObj = new Date(today.getFullYear(), today.getMonth(), 1);
+      const rawDue = s.feeDueDate || lastTx?.nextDueDate;
+      const isNoDues = typeof rawDue === 'string' && (rawDue.toUpperCase() === 'NO_DUES' || rawDue.toLowerCase() === 'no dues');
+
+      if (!isNoDues) {
+        if (s.feeDueDate) {
+          dueDateObj = parseDate(s.feeDueDate);
+        } else if (lastTx?.nextDueDate) {
+          dueDateObj = parseDate(lastTx.nextDueDate);
+        } else if (s.joiningDate || s.createdAt) {
+          dueDateObj = parseDate(s.joiningDate || s.createdAt);
+        } else {
+          // Fallback to 1st of current month
+          dueDateObj = new Date(today.getFullYear(), today.getMonth(), 1);
+        }
       }
 
-      let status: StudentDueRecord['status'] = 'PENDING';
+      let status: StudentDueRecord['status'] = isNoDues ? 'PAID' : 'PENDING';
       let daysOverdue = 0;
+      let dueAmount = isNoDues ? 0 : monthlyFee;
 
-      if (dueDateObj) {
+      if (!isNoDues && dueDateObj) {
         const dueMidnight = new Date(dueDateObj);
         dueMidnight.setHours(0, 0, 0, 0);
 
@@ -228,13 +271,11 @@ export default function TeacherDuesView() {
           status = 'UPCOMING';
           daysOverdue = 0;
         }
-      }
 
-      // Calculate total due amount based on months overdue if long overdue
-      let dueAmount = monthlyFee;
-      if (status === 'OVERDUE' && daysOverdue >= 30) {
-        const monthsCount = Math.max(1, Math.ceil(daysOverdue / 30));
-        dueAmount = monthlyFee * monthsCount;
+        if (status === 'OVERDUE' && daysOverdue >= 30) {
+          const monthsCount = Math.max(1, Math.ceil(daysOverdue / 30));
+          dueAmount = monthlyFee * monthsCount;
+        }
       }
 
       return {
@@ -251,7 +292,7 @@ export default function TeacherDuesView() {
         batchName,
         joiningDate: s.joiningDate || s.createdAt,
         dueDate: dueDateObj,
-        dueDateDisplay: formatDateDisplay(dueDateObj),
+        dueDateDisplay: isNoDues ? 'No Dues' : formatDateDisplay(dueDateObj),
         status,
         daysOverdue,
         dueAmount,
@@ -320,6 +361,10 @@ export default function TeacherDuesView() {
 
   // Action: Send Individual In-App & Push Reminder
   const handleSendReminder = async (rec: StudentDueRecord) => {
+    if (rec.status === 'PAID' || rec.dueDateDisplay === 'No Dues') {
+      Alert.alert('No Dues', `${rec.name} has No Dues (Full fee paid). No reminder needed.`);
+      return;
+    }
     const todayStr = new Date().toISOString().split('T')[0];
     const isAlreadyNotified = rec.lastFeeNotificationDate === todayStr;
 
@@ -383,6 +428,10 @@ export default function TeacherDuesView() {
 
   // Action: WhatsApp Reminder
   const handleSendWhatsApp = (rec: StudentDueRecord) => {
+    if (rec.status === 'PAID' || rec.dueDateDisplay === 'No Dues') {
+      Alert.alert('No Dues', `${rec.name} has No Dues (Full fee paid).`);
+      return;
+    }
     const cleanPhone = rec.phone.replace(/[^0-9]/g, '');
     const targetPhone = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
 
@@ -485,13 +534,20 @@ Speak Hub Academy`;
     if (!editDateStudent || !newDueDateText.trim()) return;
 
     try {
-      const parsed = new Date(newDueDateText.trim());
-      if (isNaN(parsed.getTime())) {
-        Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format (e.g., 2026-10-25).');
-        return;
+      let iso = newDueDateText.trim();
+      const isSettingNoDues = iso.toUpperCase() === 'NO_DUES' || iso.toLowerCase() === 'no dues';
+
+      if (isSettingNoDues) {
+        iso = 'NO_DUES';
+      } else {
+        const parsed = new Date(iso);
+        if (isNaN(parsed.getTime())) {
+          Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format (or NO_DUES).');
+          return;
+        }
+        iso = parsed.toISOString().split('T')[0];
       }
 
-      const iso = parsed.toISOString().split('T')[0];
       await updateDoc(doc(db, 'users', editDateStudent.id), {
         feeDueDate: iso,
         updatedAt: serverTimestamp(),
@@ -501,7 +557,7 @@ Speak Hub Academy`;
         prev.map((s) => (s.id === editDateStudent.id ? { ...s, feeDueDate: iso } : s))
       );
 
-      Alert.alert('Success', `Due date for ${editDateStudent.name} updated to ${iso}.`);
+      Alert.alert('Success', `Due status for ${editDateStudent.name} updated to ${iso === 'NO_DUES' ? 'No Dues' : iso}.`);
       setEditDateStudent(null);
       setNewDueDateText('');
     } catch (e: any) {
@@ -925,20 +981,25 @@ Speak Hub Academy`;
             {/* Quick Presets */}
             <View style={styles.presetButtonsRow}>
               {[
+                { label: 'No Dues', days: -1 },
                 { label: '+7 Days', days: 7 },
                 { label: '+15 Days', days: 15 },
                 { label: '+1 Month', days: 30 },
               ].map((p) => (
                 <TouchableOpacity
                   key={p.label}
-                  style={styles.presetChip}
+                  style={[styles.presetChip, p.days === -1 && { backgroundColor: '#ecfdf5', borderColor: '#86efac' }]}
                   onPress={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + p.days);
-                    setNewDueDateText(d.toISOString().split('T')[0]);
+                    if (p.days === -1) {
+                      setNewDueDateText('NO_DUES');
+                    } else {
+                      const d = new Date();
+                      d.setDate(d.getDate() + p.days);
+                      setNewDueDateText(d.toISOString().split('T')[0]);
+                    }
                   }}
                 >
-                  <Text style={styles.presetChipText}>{p.label}</Text>
+                  <Text style={[styles.presetChipText, p.days === -1 && { color: '#16a34a', fontWeight: 'bold' }]}>{p.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
