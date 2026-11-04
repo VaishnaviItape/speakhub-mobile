@@ -86,3 +86,20 @@ export function validatePhoneNumber(phone: string, fieldLabel = 'Mobile Number')
 
   return { isValid: true };
 }
+
+/**
+ * Validates that an email has a standard email pattern (e.g. user@domain.com).
+ */
+export function validateEmail(email: string, fieldLabel = 'Email'): ValidationResult {
+  const trimmed = (email || '').trim();
+  if (!trimmed) {
+    return { isValid: false, error: `${fieldLabel} is required.` };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) {
+    return { isValid: false, error: `Please enter a valid ${fieldLabel.toLowerCase()} address.` };
+  }
+
+  return { isValid: true };
+}

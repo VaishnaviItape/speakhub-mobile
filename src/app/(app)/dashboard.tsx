@@ -748,7 +748,8 @@ export default function DashboardScreen() {
     return !q || name.includes(q) || desc.includes(q) || dur.includes(q) || mode.includes(q);
   });
 
-  const studentFirstName = user?.name?.split(" ")[0] || "Student";
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  const studentFirstName = user?.name?.split(" ")[0] || (isTeacher ? "Instructor" : "Student");
   const nextClassName =
     activeBatch?.batchName || courseName || "Spoken English Masterclass";
   const nextClassTiming =
@@ -815,10 +816,10 @@ export default function DashboardScreen() {
           />
           <View style={styles.greetingContainer}>
             <Text style={styles.greetingTitle}>
-              Hi, {studentFirstName}! 👋
+              Hi, {isTeacher ? (user?.name || "Teacher") : studentFirstName}! 👋
             </Text>
             <Text style={styles.greetingSubtitle}>
-              Welcome to Speak Hub! 😊
+              {isTeacher ? "Speak Hub Faculty Portal 🎓" : "Welcome to Speak Hub! 😊"}
             </Text>
           </View>
         </View>
@@ -894,39 +895,79 @@ export default function DashboardScreen() {
             </View>
           )}
 
-          {/* Next Class Banner (White Background with Red Border Card) */}
-          <View style={styles.nextClassCard}>
-            <Text style={styles.nextClassTitle}>
-              <Text style={styles.nextClassPrefix}>Next Class: </Text>
-              {nextClassName}
-            </Text>
-
-            <Text style={styles.nextClassSubtitle}>{nextClassTiming}</Text>
-
-            <View style={styles.nextClassActionsRow}>
-              <TouchableOpacity
-                style={styles.linkPillButton}
-                onPress={handleCopyLink}
-                activeOpacity={0.8}
+          {/* Next Class Banner or Teacher Control Hero */}
+          {isTeacher ? (
+            <View style={styles.teacherHeroCard}>
+              <LinearGradient
+                colors={['#4338CA', '#312E81']}
+                style={styles.teacherHeroGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
               >
-                <MaterialIcons name="link" size={16} color={COLORS.primary} />
-                <Text style={styles.linkPillText}>Link</Text>
-                <MaterialIcons
-                  name="chevron-right"
-                  size={16}
-                  color="#64748b"
-                />
-              </TouchableOpacity>
+                <View style={styles.teacherHeroHeader}>
+                  <View style={styles.teacherBadgePill}>
+                    <MaterialIcons name="school" size={13} color="#A5B4FC" />
+                    <Text style={styles.teacherBadgePillText}>Faculty Workspace</Text>
+                  </View>
+                  <Text style={styles.teacherHeroGreeting}>Instructor: {user?.name || 'Teacher'}</Text>
+                  <Text style={styles.teacherHeroDesc}>Manage your assigned batches, mark student attendance & follow up on fee dues.</Text>
+                </View>
 
-              <TouchableOpacity
-                style={styles.joinClassButton}
-                onPress={() => handleJoinClass()}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.joinClassButtonText}>JOIN CLASS NOW</Text>
-              </TouchableOpacity>
+                <View style={styles.teacherHeroActionsRow}>
+                  <TouchableOpacity
+                    style={styles.teacherAttendanceBtn}
+                    onPress={() => router.push("/(app)/attendance")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="how-to-reg" size={18} color="#4338CA" style={{ marginRight: 6 }} />
+                    <Text style={styles.teacherAttendanceBtnText}>Take Batch Attendance</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.teacherDuesBtn}
+                    onPress={() => router.push("/(app)/fees")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="account-balance-wallet" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.teacherDuesBtnText}>Student Dues</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
             </View>
-          </View>
+          ) : (
+            <View style={styles.nextClassCard}>
+              <Text style={styles.nextClassTitle}>
+                <Text style={styles.nextClassPrefix}>Next Class: </Text>
+                {nextClassName}
+              </Text>
+
+              <Text style={styles.nextClassSubtitle}>{nextClassTiming}</Text>
+
+              <View style={styles.nextClassActionsRow}>
+                <TouchableOpacity
+                  style={styles.linkPillButton}
+                  onPress={handleCopyLink}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="link" size={16} color={COLORS.primary} />
+                  <Text style={styles.linkPillText}>Link</Text>
+                  <MaterialIcons
+                    name="chevron-right"
+                    size={16}
+                    color="#64748b"
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.joinClassButton}
+                  onPress={() => handleJoinClass()}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.joinClassButtonText}>JOIN CLASS NOW</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Daily Homework & Tasks Hero Card */}
           <TouchableOpacity
@@ -978,7 +1019,9 @@ export default function DashboardScreen() {
                   color={COLORS.primary}
                 />
               </View>
-              <Text style={styles.quickActionLabel}>My Schedule</Text>
+              <Text style={styles.quickActionLabel}>
+                {isTeacher ? "Batch Attendance" : "My Schedule"}
+              </Text>
             </TouchableOpacity>
 
             {/* 2. My Progress */}
@@ -999,7 +1042,9 @@ export default function DashboardScreen() {
                   color="#0D9488"
                 />
               </View>
-              <Text style={styles.quickActionLabel}>My Progress</Text>
+              <Text style={styles.quickActionLabel}>
+                {isTeacher ? "Exams & Results" : "My Progress"}
+              </Text>
             </TouchableOpacity>
 
             {/* 3. Contact Support */}
@@ -2418,5 +2463,85 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
+  },
+  /* Teacher Control Hero Card */
+  teacherHeroCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 14,
+    elevation: 3,
+    shadowColor: "#4338CA",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  teacherHeroGradient: {
+    padding: 16,
+  },
+  teacherHeroHeader: {
+    marginBottom: 12,
+  },
+  teacherBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+    marginBottom: 6,
+  },
+  teacherBadgePillText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#E0E7FF",
+    marginLeft: 4,
+  },
+  teacherHeroGreeting: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 2,
+  },
+  teacherHeroDesc: {
+    fontSize: 12,
+    color: "#C7D2FE",
+    lineHeight: 16,
+  },
+  teacherHeroActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  teacherAttendanceBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    elevation: 1,
+  },
+  teacherAttendanceBtnText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#4338CA",
+  },
+  teacherDuesBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  teacherDuesBtnText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

@@ -388,7 +388,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         let data = userSnap.exists() ? userSnap.data() : null;
         let docId = userCred.user.uid;
 
-        // If not found by UID, search by phone query
+        // If not found by UID, search by phone query or email
         if (!data) {
           const rawClean = cleanInput.replace(/[^0-9]/g, '');
           if (rawClean.length >= 10) {
@@ -407,9 +407,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             }
           }
+
+          if (!data && cleanInput.includes('@')) {
+            const qE = query(collection(db, 'users'), where('email', '==', cleanInput.toLowerCase().trim()));
+            const sE = await getDocs(qE);
+            if (!sE.empty) {
+              data = sE.docs[0].data();
+              docId = sE.docs[0].id;
+            }
+          }
         }
 
         if (data) {
+          const accountStatus = (data.status || 'active').toLowerCase();
+          if (accountStatus === 'inactive' || accountStatus === 'blocked' || accountStatus === 'deleted') {
+            await firebaseSignOut(auth);
+            return {
+              success: false,
+              error: 'Your account is inactive. Please contact the Speak Hub administrator.'
+            };
+          }
+
           const loggedUser = formatUserData(docId, { ...data, uid: userCred.user.uid }, idToken);
           setUser(loggedUser);
           await saveAuthSession(loggedUser, idToken);

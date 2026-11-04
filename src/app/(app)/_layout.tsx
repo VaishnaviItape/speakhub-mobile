@@ -136,7 +136,8 @@ export default function AppLayout() {
           name="attendance" 
           options={{ 
             href: null,
-            title: 'My Attendance'
+            title: isTeacher ? 'Batch Attendance' : 'My Attendance',
+            headerTitle: isTeacher ? 'Batch Attendance' : 'My Attendance',
           }} 
         />
         <Tabs.Screen 

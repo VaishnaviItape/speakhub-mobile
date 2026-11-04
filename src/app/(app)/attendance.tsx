@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLoader } from '../../contexts/LoaderContext';
 import { db } from '../../config/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import TeacherAttendanceView from '../../components/attendance/TeacherAttendanceView';
 
 interface AttendanceRecord {
   id: string;
@@ -33,6 +34,12 @@ interface HolidayRecord {
 
 export default function AttendanceScreen() {
   const { user } = useAuth();
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+
+  if (isTeacher) {
+    return <TeacherAttendanceView />;
+  }
+
   const [logs, setLogs] = useState<AttendanceRecord[]>([]);
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const { showLoader, hideLoader } = useLoader();

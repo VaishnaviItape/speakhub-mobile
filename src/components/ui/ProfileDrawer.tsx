@@ -233,7 +233,9 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
                 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
                   <MaterialIcons name="event-available" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>My Attendance</Text>
+                  <Text style={styles.menuRowLabel}>
+                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Batch Attendance' : 'My Attendance'}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/support')}>
@@ -277,7 +279,9 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Student Details</Text>
+              <Text style={styles.modalTitle}>
+                {user?.role === 'teacher' || user?.role === 'admin' ? 'Teacher Profile' : 'Student Details'}
+              </Text>
               <TouchableOpacity onPress={() => setIsProfileModalOpen(false)}>
                 <MaterialIcons name="close" size={24} color="#0f172a" />
               </TouchableOpacity>
