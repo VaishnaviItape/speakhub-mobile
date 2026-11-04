@@ -235,7 +235,10 @@ Thank you!`;
       const isOneTimeFee = Boolean(
         isOfflineCourse ||
         (t as any).monthsCount === 0 ||
-        (t.billingPeriod && t.billingPeriod.toLowerCase().includes('one-time'))
+        (t.billingPeriod && (
+          t.billingPeriod.toLowerCase().includes('one-time') ||
+          t.billingPeriod.toLowerCase().includes('course fee')
+        ))
       );
 
       const amountPaid = t.amountPaid || 0;
