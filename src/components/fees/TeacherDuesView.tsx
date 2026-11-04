@@ -229,10 +229,15 @@ export default function TeacherDuesView() {
 
       const lastTx = sTxs[0];
 
+      const isOffline = matchedCourse?.mode === 'offline' || matchedCourse?.modeBadge?.toLowerCase().includes('offline');
+      const offlineTarget = matchedCourse?.offlineOneTimeFee || 4000;
+      const totalPaidByStudent = sTxs.reduce((sum: number, t: any) => sum + (Number(t.amountPaid) || 0), 0);
+      const hasPaidFullOffline = isOffline && totalPaidByStudent >= offlineTarget && offlineTarget > 0;
+
       // Determine Due Date
       let dueDateObj: Date | null = null;
       const rawDue = s.feeDueDate || lastTx?.nextDueDate;
-      const isNoDues = typeof rawDue === 'string' && (rawDue.toUpperCase() === 'NO_DUES' || rawDue.toLowerCase() === 'no dues');
+      const isNoDues = hasPaidFullOffline || (typeof rawDue === 'string' && (rawDue.toUpperCase() === 'NO_DUES' || rawDue.toLowerCase() === 'no dues'));
 
       if (!isNoDues) {
         if (s.feeDueDate) {
@@ -249,7 +254,7 @@ export default function TeacherDuesView() {
 
       let status: StudentDueRecord['status'] = isNoDues ? 'PAID' : 'PENDING';
       let daysOverdue = 0;
-      let dueAmount = isNoDues ? 0 : monthlyFee;
+      let dueAmount = isNoDues ? 0 : (isOffline ? Math.max(0, offlineTarget - totalPaidByStudent) : monthlyFee);
 
       if (!isNoDues && dueDateObj) {
         const dueMidnight = new Date(dueDateObj);
@@ -273,8 +278,12 @@ export default function TeacherDuesView() {
         }
 
         if (status === 'OVERDUE' && daysOverdue >= 30) {
-          const monthsCount = Math.max(1, Math.ceil(daysOverdue / 30));
-          dueAmount = monthlyFee * monthsCount;
+          if (isOffline) {
+            dueAmount = Math.max(0, offlineTarget - totalPaidByStudent);
+          } else {
+            const monthsCount = Math.max(1, Math.ceil(daysOverdue / 30));
+            dueAmount = monthlyFee * monthsCount;
+          }
         }
       }
 
