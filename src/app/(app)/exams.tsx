@@ -47,7 +47,7 @@ export default function ExamsScreen() {
   const [activeTab, setActiveTab] = useState<"Live" | "Upcoming" | "Completed" | "Missed">("Live");
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
-  // Exam / Mock Test State
+  // Exam State
   const [examStarted, setExamStarted] = useState(false);
   const [currentExam, setCurrentExam] = useState<any>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -78,459 +78,13 @@ export default function ExamsScreen() {
   const [appState, setAppState] = useState(AppState.currentState);
   const timerRef = useRef<any>(null);
 
-  // Mock Test Datasets (Available for All Students & Unassigned Batch Students)
-  const SUGGESTED_MOCK_TESTS = [
-    {
-      id: "mock-test-1",
-      isMockTest: true,
-      title: "English Mock Test",
-      instructor: "Teacher ",
-      batchBadge: "B31",
-      batchBadgeColor: "#FFEDD5",
-      batchBadgeTextColor: "#C2410C",
-      level: "B2 Upper-Intermediate",
-      levelColor: "#CCFBF1",
-      levelTextColor: "#0D9488",
-      duration: 15,
-      numberOfQuestions: 15,
-      totalMarks: 50,
-      marksPerQuestion: 3.33,
-      negativeMarking: false,
-      questions: [
-        {
-          id: "m1_q1",
-          question: "Which of the following is the correct sentence for daily English conversation?",
-          questionType: "MCQ",
-          optionA: "He don't know the answer",
-          optionB: "He doesn't knows the answer",
-          optionC: "He doesn't know the answer",
-          optionD: "He not know the answer",
-          correctAnswer: "C",
-        },
-        {
-          id: "m1_q2",
-          question: "Which modal verb is best used to make polite requests in spoken English?",
-          questionType: "MCQ",
-          optionA: "Could",
-          optionB: "Must",
-          optionC: "Shall",
-          optionD: "Ought",
-          correctAnswer: "A",
-        },
-        {
-          id: "m1_q3",
-          question: "Select the sentence with correct subject-verb agreement:",
-          questionType: "MCQ",
-          optionA: "Each of the students are ready",
-          optionB: "Each of the students is ready",
-          optionC: "Each of the student were ready",
-          optionD: "Each of students have ready",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q4",
-          question: "Identify the correct preposition: 'I have been learning with Speak Hub ______ 2024.'",
-          questionType: "MCQ",
-          optionA: "for",
-          optionB: "from",
-          optionC: "since",
-          optionD: "in",
-          correctAnswer: "C",
-        },
-        {
-          id: "m1_q5",
-          question: "What does the idiom 'Break the ice' mean in public speaking?",
-          questionType: "MCQ",
-          optionA: "To cool down a room",
-          optionB: "To start a friendly conversation and ease tension",
-          optionC: "To speak very loudly",
-          optionD: "To stop speaking suddenly",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q6",
-          question: "What is the most natural response to the formal greeting 'How do you do?'",
-          questionType: "MCQ",
-          optionA: "I am doing well",
-          optionB: "How do you do?",
-          optionC: "Good morning",
-          optionD: "I am fine thank you",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q7",
-          question: "Choose the correct preposition: 'She is exceptionally good ______ public speaking.'",
-          questionType: "MCQ",
-          optionA: "in",
-          optionB: "at",
-          optionC: "with",
-          optionD: "on",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q8",
-          question: "Identify the antonym of 'Hesitant' in spoken English:",
-          questionType: "MCQ",
-          optionA: "Confident",
-          optionB: "Shy",
-          optionC: "Fearful",
-          optionD: "Nervous",
-          correctAnswer: "A",
-        },
-        {
-          id: "m1_q9",
-          question: "Choose the correct phrase: 'I look forward to ______ you in the next masterclass.'",
-          questionType: "MCQ",
-          optionA: "meet",
-          optionB: "meeting",
-          optionC: "met",
-          optionD: "have met",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q10",
-          question: "Identify the correct question tag: 'You practice English every day, ______?'",
-          questionType: "MCQ",
-          optionA: "don't you?",
-          optionB: "aren't you?",
-          optionC: "isn't it?",
-          optionD: "do you?",
-          correctAnswer: "A",
-        },
-        {
-          id: "m1_q11",
-          question: "Which of the following demonstrates confident body language during presentations?",
-          questionType: "MCQ",
-          optionA: "Looking at the floor continuously",
-          optionB: "Maintaining natural eye contact and open posture",
-          optionC: "Crossing arms tightly",
-          optionD: "Fidgeting with hands",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q12",
-          question: "Fill in the blank: 'Neither the instructor nor the students ______ absent today.'",
-          questionType: "MCQ",
-          optionA: "was",
-          optionB: "were",
-          optionC: "is",
-          optionD: "has been",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q13",
-          question: "What is the best technique to overcome hesitation when answering spontaneous questions?",
-          questionType: "MCQ",
-          optionA: "Switch back to your mother tongue",
-          optionB: "Take a calm breath, use conversational transitions, and structure thoughts",
-          optionC: "Stop speaking completely",
-          optionD: "Speak extremely fast without pauses",
-          correctAnswer: "B",
-        },
-        {
-          id: "m1_q14",
-          question: "Select the correct passive voice: 'Teacher Hariom conducted the fluency seminar.'",
-          questionType: "MCQ",
-          optionA: "The fluency seminar was conducted by Teacher Hariom.",
-          optionB: "The fluency seminar is conducted by Teacher Hariom.",
-          optionC: "The fluency seminar has conducted by Teacher Hariom.",
-          optionD: "The fluency seminar had been conducted.",
-          correctAnswer: "A",
-        },
-        {
-          id: "m1_q15",
-          question: "Which word means 'the ability to speak easily and smoothly'?",
-          questionType: "MCQ",
-          optionA: "Hesitation",
-          optionB: "Fluency",
-          optionC: "Monotone",
-          optionD: "Slang",
-          correctAnswer: "B",
-        },
-      ],
-    },
-    {
-      id: "mock-test-2",
-      isMockTest: true,
-      title: "English Mock Test",
-      instructor: "Teacher ",
-      batchBadge: "B32",
-      batchBadgeColor: "#E0F2FE",
-      batchBadgeTextColor: "#0284C7",
-      level: "B2 Upper-Intermediate",
-      levelColor: "#CCFBF1",
-      levelTextColor: "#0D9488",
-      duration: 15,
-      numberOfQuestions: 10,
-      totalMarks: 50,
-      marksPerQuestion: 5,
-      negativeMarking: false,
-      questions: [
-        {
-          id: "m2_q1",
-          question: "Which phrase is ideal for introducing oneself in an interview?",
-          questionType: "MCQ",
-          optionA: "Myself Rahul from Pune",
-          optionB: "Good morning, I am Rahul, a graduate with a passion for communication",
-          optionC: "Me Rahul from Maharashtra",
-          optionD: "My name is Rahul and I is graduate",
-          correctAnswer: "B",
-        },
-        {
-          id: "m2_q2",
-          question: "Identify the correct synonym of 'Articulate':",
-          questionType: "MCQ",
-          optionA: "Clear and expressive",
-          optionB: "Unclear",
-          optionC: "Hesitant",
-          optionD: "Silent",
-          correctAnswer: "A",
-        },
-        {
-          id: "m2_q3",
-          question: "Choose the correct sentence:",
-          questionType: "MCQ",
-          optionA: "If I was you, I would practice daily",
-          optionB: "If I were you, I would practice daily",
-          optionC: "If I am you, I will practice",
-          optionD: "If I be you, I practice",
-          correctAnswer: "B",
-        },
-        {
-          id: "m2_q4",
-          question: "Fill in the blank: 'He spoke so ______ that everyone understood clearly.'",
-          questionType: "MCQ",
-          optionA: "fluent",
-          optionB: "fluently",
-          optionC: "more fluent",
-          optionD: "fluency",
-          correctAnswer: "B",
-        },
-        {
-          id: "m2_q5",
-          question: "What is the antonym of 'Ambiguous'?",
-          questionType: "MCQ",
-          optionA: "Clear and precise",
-          optionB: "Vague",
-          optionC: "Confusing",
-          optionD: "Doubtful",
-          correctAnswer: "A",
-        },
-        {
-          id: "m2_q6",
-          question: "Which sentence uses the correct conditional format?",
-          questionType: "MCQ",
-          optionA: "If it rains, we will postpone the outdoor session.",
-          optionB: "If it will rain, we postpone the session.",
-          optionC: "If it rained, we will postpone.",
-          optionD: "If it rain, we postpone.",
-          correctAnswer: "A",
-        },
-        {
-          id: "m2_q7",
-          question: "Choose the correct phrase to disagree politely in a group discussion:",
-          questionType: "MCQ",
-          optionA: "You are completely wrong!",
-          optionB: "I see your point, however, I look at it from a slightly different perspective.",
-          optionC: "Shut up, that makes no sense.",
-          optionD: "I don't care about your opinion.",
-          correctAnswer: "B",
-        },
-        {
-          id: "m2_q8",
-          question: "Identify the correct spelling:",
-          questionType: "MCQ",
-          optionA: "Pronounciation",
-          optionB: "Pronunciation",
-          optionC: "Pronuntiation",
-          optionD: "Prononciation",
-          correctAnswer: "B",
-        },
-        {
-          id: "m2_q9",
-          question: "What does the phrasal verb 'Brush up on' mean?",
-          questionType: "MCQ",
-          optionA: "To clean with a brush",
-          optionB: "To practice and improve an existing skill",
-          optionC: "To forget something",
-          optionD: "To paint a wall",
-          correctAnswer: "B",
-        },
-        {
-          id: "m2_q10",
-          question: "Which connector shows contrast between two ideas?",
-          questionType: "MCQ",
-          optionA: "Furthermore",
-          optionB: "In addition",
-          optionC: "Nevertheless",
-          optionD: "Similarly",
-          correctAnswer: "C",
-        },
-      ],
-    },
-    {
-      id: "mock-test-3",
-      isMockTest: true,
-      title: "Foundation Grammar & Vocabulary",
-      instructor: "Teacher ",
-      batchBadge: "Foundation",
-      batchBadgeColor: "#EDE9FE",
-      batchBadgeTextColor: "#7C3AED",
-      level: "A2 Elementary",
-      levelColor: "#FEF3C7",
-      levelTextColor: "#D97706",
-      duration: 10,
-      numberOfQuestions: 8,
-      totalMarks: 30,
-      marksPerQuestion: 3.75,
-      negativeMarking: false,
-      questions: [
-        {
-          id: "m3_q1",
-          question: "Choose the correct plural form of 'Child':",
-          questionType: "MCQ",
-          optionA: "Childs",
-          optionB: "Children",
-          optionC: "Childrens",
-          optionD: "Childes",
-          correctAnswer: "B",
-        },
-        {
-          id: "m3_q2",
-          question: "Fill in the blank with correct article: 'He is ______ honest person.'",
-          questionType: "MCQ",
-          optionA: "a",
-          optionB: "an",
-          optionC: "the",
-          optionD: "no article",
-          correctAnswer: "B",
-        },
-        {
-          id: "m3_q3",
-          question: "Select the correct past tense of 'Speak':",
-          questionType: "MCQ",
-          optionA: "Speaked",
-          optionB: "Spoke",
-          optionC: "Spoken",
-          optionD: "Speaking",
-          correctAnswer: "B",
-        },
-        {
-          id: "m3_q4",
-          question: "Which word is an adjective in: 'She gave a brilliant presentation.'?",
-          questionType: "MCQ",
-          optionA: "She",
-          optionB: "gave",
-          optionC: "brilliant",
-          optionD: "presentation",
-          correctAnswer: "C",
-        },
-        {
-          id: "m3_q5",
-          question: "Complete the sentence: 'They ______ to the Speak Hub academy every weekend.'",
-          questionType: "MCQ",
-          optionA: "go",
-          optionB: "goes",
-          optionC: "going",
-          optionD: "gone",
-          correctAnswer: "A",
-        },
-        {
-          id: "m3_q6",
-          question: "What is the opposite of 'Ancient'?",
-          questionType: "MCQ",
-          optionA: "Old",
-          optionB: "Modern",
-          optionC: "Historic",
-          optionD: "Classic",
-          correctAnswer: "B",
-        },
-        {
-          id: "m3_q7",
-          question: "Choose the correct sentence:",
-          questionType: "MCQ",
-          optionA: "Where you are going?",
-          optionB: "Where are you going?",
-          optionC: "Where you go?",
-          optionD: "Where going you?",
-          correctAnswer: "B",
-        },
-        {
-          id: "m3_q8",
-          question: "What is the meaning of 'Vocabulary'?",
-          questionType: "MCQ",
-          optionA: "Grammar rules",
-          optionB: "The body of words used in a particular language",
-          optionC: "Handwriting style",
-          optionD: "Reading speed",
-          correctAnswer: "B",
-        },
-      ],
-    },
-    {
-      id: "mock-test-phonics",
-      isMockTest: true,
-      title: "Phonics & Picture Vocabulary",
-      instructor: "Phonics Teacher",
-      batchBadge: "Phonics",
-      batchBadgeColor: "#FCE7F3",
-      batchBadgeTextColor: "#BE185D",
-      level: "Kids & Phonics",
-      levelColor: "#F3E8FF",
-      levelTextColor: "#7E22CE",
-      duration: 10,
-      numberOfQuestions: 4,
-      totalMarks: 20,
-      marksPerQuestion: 5,
-      negativeMarking: false,
-      questions: [
-        {
-          id: "p_q1",
-          question: "Look at the picture. What is this?",
-          imageUrl: "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=600",
-          questionType: "MCQ",
-          optionA: "That is wall",
-          optionB: "This is ball",
-          optionC: "This is doll",
-          optionD: "That is cell",
-          correctAnswer: "B",
-        },
-        {
-          id: "p_q2",
-          question: "Look at the picture. What is this fruit?",
-          imageUrl: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=600",
-          questionType: "MCQ",
-          optionA: "This is an apple",
-          optionB: "That is an orange",
-          optionC: "This is a mango",
-          optionD: "That is a banana",
-          correctAnswer: "A",
-        },
-        {
-          id: "p_q3",
-          question: "Look at the picture. What animal is this?",
-          imageUrl: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600",
-          questionType: "MCQ",
-          optionA: "This is a dog",
-          optionB: "This is a cat",
-          optionC: "That is a rabbit",
-          optionD: "This is a lion",
-          correctAnswer: "B",
-        },
-        {
-          id: "p_q4",
-          question: "Look at the picture. What is this object?",
-          imageUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600",
-          questionType: "MCQ",
-          optionA: "This is a pen",
-          optionB: "That is a table",
-          optionC: "This is a book",
-          optionD: "That is a bag",
-          correctAnswer: "C",
-        },
-      ],
-    },
-  ];
+  const parseExamDate = (dateVal: any): Date | null => {
+    if (!dateVal) return null;
+    if (typeof dateVal?.toDate === "function") return dateVal.toDate();
+    if (dateVal?.seconds) return new Date(dateVal.seconds * 1000);
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d;
+  };
 
   useEffect(() => {
     let unsubExams: (() => void) | undefined;
@@ -733,11 +287,6 @@ export default function ExamsScreen() {
   }, [user]);
 
   const fetchQuestionsForExam = async (exam: any) => {
-    if (exam.isMockTest && exam.questions) {
-      setQuestions(exam.questions);
-      return;
-    }
-
     try {
       const q = query(
         collection(db, "exam_questions"),
@@ -771,17 +320,45 @@ export default function ExamsScreen() {
         qList.push(normalizedData);
       });
 
-      if (qList.length === 0) {
-        // Fallback to sample questions if none in DB
-        setQuestions(SUGGESTED_MOCK_TESTS[0].questions);
-      } else {
-        if (exam.shuffleQuestions) {
-          qList.sort(() => Math.random() - 0.5);
-        }
-        setQuestions(qList);
+      // Sort by order/questionNumber if present
+      qList.sort((a, b) => (a.order || a.questionNumber || 0) - (b.order || b.questionNumber || 0));
+
+      // Also check if exam itself has embedded questions array
+      if (qList.length === 0 && Array.isArray(exam.questions) && exam.questions.length > 0) {
+        exam.questions.forEach((qItem: any, idx: number) => {
+          const rawImg = qItem.imageUrl || qItem.image || qItem.imageAttachment || "";
+          qList.push({
+            id: qItem.id || `q_${idx}`,
+            ...qItem,
+            marks: Number(exam.marksPerQuestion) || Number(qItem.marks) || (exam.totalMarks && exam.numberOfQuestions ? Number(exam.totalMarks) / Number(exam.numberOfQuestions) : 1),
+            question: qItem.question || qItem.questionText || "",
+            imageUrl: formatGoogleDriveImageUrl(rawImg),
+            questionType:
+              qItem.questionType ||
+              (qItem.type === "mcq" ? "MCQ" : qItem.type) ||
+              "MCQ",
+            optionA: qItem.optionA || (qItem.options ? qItem.options[0] : ""),
+            optionB: qItem.optionB || (qItem.options ? qItem.options[1] : ""),
+            optionC: qItem.optionC || (qItem.options ? qItem.options[2] : ""),
+            optionD: qItem.optionD || (qItem.options ? qItem.options[3] : ""),
+            correctAnswer:
+              qItem.correctAnswer ||
+              (qItem.correctOptionIndex !== undefined
+                ? ["A", "B", "C", "D"][qItem.correctOptionIndex]
+                : "A"),
+          });
+        });
       }
-    } catch {
-      setQuestions(SUGGESTED_MOCK_TESTS[0].questions);
+
+      if (exam.shuffleQuestions) {
+        qList.sort(() => Math.random() - 0.5);
+      }
+      setQuestions(qList);
+      return qList;
+    } catch (err) {
+      console.error("Error fetching exam questions:", err);
+      setQuestions([]);
+      return [];
     }
   };
 
@@ -874,37 +451,25 @@ export default function ExamsScreen() {
   }, [examStarted, timeLeft]);
 
   const requestStartExam = async (exam: any) => {
-    if (exam.startDate && !exam.isMockTest) {
-      const sTime = exam.startDate.toDate
-        ? exam.startDate.toDate().getTime()
-        : exam.startDate.seconds
-          ? exam.startDate.seconds * 1000
-          : new Date(exam.startDate).getTime();
-      if (sTime > Date.now()) {
-        const dStr = new Date(sTime).toLocaleString("en-IN", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        });
-        Alert.alert(
-          "Exam Not Started Yet",
-          `This exam is scheduled to begin on ${dStr}. Please return at that time to take the test.`
-        );
-        return;
-      }
+    const sDate = parseExamDate(exam.startDate);
+    if (sDate && sDate.getTime() > Date.now()) {
+      const dStr = sDate.toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      Alert.alert(
+        "Exam Not Started Yet",
+        `This exam is scheduled to begin on ${dStr}. Please return at that time to take the test.`
+      );
+      return;
     }
-    if (exam.endDate && !exam.isMockTest) {
-      const eTime = exam.endDate.toDate
-        ? exam.endDate.toDate().getTime()
-        : exam.endDate.seconds
-          ? exam.endDate.seconds * 1000
-          : new Date(exam.endDate).getTime();
-      if (eTime < Date.now()) {
-        Alert.alert(
-          "Exam Window Closed",
-          "The time window for this exam has already ended."
-        );
-        return;
-      }
+    const eDate = parseExamDate(exam.endDate);
+    if (eDate && eDate.getTime() < Date.now()) {
+      Alert.alert(
+        "Exam Window Closed",
+        "The time window for this exam has already ended."
+      );
+      return;
     }
     setCurrentExam(exam);
     setShowConsent(true);
@@ -912,7 +477,7 @@ export default function ExamsScreen() {
 
   const confirmStartExam = async () => {
     setShowConsent(false);
-    if (!currentExam?.isMockTest && !permission?.granted) {
+    if (!permission?.granted) {
       const { granted } = await requestPermission();
       if (!granted) {
         Alert.alert(
@@ -922,7 +487,18 @@ export default function ExamsScreen() {
       }
     }
 
-    await fetchQuestionsForExam(currentExam);
+    showLoader();
+    const fetchedQs = await fetchQuestionsForExam(currentExam);
+    hideLoader();
+
+    if (!fetchedQs || fetchedQs.length === 0) {
+      Alert.alert(
+        "No Questions Available",
+        "This exam currently has no questions assigned yet. Please contact your instructor."
+      );
+      return;
+    }
+
     setTimeLeft((currentExam.duration || 15) * 60);
     setCurrentQuestionIndex(0);
     setAnswers({});
@@ -1165,7 +741,7 @@ export default function ExamsScreen() {
     const upcoming: any[] = [];
     const missed: any[] = [];
 
-    // Helper to check if student already attempted this exam/mock test
+    // Helper to check if student already attempted this exam
     const findAttempt = (examId: string, title?: string) => {
       return attempts.find(
         (a) =>
@@ -1181,8 +757,10 @@ export default function ExamsScreen() {
     // 1. Process all Real Exams from Firestore
     exams.forEach((ex) => {
       const key = (ex.id || ex.title || "").trim().toLowerCase();
-      const start = ex.startDate ? new Date(ex.startDate).getTime() : 0;
-      const end = ex.endDate ? new Date(ex.endDate).getTime() : 0;
+      const sDate = parseExamDate(ex.startDate);
+      const eDate = parseExamDate(ex.endDate);
+      const start = sDate ? sDate.getTime() : 0;
+      const end = eDate ? eDate.getTime() : 0;
       const attempt = findAttempt(ex.id, ex.title);
 
       if (attempt) {
@@ -1205,17 +783,7 @@ export default function ExamsScreen() {
       }
     });
 
-    // 2. Also add suggested mock tests to Live ONLY if not attempted yet
-    SUGGESTED_MOCK_TESTS.forEach((mock) => {
-      const key = (mock.id || mock.title || "").trim().toLowerCase();
-      const attempt = findAttempt(mock.id, mock.title);
-      if (!attempt && !seenLiveKeys.has(key)) {
-        seenLiveKeys.add(key);
-        live.push(mock);
-      }
-    });
-
-    // 3. Process all Completed attempts (deduplicated so each exam only appears ONCE)
+    // 2. Process all Completed attempts (deduplicated so each exam only appears ONCE)
     const completedMap = new Map<string, any>();
 
     // Sort attempts by submittedAt descending so latest attempt is considered first
@@ -1227,8 +795,7 @@ export default function ExamsScreen() {
 
     sortedAttempts.forEach((att) => {
       const matchingExam =
-        exams.find((e) => e.id === att.examId || (e.title && att.examTitle && e.title.toLowerCase() === att.examTitle.toLowerCase())) ||
-        SUGGESTED_MOCK_TESTS.find((m) => m.id === att.examId || (m.title && att.examTitle && m.title.toLowerCase() === att.examTitle.toLowerCase()));
+        exams.find((e) => e.id === att.examId || (e.title && att.examTitle && e.title.toLowerCase() === att.examTitle.toLowerCase()));
 
       const examKey = (att.examId || matchingExam?.id || att.examTitle || matchingExam?.title || att.id || "").trim().toLowerCase();
       if (!examKey) return;
@@ -1264,9 +831,8 @@ export default function ExamsScreen() {
   const currentList = categorizedExams()[activeTab];
 
   const formatIndianClockDate = (dateVal: any) => {
-    if (!dateVal) return "-";
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return "-";
+    const d = parseExamDate(dateVal);
+    if (!d) return "-";
     const dateStr = d.toLocaleDateString("en-IN", {
       month: "short",
       day: "numeric",
@@ -1485,7 +1051,7 @@ export default function ExamsScreen() {
               {activeTab === "Live"
                 ? "Check upcoming tab for future exams"
                 : activeTab === "Upcoming"
-                  ? "No scheduled exams right now. Practice with mock tests below!"
+                  ? "No scheduled exams right now."
                   : activeTab === "Completed"
                     ? "You haven't completed any exams yet."
                     : "No missed exams recorded."}
@@ -1493,101 +1059,7 @@ export default function ExamsScreen() {
           </View>
         )}
 
-        {/* Suggested Mock Tests Section (Available for All Students & Unassigned Batch Students) */}
-        <View style={styles.mockTestsSection}>
-          <Text style={styles.mockTestsSectionTitle}>Suggested Mock Tests</Text>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.mockTestsScrollContent}
-          >
-            {SUGGESTED_MOCK_TESTS.map((test) => (
-              <TouchableOpacity
-                key={test.id}
-                style={styles.mockTestCard}
-                onPress={() => requestStartExam(test)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.mockTestCardTop}>
-                  <View style={{ flex: 1, paddingRight: 6 }}>
-                    <Text style={styles.mockTestCardTitle} numberOfLines={1}>
-                      {test.title}
-                    </Text>
-                    <Text style={styles.mockTestInstructor}>
-                      {test.instructor}
-                    </Text>
-
-                    {/* Batch Badge (e.g. B31 / B32) */}
-                    <View
-                      style={[
-                        styles.batchCodePill,
-                        { backgroundColor: test.batchBadgeColor },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.batchCodePillText,
-                          { color: test.batchBadgeTextColor },
-                        ]}
-                      >
-                        {test.batchBadge}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Image
-                    source={require("../../../assets/images/mock_test_icon.png")}
-                    style={styles.mockTestIconImage}
-                    resizeMode="contain"
-                  />
-                </View>
-
-                {/* Level Badge */}
-                <View style={styles.mockTestLevelRow}>
-                  <View
-                    style={[
-                      styles.mockLevelPill,
-                      { backgroundColor: test.levelColor },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.mockLevelPillText,
-                        { color: test.levelTextColor },
-                      ]}
-                    >
-                      {test.level}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Bottom Action Footer */}
-                <View style={styles.mockTestFooter}>
-                  <View style={styles.mockTestMetaInfo}>
-                    <MaterialIcons
-                      name="schedule"
-                      size={12}
-                      color="#64748b"
-                    />
-                    <Text style={styles.mockTestMetaText}>
-                      {test.duration} min • {test.numberOfQuestions} Qs
-                    </Text>
-                  </View>
-
-                  <View style={styles.startMockBtn}>
-                    <Text style={styles.startMockBtnText}>Start Test</Text>
-                    <MaterialIcons
-                      name="arrow-forward"
-                      size={12}
-                      color="#ffffff"
-                    />
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        
       </ScrollView>
 
       {/* Profile / Menu Drawer Overlay */}
@@ -2594,112 +2066,6 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     lineHeight: 18,
-  },
-
-  /* Suggested Mock Tests Section */
-  mockTestsSection: {
-    marginTop: 10,
-    paddingLeft: 16,
-  },
-  mockTestsSectionTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 14,
-    letterSpacing: -0.2,
-  },
-  mockTestsScrollContent: {
-    paddingRight: 16,
-    gap: 14,
-  },
-  mockTestCard: {
-    width: 230,
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-  },
-  mockTestCardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  mockTestCardTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  mockTestInstructor: {
-    fontSize: 12,
-    color: "#64748b",
-    marginTop: 2,
-    marginBottom: 8,
-  },
-  batchCodePill: {
-    alignSelf: "flex-start",
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  batchCodePillText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  mockTestIconImage: {
-    width: 58,
-    height: 58,
-  },
-  mockTestLevelRow: {
-    marginTop: 10,
-    marginBottom: 12,
-  },
-  mockLevelPill: {
-    alignSelf: "flex-start",
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  mockLevelPillText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  mockTestFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-  },
-  mockTestMetaInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  mockTestMetaText: {
-    fontSize: 11,
-    color: "#64748b",
-    fontWeight: "500",
-  },
-  startMockBtn: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    gap: 4,
-  },
-  startMockBtnText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "800",
   },
 
   /* Exam List Cards */

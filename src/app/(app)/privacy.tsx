@@ -70,7 +70,7 @@ export default function PrivacyPolicyScreen() {
 
           <Text style={styles.subheading}>B. Academic & Study Records</Text>
           <Text style={styles.paragraph}>
-            We process attendance logs, homework submissions, mock exam responses, scores, and tuition fee transaction receipts to track learning progress.
+            We process attendance logs, homework submissions, exam and test responses, scores, and tuition fee transaction receipts to track learning progress.
           </Text>
         </View>
 

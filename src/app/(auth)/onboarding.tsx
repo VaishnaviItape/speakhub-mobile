@@ -56,7 +56,7 @@ const ONBOARDING_STEPS: OnboardingSlide[] = [
     title: 'Live Batches &',
     subtitleHighlight: 'Interactive Exams',
     description:
-      'Attend live online classes, attempt timed mock tests with instant answer reviews, submit homework assignments, and access study notes on the go.',
+      'Attend live online classes, attempt timed tests and exams with instant answer reviews, submit homework assignments, and access study notes on the go.',
     type: 'interactive',
     accentColor: '#6366F1',
     accentBg: ['#EEF2FF', '#E0E7FF'],
