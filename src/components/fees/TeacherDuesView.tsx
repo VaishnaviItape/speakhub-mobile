@@ -20,6 +20,7 @@ import {
   where,
   getDocs,
   doc,
+  getDoc,
   updateDoc,
   onSnapshot,
   serverTimestamp,
@@ -90,11 +91,31 @@ export default function TeacherDuesView() {
         const activeBatches = allBatches.filter((b: any) => b.status === 'active' || !b.status);
 
         if (isTeacher) {
-          batchList = activeBatches.filter((b: any) => 
-            b.teacherId === user?.id || 
-            b.teacherId === (user as any)?.uid ||
-            (user as any)?.batchIds?.includes(b.id || b.documentId)
-          );
+          const assignedIds = new Set<string>((user?.batchIds || []).map(String));
+          if (user?.id) {
+            try {
+              const uSnap = await getDoc(doc(db, 'users', user.id));
+              if (uSnap.exists()) {
+                const uData = uSnap.data();
+                (uData.batchIds || []).forEach((id: string) => assignedIds.add(String(id)));
+              }
+            } catch (e) {}
+          }
+
+          batchList = activeBatches.filter((b: any) => {
+            const bId = String(b.id || b.documentId || '');
+            const tId = String(b.teacherId || '');
+            const tIds = Array.isArray(b.teacherIds) ? b.teacherIds.map(String) : [];
+            return (
+              assignedIds.has(bId) ||
+              tId === user?.id ||
+              tId === (user as any)?.uid ||
+              tId === user?.email ||
+              tIds.includes(user?.id || '') ||
+              tIds.includes((user as any)?.uid || '') ||
+              tIds.includes(user?.email || '')
+            );
+          });
         } else {
           batchList = activeBatches;
         }

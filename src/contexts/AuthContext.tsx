@@ -297,6 +297,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       
       if (data) {
+        if (data.role === 'teacher') {
+          try {
+            const teacherEmail = data.email || '';
+            const teacherPhone = data.phone || data.mobile || '';
+            const allBatchIds = new Set<string>((data.batchIds || []).map(String));
+
+            if (teacherEmail && !teacherEmail.endsWith('@speakhub.com')) {
+              const eq = query(collection(db, 'users'), where('email', '==', teacherEmail.trim()));
+              const eSnap = await getDocs(eq);
+              eSnap.forEach(d => {
+                const bd = d.data().batchIds;
+                if (Array.isArray(bd)) bd.forEach(bId => allBatchIds.add(String(bId)));
+              });
+            }
+
+            if (teacherPhone) {
+              const cleanP = String(teacherPhone).replace(/[^0-9]/g, '');
+              const last10 = cleanP.slice(-10);
+              if (last10.length >= 10) {
+                const pq = query(collection(db, 'users'), where('phone', '==', last10));
+                const pSnap = await getDocs(pq);
+                pSnap.forEach(d => {
+                  const bd = d.data().batchIds;
+                  if (Array.isArray(bd)) bd.forEach(bId => allBatchIds.add(String(bId)));
+                });
+              }
+            }
+
+            data.batchIds = Array.from(allBatchIds);
+          } catch (syncErr) {
+            console.warn("Teacher batch sync warning in fetchAndSetUserData:", syncErr);
+          }
+        }
+
         const formattedUser = formatUserData(docId, data, passedToken);
         setUser(formattedUser);
         await saveAuthSession(formattedUser, passedToken);
@@ -327,56 +361,68 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
         const aliasEmail = `${last10}@speakhub.com`;
 
-        // Method A: Try direct sign-in with alias email
+        // Step 1: Search Firestore users collection to find the user's primary registered email
+        let targetEmail = '';
         try {
-          userCred = await signInWithEmailAndPassword(auth, aliasEmail, password);
-        } catch (aliasErr: any) {
-          if (aliasErr.code === 'auth/wrong-password') {
-            throw aliasErr;
+          const variations = [last10, `+91${last10}`, `91${last10}`, cleanPhone];
+          const numVal = Number(last10);
+          if (!isNaN(numVal)) variations.push(numVal as any);
+
+          let foundDoc: any = null;
+          for (const field of ['phone', 'mobile']) {
+            for (const val of variations) {
+              if (foundDoc) break;
+              const q = query(collection(db, 'users'), where(field, '==', val));
+              const snap = await getDocs(q);
+              if (!snap.empty) {
+                // If there's a teacher or admin document, prioritize it
+                const teacherDoc = snap.docs.find(d => {
+                  const r = d.data().role;
+                  return r === 'teacher' || r === 'admin';
+                });
+                foundDoc = teacherDoc ? teacherDoc.data() : snap.docs[0].data();
+              }
+            }
+          }
+
+          if (!foundDoc && last10.length >= 10) {
+            const allUsersSnap = await getDocs(collection(db, 'users'));
+            allUsersSnap.forEach((uDoc) => {
+              if (foundDoc) return;
+              const uData = uDoc.data();
+              const pStr = (uData.phone || uData.mobile || '').toString().replace(/[^0-9]/g, '');
+              if (pStr.length >= 10 && pStr.slice(-10) === last10) {
+                foundDoc = uData;
+              }
+            });
+          }
+
+          if (foundDoc && foundDoc.email && !foundDoc.email.toLowerCase().endsWith('@speakhub.com')) {
+            targetEmail = foundDoc.email.trim();
+          }
+        } catch (e) {
+          console.warn("Firestore mobile search error:", e);
+        }
+
+        // Step 2: If user has a real registered email (e.g. teacher gayatrititimbe@gmail.com), sign in with that!
+        if (targetEmail) {
+          try {
+            userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
+          } catch (realEmailErr: any) {
+            if (realEmailErr.code === 'auth/wrong-password') {
+              throw realEmailErr;
+            }
           }
         }
 
-        // Method B: Search Firestore users collection for real email address linked to mobile number
+        // Step 3: If not signed in via real email, try alias email (standard student format: <phone>@speakhub.com)
         if (!userCred) {
-          let targetEmail = '';
           try {
-            const variations = [last10, `+91${last10}`, `91${last10}`, cleanPhone];
-            const numVal = Number(last10);
-            if (!isNaN(numVal)) variations.push(numVal as any);
-
-            let foundDoc: any = null;
-            for (const field of ['phone', 'mobile']) {
-              for (const val of variations) {
-                if (foundDoc) break;
-                const q = query(collection(db, 'users'), where(field, '==', val));
-                const snap = await getDocs(q);
-                if (!snap.empty) {
-                  foundDoc = snap.docs[0].data();
-                }
-              }
+            userCred = await signInWithEmailAndPassword(auth, aliasEmail, password);
+          } catch (aliasErr: any) {
+            if (aliasErr.code === 'auth/wrong-password') {
+              throw aliasErr;
             }
-
-            if (!foundDoc && last10.length >= 10) {
-              const allUsersSnap = await getDocs(collection(db, 'users'));
-              allUsersSnap.forEach((uDoc) => {
-                if (foundDoc) return;
-                const uData = uDoc.data();
-                const pStr = (uData.phone || uData.mobile || '').toString().replace(/[^0-9]/g, '');
-                if (pStr.length >= 10 && pStr.slice(-10) === last10) {
-                  foundDoc = uData;
-                }
-              });
-            }
-
-            if (foundDoc && foundDoc.email) {
-              targetEmail = foundDoc.email;
-            }
-          } catch (e) {
-            console.warn("Firestore mobile search error:", e);
-          }
-
-          if (targetEmail && targetEmail !== aliasEmail) {
-            userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
           }
         }
       }
@@ -396,24 +442,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const qP = query(collection(db, 'users'), where('phone', '==', last10));
             const sP = await getDocs(qP);
             if (!sP.empty) {
-              data = sP.docs[0].data();
-              docId = sP.docs[0].id;
+              const teacherDoc = sP.docs.find(d => d.data().role === 'teacher' || d.data().role === 'admin');
+              data = teacherDoc ? teacherDoc.data() : sP.docs[0].data();
+              docId = teacherDoc ? teacherDoc.id : sP.docs[0].id;
             } else {
               const qM = query(collection(db, 'users'), where('mobile', '==', last10));
               const sM = await getDocs(qM);
               if (!sM.empty) {
-                data = sM.docs[0].data();
-                docId = sM.docs[0].id;
+                const teacherDoc = sM.docs.find(d => d.data().role === 'teacher' || d.data().role === 'admin');
+                data = teacherDoc ? teacherDoc.data() : sM.docs[0].data();
+                docId = teacherDoc ? teacherDoc.id : sM.docs[0].id;
               }
             }
           }
 
-          if (!data && cleanInput.includes('@')) {
-            const qE = query(collection(db, 'users'), where('email', '==', cleanInput.toLowerCase().trim()));
+          const fallbackEmail = (cleanInput.includes('@') ? cleanInput : userCred.user.email || '').toLowerCase().trim();
+          if (!data && fallbackEmail) {
+            const qE = query(collection(db, 'users'), where('email', '==', fallbackEmail));
             const sE = await getDocs(qE);
             if (!sE.empty) {
-              data = sE.docs[0].data();
-              docId = sE.docs[0].id;
+              const teacherDoc = sE.docs.find(d => d.data().role === 'teacher' || d.data().role === 'admin');
+              data = teacherDoc ? teacherDoc.data() : sE.docs[0].data();
+              docId = teacherDoc ? teacherDoc.id : sE.docs[0].id;
             }
           }
         }
@@ -426,6 +476,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               success: false,
               error: 'Your account is inactive. Please contact the Speak Hub administrator.'
             };
+          }
+
+          if (data.role === 'teacher') {
+            try {
+              const teacherEmail = data.email || '';
+              const teacherPhone = data.phone || data.mobile || '';
+              const allBatchIds = new Set<string>((data.batchIds || []).map(String));
+
+              if (teacherEmail && !teacherEmail.endsWith('@speakhub.com')) {
+                const eq = query(collection(db, 'users'), where('email', '==', teacherEmail.trim()));
+                const eSnap = await getDocs(eq);
+                eSnap.forEach(d => {
+                  const bd = d.data().batchIds;
+                  if (Array.isArray(bd)) bd.forEach(bId => allBatchIds.add(String(bId)));
+                });
+              }
+
+              if (teacherPhone) {
+                const cleanP = String(teacherPhone).replace(/[^0-9]/g, '');
+                const last10 = cleanP.slice(-10);
+                if (last10.length >= 10) {
+                  const pq = query(collection(db, 'users'), where('phone', '==', last10));
+                  const pSnap = await getDocs(pq);
+                  pSnap.forEach(d => {
+                    const bd = d.data().batchIds;
+                    if (Array.isArray(bd)) bd.forEach(bId => allBatchIds.add(String(bId)));
+                  });
+                }
+              }
+
+              data.batchIds = Array.from(allBatchIds);
+            } catch (syncErr) {
+              console.warn("Teacher batch sync warning in loginWithEmail:", syncErr);
+            }
           }
 
           const loggedUser = formatUserData(docId, { ...data, uid: userCred.user.uid }, idToken);
