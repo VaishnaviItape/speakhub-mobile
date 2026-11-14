@@ -373,14 +373,43 @@ export default function TeacherAttendanceView() {
       }
     }
 
+    const parseSafe = (val: any): Date | null => {
+      if (!val) return null;
+      if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+      if (typeof val?.toDate === 'function') {
+        try {
+          const d = val.toDate();
+          return isNaN(d.getTime()) ? null : d;
+        } catch (e) {}
+      }
+      if (typeof val?.seconds === 'number') {
+        const d = new Date(val.seconds * 1000);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      if (typeof val === 'string') {
+        const str = val.trim();
+        const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+        if (ddmmyyyy) {
+          const day = parseInt(ddmmyyyy[1], 10);
+          const month = parseInt(ddmmyyyy[2], 10);
+          const year = parseInt(ddmmyyyy[3], 10);
+          const parsed = new Date(year, month - 1, day);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        }
+        const parsed = new Date(str);
+        return isNaN(parsed.getTime()) ? null : parsed;
+      }
+      return null;
+    };
+
     let dueDateObj: Date | null = null;
     if (student.feeDueDate) {
-      const d = student.feeDueDate?.toDate ? student.feeDueDate.toDate() : new Date(student.feeDueDate);
-      if (!isNaN(d.getTime())) dueDateObj = d;
+      const d = parseSafe(student.feeDueDate);
+      if (d) dueDateObj = d;
     }
     if (!dueDateObj && student.joiningDate) {
-      const d = student.joiningDate?.toDate ? student.joiningDate.toDate() : new Date(student.joiningDate);
-      if (!isNaN(d.getTime())) {
+      const d = parseSafe(student.joiningDate);
+      if (d) {
         const today = new Date();
         const jDay = Math.min(d.getDate(), 28);
         dueDateObj = new Date(today.getFullYear(), today.getMonth(), jDay);

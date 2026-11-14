@@ -198,27 +198,61 @@ export default function TeacherDuesView() {
     fetchAllData();
   };
 
-  // Helper date parsers
+  // Helper date parsers supporting DD-MM-YYYY, YYYY-MM-DD, Firestore Timestamps
   const parseDate = (d: any): Date | null => {
     if (!d) return null;
     if (d instanceof Date) return isNaN(d.getTime()) ? null : d;
-    if (d.toDate && typeof d.toDate === 'function') return d.toDate();
-    if (d.seconds) return new Date(d.seconds * 1000);
+    if (typeof d?.toDate === 'function') {
+      try {
+        const parsed = d.toDate();
+        return isNaN(parsed.getTime()) ? null : parsed;
+      } catch (e) {}
+    }
+    if (typeof d?.seconds === 'number') {
+      const parsed = new Date(d.seconds * 1000);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
     if (typeof d === 'string') {
-      const parsed = new Date(d);
+      const str = d.trim();
+      if (!str || str.toUpperCase() === 'NO_DUES' || str.toLowerCase() === 'no dues') return null;
+
+      // 1. DD-MM-YYYY or DD/MM/YYYY
+      const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+      if (ddmmyyyy) {
+        const day = parseInt(ddmmyyyy[1], 10);
+        const month = parseInt(ddmmyyyy[2], 10);
+        const year = parseInt(ddmmyyyy[3], 10);
+        const parsed = new Date(year, month - 1, day);
+        return isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      // 2. YYYY-MM-DD or YYYY/MM/DD
+      const yyyymmdd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (yyyymmdd) {
+        const year = parseInt(yyyymmdd[1], 10);
+        const month = parseInt(yyyymmdd[2], 10);
+        const day = parseInt(yyyymmdd[3], 10);
+        const parsed = new Date(year, month - 1, day);
+        return isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      const parsed = new Date(str);
       return isNaN(parsed.getTime()) ? null : parsed;
     }
     return null;
   };
 
   const formatDateDisplay = (dateVal: any): string => {
+    if (!dateVal) return 'N/A';
+    if (typeof dateVal === 'string' && (dateVal.toUpperCase() === 'NO_DUES' || dateVal.toLowerCase() === 'no dues')) {
+      return 'No Dues';
+    }
     const d = parseDate(dateVal);
-    if (!d) return 'N/A';
-    const monthNames = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return `${d.getDate().toString().padStart(2, '0')} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    if (!d) return typeof dateVal === 'string' ? dateVal : 'N/A';
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
   };
 
   // Calculate student fee due records
@@ -559,35 +593,41 @@ Speak Hub Academy`;
     );
   };
 
-  // Action: Save New Due Date
+  // Action: Save New Due Date (Fires update query to Firestore)
   const handleSaveDueDate = async () => {
     if (!editDateStudent || !newDueDateText.trim()) return;
 
     try {
-      let iso = newDueDateText.trim();
-      const isSettingNoDues = iso.toUpperCase() === 'NO_DUES' || iso.toLowerCase() === 'no dues';
+      const text = newDueDateText.trim();
+      const isSettingNoDues = text.toUpperCase() === 'NO_DUES' || text.toLowerCase() === 'no dues';
 
+      let dateToSave: string;
       if (isSettingNoDues) {
-        iso = 'NO_DUES';
+        dateToSave = 'NO_DUES';
       } else {
-        const parsed = new Date(iso);
-        if (isNaN(parsed.getTime())) {
-          Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format (or NO_DUES).');
+        const parsed = parseDate(text);
+        if (!parsed || isNaN(parsed.getTime())) {
+          Alert.alert('Invalid Date', 'Please enter a valid date in DD-MM-YYYY format (e.g. 15-11-2026) or NO_DUES.');
           return;
         }
-        iso = parsed.toISOString().split('T')[0];
+        const day = parsed.getDate().toString().padStart(2, '0');
+        const month = (parsed.getMonth() + 1).toString().padStart(2, '0');
+        const year = parsed.getFullYear();
+        dateToSave = `${day}-${month}-${year}`;
       }
 
+      // FIRE THE UPDATE QUERY to Firestore users collection
       await updateDoc(doc(db, 'users', editDateStudent.id), {
-        feeDueDate: iso,
+        feeDueDate: dateToSave,
         updatedAt: serverTimestamp(),
       });
 
+      // Update local state without forcefully resetting
       setStudents((prev) =>
-        prev.map((s) => (s.id === editDateStudent.id ? { ...s, feeDueDate: iso } : s))
+        prev.map((s) => (s.id === editDateStudent.id ? { ...s, feeDueDate: dateToSave } : s))
       );
 
-      Alert.alert('Success', `Due status for ${editDateStudent.name} updated to ${iso === 'NO_DUES' ? 'No Dues' : iso}.`);
+      Alert.alert('Success', `Due date for ${editDateStudent.name} updated to ${dateToSave === 'NO_DUES' ? 'No Dues' : dateToSave}.`);
       setEditDateStudent(null);
       setNewDueDateText('');
     } catch (e: any) {
@@ -915,7 +955,7 @@ Speak Hub Academy`;
                   onPress={() => {
                     setEditDateStudent(rec);
                     setNewDueDateText(
-                      rec.dueDate ? rec.dueDate.toISOString().split('T')[0] : ''
+                      rec.dueDate ? formatDateDisplay(rec.dueDate) : ''
                     );
                   }}
                   style={styles.editDateBtn}
@@ -999,10 +1039,10 @@ Speak Hub Academy`;
               Student: {editDateStudent?.name} ({editDateStudent?.courseName})
             </Text>
 
-            <Text style={styles.inputLabel}>New Due Date (YYYY-MM-DD):</Text>
+            <Text style={styles.inputLabel}>New Due Date (DD-MM-YYYY):</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="e.g. 2026-10-25"
+              placeholder="e.g. 25-10-2026"
               placeholderTextColor="#94a3b8"
               value={newDueDateText}
               onChangeText={setNewDueDateText}
@@ -1025,7 +1065,7 @@ Speak Hub Academy`;
                     } else {
                       const d = new Date();
                       d.setDate(d.getDate() + p.days);
-                      setNewDueDateText(d.toISOString().split('T')[0]);
+                      setNewDueDateText(formatDateDisplay(d));
                     }
                   }}
                 >

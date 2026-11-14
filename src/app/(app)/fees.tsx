@@ -129,18 +129,39 @@ export default function FeesScreen() {
 
   const formatDateDisplay = (dateVal?: any): string => {
     if (!dateVal) return 'N/A';
-    let d: Date;
-    if (dateVal instanceof Date) {
-      d = dateVal;
-    } else if (typeof dateVal === 'string') {
-      d = new Date(dateVal);
-    } else if (dateVal.seconds) {
-      d = new Date(dateVal.seconds * 1000);
-    } else {
-      d = new Date();
+    if (typeof dateVal === 'string' && (dateVal.toUpperCase() === 'NO_DUES' || dateVal.toLowerCase() === 'no dues')) {
+      return 'No Dues';
     }
-    if (isNaN(d.getTime())) return 'N/A';
-    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    let d: Date | null = null;
+    if (dateVal instanceof Date) {
+      d = isNaN(dateVal.getTime()) ? null : dateVal;
+    } else if (typeof dateVal?.toDate === 'function') {
+      try {
+        const parsed = dateVal.toDate();
+        d = isNaN(parsed.getTime()) ? null : parsed;
+      } catch (e) {}
+    } else if (typeof dateVal?.seconds === 'number') {
+      const parsed = new Date(dateVal.seconds * 1000);
+      d = isNaN(parsed.getTime()) ? null : parsed;
+    } else if (typeof dateVal === 'string') {
+      const str = dateVal.trim();
+      const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+      if (ddmmyyyy) {
+        const day = parseInt(ddmmyyyy[1], 10);
+        const month = parseInt(ddmmyyyy[2], 10);
+        const year = parseInt(ddmmyyyy[3], 10);
+        const parsed = new Date(year, month - 1, day);
+        d = isNaN(parsed.getTime()) ? null : parsed;
+      } else {
+        const parsed = new Date(str);
+        d = isNaN(parsed.getTime()) ? null : parsed;
+      }
+    }
+    if (!d) return typeof dateVal === 'string' ? dateVal : 'N/A';
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
   };
 
   const copyToClipboard = (text: string, label: string) => {
