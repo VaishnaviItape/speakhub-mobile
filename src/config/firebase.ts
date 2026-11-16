@@ -30,4 +30,17 @@ export const auth = authInstance;
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
+// Secondary Firebase app instance used when teachers/admins register new students
+// so that the current logged-in user is not signed out.
+export const secondaryApp = getApps().find(a => a.name === 'SecondaryApp') 
+  || initializeApp(firebaseConfig, 'SecondaryApp');
+
+let secondaryAuthInstance: any;
+try {
+  secondaryAuthInstance = initializeAuth(secondaryApp);
+} catch (e) {
+  secondaryAuthInstance = getAuth(secondaryApp);
+}
+export const secondaryAuth = secondaryAuthInstance;
+
 export default app;

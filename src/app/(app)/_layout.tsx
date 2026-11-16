@@ -155,6 +155,30 @@ export default function AppLayout() {
             title: 'Notifications'
           }} 
         />
+        <Tabs.Screen 
+          name="students" 
+          options={{ 
+            headerShown: false,
+            href: null,
+            title: 'Student Master'
+          }} 
+        />
+        <Tabs.Screen 
+          name="batches" 
+          options={{ 
+            headerShown: false,
+            href: null,
+            title: 'Batch Master'
+          }} 
+        />
+        <Tabs.Screen 
+          name="courses" 
+          options={{ 
+            headerShown: false,
+            href: null,
+            title: 'Course Master'
+          }} 
+        />
       </Tabs>
       
       {/* Global Drawer Overlay */}

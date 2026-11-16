@@ -209,6 +209,45 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
 
               {/* Minimalist Developed Icon List Options */}
               <View style={styles.menuList}>
+                {(user?.role === 'teacher' || user?.role === 'admin') && (
+                  <>
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/students')}>
+                      <MaterialIcons name="people" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Student Master (Add Students)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/batches')}>
+                      <MaterialIcons name="groups" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Batch Master (Create Batches)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/courses')}>
+                      <MaterialIcons name="library-books" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Course Master (Add Courses)
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
+                  <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>
+                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Notes Studio (Add Notes)' : 'Notes & Study Materials'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
+                  <MaterialIcons name="event-available" size={24} color={COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>
+                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Batch Attendance' : 'My Attendance'}
+                  </Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/fees')}>
                   <MaterialIcons name={user?.role === 'teacher' || user?.role === 'admin' ? "account-balance-wallet" : "receipt-long"} size={24} color={COLORS.primary} />
                   <Text style={styles.menuRowLabel}>
@@ -224,18 +263,6 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/exams')}>
                   <MaterialIcons name="assessment" size={24} color={COLORS.primary} />
                   <Text style={styles.menuRowLabel}>Test Series & Results</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
-                  <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>Notes & Study Materials</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
-                  <MaterialIcons name="event-available" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>
-                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Batch Attendance' : 'My Attendance'}
-                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/support')}>

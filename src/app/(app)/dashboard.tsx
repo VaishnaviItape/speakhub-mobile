@@ -37,10 +37,10 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useLoader } from "../../contexts/LoaderContext";
 import { getYouTubeThumbnail } from "../../utils/youtube";
 import ProfileDrawer from "../../components/ui/ProfileDrawer";
-import { 
+import {
   subscribeToUserNotifications,
   markNotificationAsRead,
-  markAllNotificationsAsRead 
+  markAllNotificationsAsRead
 } from "../../utils/notificationService";
 
 export default function DashboardScreen() {
@@ -174,8 +174,8 @@ export default function DashboardScreen() {
             const nDate = nData.createdAt?.toDate
               ? nData.createdAt.toDate()
               : nData.createdAt
-              ? new Date(nData.createdAt)
-              : new Date();
+                ? new Date(nData.createdAt)
+                : new Date();
 
             list.push({
               id: d.id,
@@ -425,7 +425,7 @@ export default function DashboardScreen() {
           if (uSnap.exists()) {
             studentData = uSnap.data();
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       if (liveUserData) {
@@ -459,7 +459,7 @@ export default function DashboardScreen() {
                 studentData = { ...studentData, ...mSnap.docs[0].data() };
               }
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
 
@@ -574,8 +574,8 @@ export default function DashboardScreen() {
           const nDate = nData.createdAt?.toDate
             ? nData.createdAt.toDate()
             : nData.createdAt
-            ? new Date(nData.createdAt)
-            : today;
+              ? new Date(nData.createdAt)
+              : today;
           fetchedNotifications.push({
             id: d.id,
             title: nData.title || "Academy Update",
@@ -588,7 +588,7 @@ export default function DashboardScreen() {
             actionLabel: nData.actionLabel || "View Details",
           });
         });
-      } catch (e) {}
+      } catch (e) { }
 
       // Fetch YouTube Videos (Live DB only)
       try {
@@ -676,12 +676,10 @@ export default function DashboardScreen() {
 
       Alert.alert(
         "🎉 Seat Booking Inquiry Sent!",
-        `Thank you ${
-          bookingName || "Student"
-        }! Your seat booking inquiry for "${
-          selectedCourseForBooking?.courseName ||
-          selectedCourseForBooking?.name ||
-          "the course"
+        `Thank you ${bookingName || "Student"
+        }! Your seat booking inquiry for "${selectedCourseForBooking?.courseName ||
+        selectedCourseForBooking?.name ||
+        "the course"
         }" has been submitted.\n\nOur counseling team will contact you at ${bookingPhone} to confirm your seat.`,
         [{ text: "OK" }]
       );
@@ -712,9 +710,9 @@ export default function DashboardScreen() {
         Alert.alert(
           "Cannot open link",
           "Could not open meeting URL:\n" +
-            rawUrl +
-            "\n\nError: " +
-            err.message
+          rawUrl +
+          "\n\nError: " +
+          err.message
         );
       }
     } else {
@@ -910,26 +908,57 @@ export default function DashboardScreen() {
                     <Text style={styles.teacherBadgePillText}>Faculty Workspace</Text>
                   </View>
                   <Text style={styles.teacherHeroGreeting}>Instructor: {user?.name || 'Teacher'}</Text>
-                  <Text style={styles.teacherHeroDesc}>Manage your assigned batches, mark student attendance & follow up on fee dues.</Text>
+                  <Text style={styles.teacherHeroDesc}>Manage your assigned batches, add notes, register students, configure courses & take attendance.</Text>
                 </View>
 
+                {/* Primary Quick Row */}
                 <View style={styles.teacherHeroActionsRow}>
                   <TouchableOpacity
                     style={styles.teacherAttendanceBtn}
-                    onPress={() => router.push("/(app)/attendance")}
+                    onPress={() => router.push("/(app)/notes")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="how-to-reg" size={18} color="#4338CA" style={{ marginRight: 6 }} />
-                    <Text style={styles.teacherAttendanceBtnText}>Take Batch Attendance</Text>
+                    <MaterialIcons name="menu-book" size={17} color="#4338CA" style={{ marginRight: 5 }} />
+                    <Text style={styles.teacherAttendanceBtnText}>+ Add Notes</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.teacherDuesBtn}
-                    onPress={() => router.push("/(app)/fees")}
+                    style={styles.teacherAttendanceBtn}
+                    onPress={() => router.push("/(app)/students")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="account-balance-wallet" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.teacherDuesBtnText}>Student Dues</Text>
+                    <MaterialIcons name="person-add" size={17} color="#4338CA" style={{ marginRight: 5 }} />
+                    <Text style={styles.teacherAttendanceBtnText}>+ Add Student</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Secondary Actions Row */}
+                <View style={[styles.teacherHeroActionsRow, { marginTop: 8 }]}>
+                  <TouchableOpacity
+                    style={[styles.teacherDuesBtn, { flex: 1 }]}
+                    onPress={() => router.push("/(app)/batches")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="groups" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.teacherDuesBtnText}>+ Batch</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.teacherDuesBtn, { flex: 1 }]}
+                    onPress={() => router.push("/(app)/courses")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="library-books" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.teacherDuesBtnText}>+ Course</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.teacherDuesBtn, { flex: 1 }]}
+                    onPress={() => router.push("/(app)/attendance")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="how-to-reg" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.teacherDuesBtnText}>Attendance</Text>
                   </TouchableOpacity>
                 </View>
               </LinearGradient>
@@ -969,35 +998,110 @@ export default function DashboardScreen() {
             </View>
           )}
 
-          {/* Daily Homework & Tasks Hero Card */}
-          <TouchableOpacity
-            style={styles.homeworkHeroCard}
-            onPress={() => router.push("/(app)/homework")}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={['#FFF1F2', '#FFE4E6']}
-              style={styles.homeworkHeroGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.homeworkHeroLeft}>
-                <View style={styles.homeworkHeroIconCircle}>
-                  <MaterialIcons name="assignment" size={24} color={COLORS.primary} />
-                </View>
-                <View style={styles.homeworkHeroTextBox}>
-                  <View style={styles.homeworkHeroBadgeRow}>
-                    <Text style={styles.homeworkHeroBadge}>TODAY'S TASKS</Text>
+          {/* Faculty Admin Center or Daily Homework Hero Card */}
+          {isTeacher ? (
+            <View style={styles.teacherStudioSection}>
+              <View style={styles.teacherStudioHeaderRow}>
+                <Text style={styles.teacherStudioSectionTitle}>Faculty Admin Studio 🎓</Text>
+                <Text style={styles.teacherStudioSectionSubtitle}>Full administrative control from mobile</Text>
+              </View>
+
+              <View style={styles.teacherStudioGrid}>
+                {/* 1. Study Notes */}
+                <TouchableOpacity
+                  style={styles.teacherStudioCard}
+                  onPress={() => router.push("/(app)/notes")}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#FFF1F2' }]}>
+                    <MaterialIcons name="menu-book" size={24} color="#E11D48" />
                   </View>
-                  <Text style={styles.homeworkHeroTitle}>Daily Homework & Diary</Text>
-                  <Text style={styles.homeworkHeroSubtitle}>View worksheets, practice & submit via WhatsApp</Text>
+                  <Text style={styles.teacherStudioCardTitle}>Notes Studio</Text>
+                  <Text style={styles.teacherStudioCardDesc}>Upload study notes & video lectures</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#FFF1F2' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: '#E11D48' }]}>+ Add Note</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 2. Students */}
+                <TouchableOpacity
+                  style={styles.teacherStudioCard}
+                  onPress={() => router.push("/(app)/students")}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#EEF2FF' }]}>
+                    <MaterialIcons name="people" size={24} color="#4F46E5" />
+                  </View>
+                  <Text style={styles.teacherStudioCardTitle}>Student Master</Text>
+                  <Text style={styles.teacherStudioCardDesc}>Register students & view credentials</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#EEF2FF' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: '#4F46E5' }]}>+ Add Student</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 3. Batches */}
+                <TouchableOpacity
+                  style={styles.teacherStudioCard}
+                  onPress={() => router.push("/(app)/batches")}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#F0FDF4' }]}>
+                    <MaterialIcons name="groups" size={24} color="#16A34A" />
+                  </View>
+                  <Text style={styles.teacherStudioCardTitle}>Batch Master</Text>
+                  <Text style={styles.teacherStudioCardDesc}>Create batches & live meeting links</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#F0FDF4' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: '#16A34A' }]}>+ Create Batch</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 4. Courses */}
+                <TouchableOpacity
+                  style={styles.teacherStudioCard}
+                  onPress={() => router.push("/(app)/courses")}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#FEF3C7' }]}>
+                    <MaterialIcons name="library-books" size={24} color="#D97706" />
+                  </View>
+                  <Text style={styles.teacherStudioCardTitle}>Course Master</Text>
+                  <Text style={styles.teacherStudioCardDesc}>Configure online & offline course fees</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#FEF3C7' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: '#D97706' }]}>+ Add Course</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.homeworkHeroCard}
+              onPress={() => router.push("/(app)/homework")}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#FFF1F2', '#FFE4E6']}
+                style={styles.homeworkHeroGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <View style={styles.homeworkHeroLeft}>
+                  <View style={styles.homeworkHeroIconCircle}>
+                    <MaterialIcons name="assignment" size={24} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.homeworkHeroTextBox}>
+                    <View style={styles.homeworkHeroBadgeRow}>
+                      <Text style={styles.homeworkHeroBadge}>TODAY'S TASKS</Text>
+                    </View>
+                    <Text style={styles.homeworkHeroTitle}>Daily Homework & Diary</Text>
+                    <Text style={styles.homeworkHeroSubtitle}>View worksheets, practice & submit via WhatsApp</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.homeworkHeroArrow}>
-                <MaterialIcons name="arrow-forward-ios" size={15} color={COLORS.primary} />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
+                <View style={styles.homeworkHeroArrow}>
+                  <MaterialIcons name="arrow-forward-ios" size={15} color={COLORS.primary} />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
 
           {/* 4 Quick Action Pastel Cards */}
           <View style={styles.quickActionsGrid}>
@@ -1428,9 +1532,8 @@ export default function DashboardScreen() {
                   <Text style={styles.notifModalTitle}>Notifications</Text>
                   <Text style={styles.notifModalSubtitle}>
                     {unreadCount > 0
-                      ? `${unreadCount} unread update${
-                          unreadCount > 1 ? "s" : ""
-                        }`
+                      ? `${unreadCount} unread update${unreadCount > 1 ? "s" : ""
+                      }`
                       : "All caught up 🎉"}
                   </Text>
                 </View>
@@ -2543,5 +2646,71 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  /* Faculty Management Studio */
+  teacherStudioSection: {
+    marginBottom: 20,
+  },
+  teacherStudioHeaderRow: {
+    marginBottom: 12,
+  },
+  teacherStudioSectionTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  teacherStudioSectionSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  teacherStudioGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  teacherStudioCard: {
+    width: "48%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    justifyContent: "space-between",
+  },
+  teacherStudioIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  teacherStudioCardTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  teacherStudioCardDesc: {
+    fontSize: 11,
+    color: "#64748B",
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  teacherStudioPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  teacherStudioPillText: {
+    fontSize: 10.5,
+    fontWeight: "700",
   },
 });

@@ -33,6 +33,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useLoader } from "../../contexts/LoaderContext";
 import { db } from "../../config/firebase";
 import ProfileDrawer from "../../components/ui/ProfileDrawer";
+import TeacherNotesView from "../../components/notes/TeacherNotesView";
 import { SPEAK_HUB_LOGO_BASE64 } from "../../constants/assetsBase64";
 
 interface NoteItem {
@@ -67,6 +68,12 @@ interface NoteItem {
 
 export default function NotesScreen() {
   const { user } = useAuth();
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+
+  if (isTeacher) {
+    return <TeacherNotesView />;
+  }
+
   const insets = useSafeAreaInsets();
   const { showLoader, hideLoader } = useLoader();
 
