@@ -207,27 +207,32 @@ export default function ExamsScreen() {
 
             const isBatchMatch =
               isExplicitlyEnabled ||
-              !bId ||
               bId === "all" ||
               (Array.isArray(data.batchIds) && data.batchIds.includes("all")) ||
-              (Array.isArray(data.batchIds) &&
-                data.batchIds.some((id: string) => studentBatchKeys.includes(id))) ||
-              !hasSpecificBatch ||
-              studentBatchKeys.includes(bId) ||
-              (data.batchName &&
-                studentBatchKeys.some(
-                  (k) => k && k.toLowerCase() === String(data.batchName).toLowerCase()
-                ));
+              (hasSpecificBatch && (
+                (bId && studentBatchKeys.includes(bId)) ||
+                (Array.isArray(data.batchIds) &&
+                  data.batchIds.some((id: string) => studentBatchKeys.includes(id))) ||
+                (data.batchName &&
+                  studentBatchKeys.some(
+                    (k) => k && k.toLowerCase() === String(data.batchName).toLowerCase()
+                  ))
+              ));
 
             const isCourseMatch =
               !cId ||
               cId === "all" ||
-              !hasSpecificCourse ||
-              studentCourseKeys.includes(cId) ||
-              (data.courseName &&
-                studentCourseKeys.some(
-                  (k) => k && k.toLowerCase() === String(data.courseName).toLowerCase()
-                ));
+              (Array.isArray(data.courseIds) && data.courseIds.includes("all")) ||
+              (hasSpecificCourse && (
+                studentCourseKeys.includes(cId) ||
+                (Array.isArray(data.courseIds) &&
+                  data.courseIds.some((id: string) => studentCourseKeys.includes(id))) ||
+                (data.courseName &&
+                  studentCourseKeys.some(
+                    (k) => k && k.toLowerCase() === String(data.courseName).toLowerCase()
+                  ))
+              )) ||
+              !hasSpecificCourse;
 
             const isMatch = isBatchMatch && (isCourseMatch || !cId);
 
@@ -754,7 +759,7 @@ export default function ExamsScreen() {
     const seenUpcomingKeys = new Set<string>();
     const seenMissedKeys = new Set<string>();
 
-    // 1. Process all Real Exams from Firestore
+    // Process all Exams from Firestore
     exams.forEach((ex) => {
       const key = (ex.id || ex.title || "").trim().toLowerCase();
       const sDate = parseExamDate(ex.startDate);
