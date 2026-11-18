@@ -108,16 +108,44 @@ export default function TeacherStudentsView() {
   const [demoTiming, setDemoTiming] = useState('07:00 PM - 08:00 PM');
 
   // Helper password generator
-  const generateStudentPassword = (nameStr: string, dobInput?: string) => {
+  const generateStudentPassword = (nameStr: string, dobInput?: any) => {
     const cleanName = (nameStr || 'student').trim().split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
     let birthYear = '2003';
+
     if (dobInput) {
-      const parts = dobInput.split('-');
-      if (parts.length === 3 && parts[0].length === 4) {
-        birthYear = parts[0];
+      try {
+        if (typeof dobInput === 'string') {
+          if (dobInput.includes('-')) {
+            const parts = dobInput.split('-');
+            if (parts.length >= 3) {
+              if (parts[0].length === 4 && !isNaN(Number(parts[0]))) {
+                birthYear = parts[0];
+              } else if (parts[2].slice(0, 4).length === 4 && !isNaN(Number(parts[2].slice(0, 4)))) {
+                birthYear = parts[2].slice(0, 4);
+              }
+            }
+          }
+          if (birthYear === '2003') {
+            const d = new Date(dobInput);
+            if (!isNaN(d.getTime()) && d.getFullYear() > 1900 && d.getFullYear() <= new Date().getFullYear()) {
+              birthYear = d.getFullYear().toString();
+            }
+          }
+        } else {
+          const d = typeof dobInput?.toDate === 'function'
+            ? dobInput.toDate()
+            : (dobInput instanceof Date ? dobInput : new Date(dobInput));
+          if (d && !isNaN(d.getTime()) && d.getFullYear() > 1900 && d.getFullYear() <= new Date().getFullYear()) {
+            birthYear = d.getFullYear().toString();
+          }
+        }
+      } catch {
+        birthYear = '2003';
       }
     }
-    return `${cleanName}${birthYear}`;
+
+    const namePrefix = cleanName.length >= 2 ? cleanName : cleanName.padEnd(2, 'x');
+    return `${namePrefix}${birthYear}`;
   };
 
   // ── Fetch Courses & Batches ───────────────────────────────────────────
