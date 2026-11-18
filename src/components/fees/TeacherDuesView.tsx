@@ -105,7 +105,7 @@ export default function TeacherDuesView() {
                 const uData = uSnap.data();
                 (uData.batchIds || []).forEach((id: string) => assignedIds.add(String(id)));
               }
-            } catch (e) {}
+            } catch (e) { }
           }
 
           batchList = activeBatches.filter((b: any) => {
@@ -212,7 +212,7 @@ export default function TeacherDuesView() {
       try {
         const parsed = d.toDate();
         return isNaN(parsed.getTime()) ? null : parsed;
-      } catch (e) {}
+      } catch (e) { }
     }
     if (typeof d?.seconds === 'number') {
       const parsed = new Date(d.seconds * 1000);
@@ -474,10 +474,10 @@ export default function TeacherDuesView() {
           prev.map((s) =>
             s.id === rec.id
               ? {
-                  ...s,
-                  lastFeeNotificationDate: todayStr,
-                  lastFeeNotificationSentAt: new Date(),
-                }
+                ...s,
+                lastFeeNotificationDate: todayStr,
+                lastFeeNotificationSentAt: new Date(),
+              }
               : s
           )
         );
@@ -689,447 +689,447 @@ Speak Hub Academy`;
         }
         showsVerticalScrollIndicator={false}
       >
-      {/* Teacher Portal Banner Header */}
-      <View style={styles.teacherBannerCard}>
-        <View style={styles.teacherBannerTop}>
-          <View style={styles.teacherBadgePill}>
-            <MaterialIcons name="school" size={14} color="#ffffff" />
-            <Text style={styles.teacherBadgeText}>Teacher Portal</Text>
-          </View>
-          <Text style={styles.teacherGreeting}>
-            {user?.name || 'Teacher'}
-          </Text>
-        </View>
-        <Text style={styles.bannerTitle}>Student Fee Dues & Reminders</Text>
-        <Text style={styles.bannerSubtitle}>
-          Track pending student fees and dispatch instant push & WhatsApp payment reminders.
-        </Text>
-      </View>
-
-      {/* KPI Stats Grid */}
-      <View style={styles.kpiGrid}>
-        <View style={[styles.kpiCard, { borderLeftColor: COLORS.primary }]}>
-          <View style={styles.kpiTopRow}>
-            <Text style={styles.kpiLabel}>Total Dues</Text>
-            <MaterialIcons name="account-balance-wallet" size={18} color={COLORS.primary} />
-          </View>
-          <Text style={[styles.kpiValue, { color: COLORS.primary }]}>
-            ₹{stats.totalDueSum.toLocaleString()}
-          </Text>
-          <Text style={styles.kpiSubtext}>{stats.totalDueStudents} students with dues</Text>
-        </View>
-
-        <View style={[styles.kpiCard, { borderLeftColor: '#dc2626' }]}>
-          <View style={styles.kpiTopRow}>
-            <Text style={styles.kpiLabel}>Overdue</Text>
-            <MaterialIcons name="warning" size={18} color="#dc2626" />
-          </View>
-          <Text style={[styles.kpiValue, { color: '#dc2626' }]}>
-            {stats.overdueCount}
-          </Text>
-          <Text style={styles.kpiSubtext}>Payment past due</Text>
-        </View>
-
-        <View style={[styles.kpiCard, { borderLeftColor: '#d97706' }]}>
-          <View style={styles.kpiTopRow}>
-            <Text style={styles.kpiLabel}>Due This Week</Text>
-            <MaterialIcons name="schedule" size={18} color="#d97706" />
-          </View>
-          <Text style={[styles.kpiValue, { color: '#d97706' }]}>
-            {stats.dueSoonCount}
-          </Text>
-          <Text style={styles.kpiSubtext}>Within next 7 days</Text>
-        </View>
-
-        <View style={[styles.kpiCard, { borderLeftColor: '#16a34a' }]}>
-          <View style={styles.kpiTopRow}>
-            <Text style={styles.kpiLabel}>Notified Today</Text>
-            <MaterialIcons name="notifications-active" size={18} color="#16a34a" />
-          </View>
-          <Text style={[styles.kpiValue, { color: '#16a34a' }]}>
-            {stats.notifiedTodayCount}
-          </Text>
-          <Text style={styles.kpiSubtext}>Reminders sent</Text>
-        </View>
-      </View>
-
-      {/* Search Input Bar */}
-      <View style={styles.searchBarWrapper}>
-        <MaterialIcons name="search" size={20} color="#64748b" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by student name, phone or code..."
-          placeholderTextColor="#94a3b8"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClearBtn}>
-            <MaterialIcons name="close" size={16} color="#64748b" />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Batch Filter Chips */}
-      <View style={styles.batchSection}>
-        <Text style={styles.filterSectionTitle}>Filter by Batch:</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.batchScrollContainer}
-        >
-          <TouchableOpacity
-            style={[
-              styles.batchChip,
-              selectedBatch === 'all' && styles.batchChipActive,
-            ]}
-            onPress={() => setSelectedBatch('all')}
-          >
-            <Text
-              style={[
-                styles.batchChipText,
-                selectedBatch === 'all' && styles.batchChipTextActive,
-              ]}
-            >
-              All Batches ({dueRecords.length})
+        {/* Teacher Portal Banner Header */}
+        <View style={styles.teacherBannerCard}>
+          <View style={styles.teacherBannerTop}>
+            <View style={styles.teacherBadgePill}>
+              <MaterialIcons name="school" size={14} color="#ffffff" />
+              <Text style={styles.teacherBadgeText}>Teacher Portal</Text>
+            </View>
+            <Text style={styles.teacherGreeting}>
+              {user?.name || 'Teacher'}
             </Text>
-          </TouchableOpacity>
+          </View>
+          <Text style={styles.bannerTitle}>Student Fee Dues & Reminders</Text>
+          <Text style={styles.bannerSubtitle}>
+            Track pending student fees and dispatch instant push & WhatsApp payment reminders.
+          </Text>
+        </View>
 
-          {batches.map((b) => {
-            const count = dueRecords.filter(
-              (r) => r.batchId === b.id || r.batchName === (b.batchName || b.name)
-            ).length;
-            const bName = b.batchName || b.name || b.id;
-            return (
-              <TouchableOpacity
-                key={b.id}
+        {/* KPI Stats Grid */}
+        <View style={styles.kpiGrid}>
+          <View style={[styles.kpiCard, { borderLeftColor: COLORS.primary }]}>
+            <View style={styles.kpiTopRow}>
+              <Text style={styles.kpiLabel}>Total Dues</Text>
+              <MaterialIcons name="account-balance-wallet" size={18} color={COLORS.primary} />
+            </View>
+            <Text style={[styles.kpiValue, { color: COLORS.primary }]}>
+              ₹{stats.totalDueSum.toLocaleString()}
+            </Text>
+            <Text style={styles.kpiSubtext}>{stats.totalDueStudents} students with dues</Text>
+          </View>
+
+          <View style={[styles.kpiCard, { borderLeftColor: '#dc2626' }]}>
+            <View style={styles.kpiTopRow}>
+              <Text style={styles.kpiLabel}>Overdue</Text>
+              <MaterialIcons name="warning" size={18} color="#dc2626" />
+            </View>
+            <Text style={[styles.kpiValue, { color: '#dc2626' }]}>
+              {stats.overdueCount}
+            </Text>
+            <Text style={styles.kpiSubtext}>Payment past due</Text>
+          </View>
+
+          <View style={[styles.kpiCard, { borderLeftColor: '#d97706' }]}>
+            <View style={styles.kpiTopRow}>
+              <Text style={styles.kpiLabel}>Due This Week</Text>
+              <MaterialIcons name="schedule" size={18} color="#d97706" />
+            </View>
+            <Text style={[styles.kpiValue, { color: '#d97706' }]}>
+              {stats.dueSoonCount}
+            </Text>
+            <Text style={styles.kpiSubtext}>Within next 7 days</Text>
+          </View>
+
+          <View style={[styles.kpiCard, { borderLeftColor: '#16a34a' }]}>
+            <View style={styles.kpiTopRow}>
+              <Text style={styles.kpiLabel}>Notified Today</Text>
+              <MaterialIcons name="notifications-active" size={18} color="#16a34a" />
+            </View>
+            <Text style={[styles.kpiValue, { color: '#16a34a' }]}>
+              {stats.notifiedTodayCount}
+            </Text>
+            <Text style={styles.kpiSubtext}>Reminders sent</Text>
+          </View>
+        </View>
+
+        {/* Search Input Bar */}
+        <View style={styles.searchBarWrapper}>
+          <MaterialIcons name="search" size={20} color="#64748b" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by student name, phone or code..."
+            placeholderTextColor="#94a3b8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClearBtn}>
+              <MaterialIcons name="close" size={16} color="#64748b" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Batch Filter Chips */}
+        <View style={styles.batchSection}>
+          <Text style={styles.filterSectionTitle}>Filter by Batch:</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.batchScrollContainer}
+          >
+            <TouchableOpacity
+              style={[
+                styles.batchChip,
+                selectedBatch === 'all' && styles.batchChipActive,
+              ]}
+              onPress={() => setSelectedBatch('all')}
+            >
+              <Text
                 style={[
-                  styles.batchChip,
-                  selectedBatch === b.id && styles.batchChipActive,
+                  styles.batchChipText,
+                  selectedBatch === 'all' && styles.batchChipTextActive,
                 ]}
-                onPress={() => setSelectedBatch(b.id)}
               >
-                <Text
-                  style={[
-                    styles.batchChipText,
-                    selectedBatch === b.id && styles.batchChipTextActive,
-                  ]}
-                >
-                  {bName} ({count})
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+                All Batches ({dueRecords.length})
+              </Text>
+            </TouchableOpacity>
 
-      {/* Due Status Filter Tabs */}
-      <View style={styles.tabsRow}>
-        {[
-          { key: 'dues', label: `Pending Dues (${stats.totalDueStudents})` },
-          { key: 'overdue', label: `Overdue (${stats.overdueCount})` },
-          { key: 'due_soon', label: `Due Soon (${stats.dueSoonCount})` },
-          { key: 'all', label: `All (${dueRecords.length})` },
-        ].map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.tabBtn,
-              activeTab === tab.key && styles.tabBtnActive,
-            ]}
-            onPress={() => setActiveTab(tab.key as any)}
-          >
-            <Text
+            {batches.map((b) => {
+              const count = dueRecords.filter(
+                (r) => r.batchId === b.id || r.batchName === (b.batchName || b.name)
+              ).length;
+              const bName = b.batchName || b.name || b.id;
+              return (
+                <TouchableOpacity
+                  key={b.id}
+                  style={[
+                    styles.batchChip,
+                    selectedBatch === b.id && styles.batchChipActive,
+                  ]}
+                  onPress={() => setSelectedBatch(b.id)}
+                >
+                  <Text
+                    style={[
+                      styles.batchChipText,
+                      selectedBatch === b.id && styles.batchChipTextActive,
+                    ]}
+                  >
+                    {bName} ({count})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Due Status Filter Tabs */}
+        <View style={styles.tabsRow}>
+          {[
+            { key: 'dues', label: `Pending Dues (${stats.totalDueStudents})` },
+            { key: 'overdue', label: `Overdue (${stats.overdueCount})` },
+            { key: 'due_soon', label: `Due Soon (${stats.dueSoonCount})` },
+            { key: 'all', label: `All (${dueRecords.length})` },
+          ].map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
               style={[
-                styles.tabText,
-                activeTab === tab.key && styles.tabTextActive,
+                styles.tabBtn,
+                activeTab === tab.key && styles.tabBtnActive,
               ]}
+              onPress={() => setActiveTab(tab.key as any)}
             >
-              {tab.label}
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab.key && styles.tabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Bulk Action Header Bar */}
+        <View style={styles.bulkActionBar}>
+          <View style={styles.bulkActionInfo}>
+            <Text style={styles.bulkActionCount}>
+              Showing {filteredRecords.length} student{filteredRecords.length !== 1 ? 's' : ''}
             </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            <Text style={styles.bulkActionSum}>
+              Dues Sum: ₹{filteredRecords.reduce((sum, r) => sum + r.dueAmount, 0).toLocaleString()}
+            </Text>
+          </View>
 
-      {/* Bulk Action Header Bar */}
-      <View style={styles.bulkActionBar}>
-        <View style={styles.bulkActionInfo}>
-          <Text style={styles.bulkActionCount}>
-            Showing {filteredRecords.length} student{filteredRecords.length !== 1 ? 's' : ''}
-          </Text>
-          <Text style={styles.bulkActionSum}>
-            Dues Sum: ₹{filteredRecords.reduce((sum, r) => sum + r.dueAmount, 0).toLocaleString()}
-          </Text>
+          {filteredRecords.some((r) => r.status === 'OVERDUE' || r.status === 'DUE_TODAY' || r.status === 'DUE_SOON') && (
+            <TouchableOpacity
+              style={styles.bulkNotifyBtn}
+              onPress={handleBulkNotify}
+              disabled={isBulkNotifying}
+              activeOpacity={0.85}
+            >
+              {isBulkNotifying ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <MaterialIcons name="notifications-active" size={16} color="#ffffff" />
+                  <Text style={styles.bulkNotifyBtnText}>Notify All</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
-        {filteredRecords.some((r) => r.status === 'OVERDUE' || r.status === 'DUE_TODAY' || r.status === 'DUE_SOON') && (
-          <TouchableOpacity
-            style={styles.bulkNotifyBtn}
-            onPress={handleBulkNotify}
-            disabled={isBulkNotifying}
-            activeOpacity={0.85}
-          >
-            {isBulkNotifying ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <>
-                <MaterialIcons name="notifications-active" size={16} color="#ffffff" />
-                <Text style={styles.bulkNotifyBtnText}>Notify All</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Students Due Cards List */}
+        {filteredRecords.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <MaterialIcons name="verified" size={48} color="#16a34a" />
+            <Text style={styles.emptyTitle}>All Cleared!</Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery
+                ? 'No students found matching your search.'
+                : 'There are no pending dues in this selection.'}
+            </Text>
+          </View>
+        ) : (
+          filteredRecords.map((rec) => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const isNotifiedToday = rec.lastFeeNotificationDate === todayStr;
 
-      {/* Students Due Cards List */}
-      {filteredRecords.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <MaterialIcons name="verified" size={48} color="#16a34a" />
-          <Text style={styles.emptyTitle}>All Cleared!</Text>
-          <Text style={styles.emptySubtitle}>
-            {searchQuery
-              ? 'No students found matching your search.'
-              : 'There are no pending dues in this selection.'}
-          </Text>
-        </View>
-      ) : (
-        filteredRecords.map((rec) => {
-          const todayStr = new Date().toISOString().split('T')[0];
-          const isNotifiedToday = rec.lastFeeNotificationDate === todayStr;
+            // Status colors
+            let statusBadgeBg = '#fee2e2';
+            let statusBadgeText = '#dc2626';
+            let statusLabel = `Overdue by ${rec.daysOverdue} days`;
 
-          // Status colors
-          let statusBadgeBg = '#fee2e2';
-          let statusBadgeText = '#dc2626';
-          let statusLabel = `Overdue by ${rec.daysOverdue} days`;
+            if (rec.status === 'DUE_TODAY') {
+              statusBadgeBg = '#fef3c7';
+              statusBadgeText = '#d97706';
+              statusLabel = 'Due Today';
+            } else if (rec.status === 'DUE_SOON') {
+              statusBadgeBg = '#dbeafe';
+              statusBadgeText = '#2563eb';
+              statusLabel = 'Due This Week';
+            } else if (rec.status === 'UPCOMING') {
+              statusBadgeBg = '#dcfce7';
+              statusBadgeText = '#16a34a';
+              statusLabel = 'Upcoming';
+            }
 
-          if (rec.status === 'DUE_TODAY') {
-            statusBadgeBg = '#fef3c7';
-            statusBadgeText = '#d97706';
-            statusLabel = 'Due Today';
-          } else if (rec.status === 'DUE_SOON') {
-            statusBadgeBg = '#dbeafe';
-            statusBadgeText = '#2563eb';
-            statusLabel = 'Due This Week';
-          } else if (rec.status === 'UPCOMING') {
-            statusBadgeBg = '#dcfce7';
-            statusBadgeText = '#16a34a';
-            statusLabel = 'Upcoming';
-          }
-
-          return (
-            <View key={rec.id} style={styles.studentCard}>
-              {/* Card Header: Student Name & Status */}
-              <View style={styles.cardHeader}>
-                <View style={styles.studentAvatarCircle}>
-                  <Text style={styles.avatarInitials}>
-                    {rec.name.slice(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.studentInfoCol}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.studentName} numberOfLines={1}>
-                      {rec.name}
-                    </Text>
-                    <View style={styles.studentCodeBadge}>
-                      <Text style={styles.studentCodeText}>{rec.studentCode}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.courseAndBatchText}>
-                    {rec.courseName} • Batch: {rec.batchName}
-                  </Text>
-                </View>
-
-                {/* Status Pill */}
-                <View style={[styles.statusPill, { backgroundColor: statusBadgeBg }]}>
-                  <Text style={[styles.statusPillText, { color: statusBadgeText }]}>
-                    {statusLabel}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Financial Snapshot Row */}
-              <View style={styles.financialRow}>
-                <View style={styles.finCol}>
-                  <Text style={styles.finLabel}>Amount Due</Text>
-                  <Text style={styles.finAmountValue}>₹{rec.dueAmount}</Text>
-                </View>
-                <View style={styles.finDivider} />
-                <View style={styles.finCol}>
-                  <Text style={styles.finLabel}>Due Date</Text>
-                  <Text style={styles.finDateValue}>{rec.dueDateDisplay}</Text>
-                </View>
-                <View style={styles.finDivider} />
-                <View style={styles.finCol}>
-                  <Text style={styles.finLabel}>Monthly Fee</Text>
-                  <Text style={styles.finFeeValue}>₹{rec.monthlyFee}</Text>
-                </View>
-              </View>
-
-              {/* Notification Status Banner */}
-              <View style={styles.notificationStatusRow}>
-                {isNotifiedToday ? (
-                  <View style={styles.notifiedPillSuccess}>
-                    <MaterialIcons name="check-circle" size={13} color="#16a34a" />
-                    <Text style={styles.notifiedTextSuccess}>Reminder Sent Today</Text>
-                  </View>
-                ) : rec.lastFeeNotificationDate ? (
-                  <View style={styles.notifiedPillNeutral}>
-                    <MaterialIcons name="history" size={13} color="#64748b" />
-                    <Text style={styles.notifiedTextNeutral}>
-                      Last notified: {rec.lastFeeNotificationDate}
+            return (
+              <View key={rec.id} style={styles.studentCard}>
+                {/* Card Header: Student Name & Status */}
+                <View style={styles.cardHeader}>
+                  <View style={styles.studentAvatarCircle}>
+                    <Text style={styles.avatarInitials}>
+                      {rec.name.slice(0, 2).toUpperCase()}
                     </Text>
                   </View>
-                ) : (
-                  <View style={styles.notifiedPillNone}>
-                    <MaterialIcons name="notifications-none" size={13} color="#94a3b8" />
-                    <Text style={styles.notifiedTextNone}>Not yet notified this month</Text>
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  onPress={() => {
-                    setEditDateStudent(rec);
-                    setNewDueDateText(
-                      rec.dueDate ? formatDateDisplay(rec.dueDate) : ''
-                    );
-                  }}
-                  style={styles.editDateBtn}
-                >
-                  <MaterialIcons name="edit-calendar" size={13} color={COLORS.primary} />
-                  <Text style={styles.editDateText}>Edit Date</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Action Buttons Row */}
-              <View style={styles.cardActionsRow}>
-                {/* 1. Send Push & In-App Notification */}
-                <TouchableOpacity
-                  style={[
-                    styles.primaryNotifyBtn,
-                    isNotifiedToday && styles.primaryNotifyBtnSent,
-                  ]}
-                  onPress={() => handleSendReminder(rec)}
-                  disabled={sendingNotificationId === rec.id}
-                  activeOpacity={0.8}
-                >
-                  {sendingNotificationId === rec.id ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <>
-                      <MaterialIcons
-                        name={isNotifiedToday ? "notifications-active" : "notifications"}
-                        size={16}
-                        color="#ffffff"
-                      />
-                      <Text style={styles.primaryNotifyBtnText}>
-                        {isNotifiedToday ? "Resend Reminder" : "Send Reminder"}
+                  <View style={styles.studentInfoCol}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.studentName} numberOfLines={1}>
+                        {rec.name}
                       </Text>
-                    </>
+                      <View style={styles.studentCodeBadge}>
+                        <Text style={styles.studentCodeText}>{rec.studentCode}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.courseAndBatchText}>
+                      {rec.courseName} • Batch: {rec.batchName}
+                    </Text>
+                  </View>
+
+                  {/* Status Pill */}
+                  <View style={[styles.statusPill, { backgroundColor: statusBadgeBg }]}>
+                    <Text style={[styles.statusPillText, { color: statusBadgeText }]}>
+                      {statusLabel}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Financial Snapshot Row */}
+                <View style={styles.financialRow}>
+                  <View style={styles.finCol}>
+                    <Text style={styles.finLabel}>Amount Due</Text>
+                    <Text style={styles.finAmountValue}>₹{rec.dueAmount}</Text>
+                  </View>
+                  <View style={styles.finDivider} />
+                  <View style={styles.finCol}>
+                    <Text style={styles.finLabel}>Due Date</Text>
+                    <Text style={styles.finDateValue}>{rec.dueDateDisplay}</Text>
+                  </View>
+                  <View style={styles.finDivider} />
+                  <View style={styles.finCol}>
+                    <Text style={styles.finLabel}>Monthly Fee</Text>
+                    <Text style={styles.finFeeValue}>₹{rec.monthlyFee}</Text>
+                  </View>
+                </View>
+
+                {/* Notification Status Banner */}
+                <View style={styles.notificationStatusRow}>
+                  {isNotifiedToday ? (
+                    <View style={styles.notifiedPillSuccess}>
+                      <MaterialIcons name="check-circle" size={13} color="#16a34a" />
+                      <Text style={styles.notifiedTextSuccess}>Reminder Sent Today</Text>
+                    </View>
+                  ) : rec.lastFeeNotificationDate ? (
+                    <View style={styles.notifiedPillNeutral}>
+                      <MaterialIcons name="history" size={13} color="#64748b" />
+                      <Text style={styles.notifiedTextNeutral}>
+                        Last notified: {rec.lastFeeNotificationDate}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.notifiedPillNone}>
+                      <MaterialIcons name="notifications-none" size={13} color="#94a3b8" />
+                      <Text style={styles.notifiedTextNone}>Not yet notified this month</Text>
+                    </View>
                   )}
-                </TouchableOpacity>
 
-                {/* 2. WhatsApp Direct Message */}
-                <TouchableOpacity
-                  style={styles.whatsappActionBtn}
-                  onPress={() => handleSendWhatsApp(rec)}
-                  activeOpacity={0.8}
-                >
-                  <MaterialIcons name="chat" size={16} color="#16a34a" />
-                  <Text style={styles.whatsappActionBtnText}>WhatsApp</Text>
-                </TouchableOpacity>
-
-                {/* 3. Call Student / Parent */}
-                {!!rec.phone && (
                   <TouchableOpacity
-                    style={styles.callActionBtn}
-                    onPress={() => handleCallStudent(rec.phone)}
+                    onPress={() => {
+                      setEditDateStudent(rec);
+                      setNewDueDateText(
+                        rec.dueDate ? formatDateDisplay(rec.dueDate) : ''
+                      );
+                    }}
+                    style={styles.editDateBtn}
+                  >
+                    <MaterialIcons name="edit-calendar" size={13} color={COLORS.primary} />
+                    <Text style={styles.editDateText}>Edit Date</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Action Buttons Row */}
+                <View style={styles.cardActionsRow}>
+                  {/* 1. Send Push & In-App Notification */}
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryNotifyBtn,
+                      isNotifiedToday && styles.primaryNotifyBtnSent,
+                    ]}
+                    onPress={() => handleSendReminder(rec)}
+                    disabled={sendingNotificationId === rec.id}
                     activeOpacity={0.8}
                   >
-                    <MaterialIcons name="phone" size={16} color="#2563eb" />
+                    {sendingNotificationId === rec.id ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <MaterialIcons
+                          name={isNotifiedToday ? "notifications-active" : "notifications"}
+                          size={16}
+                          color="#ffffff"
+                        />
+                        <Text style={styles.primaryNotifyBtnText}>
+                          {isNotifiedToday ? "Resend Reminder" : "Send Reminder"}
+                        </Text>
+                      </>
+                    )}
                   </TouchableOpacity>
-                )}
+
+                  {/* 2. WhatsApp Direct Message */}
+                  <TouchableOpacity
+                    style={styles.whatsappActionBtn}
+                    onPress={() => handleSendWhatsApp(rec)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="chat" size={16} color="#16a34a" />
+                    <Text style={styles.whatsappActionBtnText}>WhatsApp</Text>
+                  </TouchableOpacity>
+
+                  {/* 3. Call Student / Parent */}
+                  {!!rec.phone && (
+                    <TouchableOpacity
+                      style={styles.callActionBtn}
+                      onPress={() => handleCallStudent(rec.phone)}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialIcons name="phone" size={16} color="#2563eb" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })
+        )}
+
+        {/* Quick Edit Due Date Modal */}
+        <Modal
+          visible={!!editDateStudent}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setEditDateStudent(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Update Due Date</Text>
+                <TouchableOpacity onPress={() => setEditDateStudent(null)}>
+                  <MaterialIcons name="close" size={20} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalStudentName}>
+                Student: {editDateStudent?.name} ({editDateStudent?.courseName})
+              </Text>
+
+              <Text style={styles.inputLabel}>New Due Date (DD-MM-YYYY):</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. 25-10-2026"
+                placeholderTextColor="#94a3b8"
+                value={newDueDateText}
+                onChangeText={setNewDueDateText}
+              />
+
+              {/* Quick Presets */}
+              <View style={styles.presetButtonsRow}>
+                {[
+                  { label: 'No Dues', days: -1 },
+                  { label: '+7 Days', days: 7 },
+                  { label: '+15 Days', days: 15 },
+                  { label: '+1 Month', days: 30 },
+                ].map((p) => (
+                  <TouchableOpacity
+                    key={p.label}
+                    style={[styles.presetChip, p.days === -1 && { backgroundColor: '#ecfdf5', borderColor: '#86efac' }]}
+                    onPress={() => {
+                      if (p.days === -1) {
+                        setNewDueDateText('NO_DUES');
+                      } else {
+                        const d = new Date();
+                        d.setDate(d.getDate() + p.days);
+                        setNewDueDateText(formatDateDisplay(d));
+                      }
+                    }}
+                  >
+                    <Text style={[styles.presetChipText, p.days === -1 && { color: '#16a34a', fontWeight: 'bold' }]}>{p.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.modalButtonsRow}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setEditDateStudent(null)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveDueDate}>
+                  <Text style={styles.modalSaveText}>Save Due Date</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          );
-        })
-      )}
-
-      {/* Quick Edit Due Date Modal */}
-      <Modal
-        visible={!!editDateStudent}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setEditDateStudent(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Update Due Date</Text>
-              <TouchableOpacity onPress={() => setEditDateStudent(null)}>
-                <MaterialIcons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalStudentName}>
-              Student: {editDateStudent?.name} ({editDateStudent?.courseName})
-            </Text>
-
-            <Text style={styles.inputLabel}>New Due Date (DD-MM-YYYY):</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. 25-10-2026"
-              placeholderTextColor="#94a3b8"
-              value={newDueDateText}
-              onChangeText={setNewDueDateText}
-            />
-
-            {/* Quick Presets */}
-            <View style={styles.presetButtonsRow}>
-              {[
-                { label: 'No Dues', days: -1 },
-                { label: '+7 Days', days: 7 },
-                { label: '+15 Days', days: 15 },
-                { label: '+1 Month', days: 30 },
-              ].map((p) => (
-                <TouchableOpacity
-                  key={p.label}
-                  style={[styles.presetChip, p.days === -1 && { backgroundColor: '#ecfdf5', borderColor: '#86efac' }]}
-                  onPress={() => {
-                    if (p.days === -1) {
-                      setNewDueDateText('NO_DUES');
-                    } else {
-                      const d = new Date();
-                      d.setDate(d.getDate() + p.days);
-                      setNewDueDateText(formatDateDisplay(d));
-                    }
-                  }}
-                >
-                  <Text style={[styles.presetChipText, p.days === -1 && { color: '#16a34a', fontWeight: 'bold' }]}>{p.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.modalButtonsRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setEditDateStudent(null)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveDueDate}>
-                <Text style={styles.modalSaveText}>Save Due Date</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </View>
-      </Modal>
-    </ScrollView>
+        </Modal>
+      </ScrollView>
 
-    <ProfileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
-  </View>
-);
+      <ProfileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
