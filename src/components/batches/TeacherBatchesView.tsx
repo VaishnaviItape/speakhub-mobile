@@ -33,6 +33,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
 import { validateBatchName } from '../../utils/validation';
 import ProfileDrawer from '../ui/ProfileDrawer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface BatchDoc {
   id: string;
@@ -55,6 +56,7 @@ export interface BatchDoc {
 export default function TeacherBatchesView() {
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Batches state
@@ -352,8 +354,17 @@ export default function TeacherBatchesView() {
   return (
     <View style={styles.container}>
       {/* ── Top Header Bar ──────────────────────────────────────────── */}
-      <View style={styles.topHeader}>
+      <View style={[styles.topHeader, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.topHeaderLeft}>
+          {router.canGoBack() && (
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.back()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="arrow-back" size={22} color="#1E293B" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.menuBtn}
             onPress={() => setIsDrawerOpen(true)}
@@ -781,6 +792,12 @@ const styles = StyleSheet.create({
   },
   menuBtn: {
     padding: 6,
+  },
+  backBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    marginRight: 2,
   },
   facultyPill: {
     flexDirection: 'row',

@@ -27,6 +27,9 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import ProfileDrawer from '../ui/ProfileDrawer';
 import {
   sendFeeDueNotification,
   sendFeeDueNotificationsBulk,
@@ -58,6 +61,9 @@ export interface StudentDueRecord {
 
 export default function TeacherDuesView() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -645,14 +651,44 @@ Speak Hub Academy`;
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
-      }
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
+      {/* Top Header Bar */}
+      <View style={[styles.topHeaderBar, { paddingTop: Math.max(insets.top, 14) }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {router.canGoBack() && (
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => router.back()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="arrow-back" size={22} color="#1E293B" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.navBtn}
+            onPress={() => setIsDrawerOpen(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialIcons name="menu" size={24} color="#1E293B" />
+          </TouchableOpacity>
+          <View>
+            <View style={styles.facultyBadgePill}>
+              <MaterialIcons name="school" size={12} color="#4338CA" />
+              <Text style={styles.facultyBadgePillText}>Faculty Finance</Text>
+            </View>
+            <Text style={styles.topHeaderTitle}>Student Fee Dues</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
       {/* Teacher Portal Banner Header */}
       <View style={styles.teacherBannerCard}>
         <View style={styles.teacherBannerTop}>
@@ -1090,13 +1126,50 @@ Speak Hub Academy`;
         </View>
       </Modal>
     </ScrollView>
-  );
+
+    <ProfileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+  },
+  topHeaderBar: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  navBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  facultyBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginBottom: 2,
+  },
+  facultyBadgePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4338CA',
+    textTransform: 'uppercase',
+  },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
   },
   scrollContent: {
     padding: 16,

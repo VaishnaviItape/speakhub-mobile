@@ -30,6 +30,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
 import { validateName, validatePositiveNumber } from '../../utils/validation';
 import ProfileDrawer from '../ui/ProfileDrawer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 export interface CourseDoc {
   id: string;
@@ -52,6 +54,8 @@ export interface CourseDoc {
 
 export default function TeacherCoursesView() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Courses state
@@ -289,8 +293,17 @@ export default function TeacherCoursesView() {
   return (
     <View style={styles.container}>
       {/* ── Top Header Bar ──────────────────────────────────────────── */}
-      <View style={styles.topHeader}>
+      <View style={[styles.topHeader, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.topHeaderLeft}>
+          {router.canGoBack() && (
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => router.back()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="arrow-back" size={22} color="#1E293B" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.menuBtn}
             onPress={() => setIsDrawerOpen(true)}
@@ -768,6 +781,12 @@ const styles = StyleSheet.create({
   },
   menuBtn: {
     padding: 6,
+  },
+  backBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    marginRight: 2,
   },
   facultyPill: {
     flexDirection: 'row',

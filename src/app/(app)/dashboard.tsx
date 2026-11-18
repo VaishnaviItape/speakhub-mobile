@@ -78,6 +78,14 @@ export default function DashboardScreen() {
   const [showAllVideosModal, setShowAllVideosModal] = useState(false);
   const [videoSearchQuery, setVideoSearchQuery] = useState("");
 
+  // Faculty State
+  const [facultyStats, setFacultyStats] = useState({
+    studentsCount: 0,
+    batchesCount: 0,
+    coursesCount: 0,
+  });
+  const [facultyBatches, setFacultyBatches] = useState<any[]>([]);
+
   // Form State
   const [bookingName, setBookingName] = useState(user?.name || "");
   const [bookingParentName, setBookingParentName] = useState(
@@ -610,6 +618,31 @@ export default function DashboardScreen() {
         (a, b) => b.date.getTime() - a.date.getTime()
       );
       setNotifications(fetchedNotifications);
+
+      // Fetch Faculty Metrics if user is teacher / admin
+      const isTeacherRole = user?.role === 'teacher' || user?.role === 'admin';
+      if (isTeacherRole) {
+        try {
+          const sSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+          const bSnap = await getDocs(collection(db, "batches"));
+          const cSnap = await getDocs(collection(db, "courses"));
+
+          const batchList: any[] = [];
+          bSnap.forEach((bDoc) => {
+            const data = bDoc.data();
+            batchList.push({ id: bDoc.id, ...data });
+          });
+
+          setFacultyStats({
+            studentsCount: sSnap.size,
+            batchesCount: batchList.length,
+            coursesCount: cSnap.size,
+          });
+          setFacultyBatches(batchList);
+        } catch (fErr) {
+          console.warn("Error fetching faculty stats:", fErr);
+        }
+      }
     } catch (e) {
       console.error("Error fetching dashboard data:", e);
     } finally {
@@ -911,17 +944,38 @@ export default function DashboardScreen() {
                   <Text style={styles.teacherHeroDesc}>Manage your assigned batches, add notes, register students, configure courses & take attendance.</Text>
                 </View>
 
-                {/* Primary Quick Row */}
-                <View style={styles.teacherHeroActionsRow}>
+                {/* Faculty Live Stat Counter Strip */}
+                <View style={styles.teacherStatPillsRow}>
                   <TouchableOpacity
-                    style={styles.teacherAttendanceBtn}
-                    onPress={() => router.push("/(app)/notes")}
-                    activeOpacity={0.85}
+                    style={styles.teacherStatPill}
+                    onPress={() => router.push("/(app)/students")}
+                    activeOpacity={0.8}
                   >
-                    <MaterialIcons name="menu-book" size={17} color="#4338CA" style={{ marginRight: 5 }} />
-                    <Text style={styles.teacherAttendanceBtnText}>+ Add Notes</Text>
+                    <Text style={styles.teacherStatPillNumber}>{facultyStats.studentsCount}</Text>
+                    <Text style={styles.teacherStatPillLabel}>Students</Text>
                   </TouchableOpacity>
 
+                  <TouchableOpacity
+                    style={styles.teacherStatPill}
+                    onPress={() => router.push("/(app)/batches")}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.teacherStatPillNumber}>{facultyStats.batchesCount}</Text>
+                    <Text style={styles.teacherStatPillLabel}>Batches</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.teacherStatPill}
+                    onPress={() => router.push("/(app)/courses")}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.teacherStatPillNumber}>{facultyStats.coursesCount}</Text>
+                    <Text style={styles.teacherStatPillLabel}>Courses</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Primary Quick Row */}
+                <View style={[styles.teacherHeroActionsRow, { marginTop: 12 }]}>
                   <TouchableOpacity
                     style={styles.teacherAttendanceBtn}
                     onPress={() => router.push("/(app)/students")}
@@ -930,10 +984,28 @@ export default function DashboardScreen() {
                     <MaterialIcons name="person-add" size={17} color="#4338CA" style={{ marginRight: 5 }} />
                     <Text style={styles.teacherAttendanceBtnText}>+ Add Student</Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.teacherAttendanceBtn}
+                    onPress={() => router.push("/(app)/attendance")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="how-to-reg" size={17} color="#4338CA" style={{ marginRight: 5 }} />
+                    <Text style={styles.teacherAttendanceBtnText}>Attendance</Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Secondary Actions Row */}
                 <View style={[styles.teacherHeroActionsRow, { marginTop: 8 }]}>
+                  <TouchableOpacity
+                    style={[styles.teacherDuesBtn, { flex: 1 }]}
+                    onPress={() => router.push("/(app)/notes")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="menu-book" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.teacherDuesBtnText}>+ Notes</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[styles.teacherDuesBtn, { flex: 1 }]}
                     onPress={() => router.push("/(app)/batches")}
@@ -945,20 +1017,11 @@ export default function DashboardScreen() {
 
                   <TouchableOpacity
                     style={[styles.teacherDuesBtn, { flex: 1 }]}
-                    onPress={() => router.push("/(app)/courses")}
+                    onPress={() => router.push("/(app)/fees")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="library-books" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.teacherDuesBtnText}>+ Course</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.teacherDuesBtn, { flex: 1 }]}
-                    onPress={() => router.push("/(app)/attendance")}
-                    activeOpacity={0.85}
-                  >
-                    <MaterialIcons name="how-to-reg" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.teacherDuesBtnText}>Attendance</Text>
+                    <MaterialIcons name="account-balance-wallet" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.teacherDuesBtnText}>Fee Dues</Text>
                   </TouchableOpacity>
                 </View>
               </LinearGradient>
@@ -1068,6 +1131,38 @@ export default function DashboardScreen() {
                   <Text style={styles.teacherStudioCardDesc}>Configure online & offline course fees</Text>
                   <View style={[styles.teacherStudioPill, { backgroundColor: '#FEF3C7' }]}>
                     <Text style={[styles.teacherStudioPillText, { color: '#D97706' }]}>+ Add Course</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 5. Batch Attendance */}
+                <TouchableOpacity
+                  style={styles.teacherStudioCard}
+                  onPress={() => router.push("/(app)/attendance")}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#ECFDF5' }]}>
+                    <MaterialIcons name="how-to-reg" size={24} color="#059669" />
+                  </View>
+                  <Text style={styles.teacherStudioCardTitle}>Batch Attendance</Text>
+                  <Text style={styles.teacherStudioCardDesc}>Mark daily attendance & track rate</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#ECFDF5' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: '#059669' }]}>Take Attendance</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 6. Student Fee Dues */}
+                <TouchableOpacity
+                  style={styles.teacherStudioCard}
+                  onPress={() => router.push("/(app)/fees")}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#EDE9FE' }]}>
+                    <MaterialIcons name="account-balance-wallet" size={24} color="#7C3AED" />
+                  </View>
+                  <Text style={styles.teacherStudioCardTitle}>Fee Dues Tracker</Text>
+                  <Text style={styles.teacherStudioCardDesc}>Check pending fees & send reminders</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#EDE9FE' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: '#7C3AED' }]}>View Dues</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -1292,107 +1387,173 @@ export default function DashboardScreen() {
             })}
           </ScrollView>
 
-          {/* Search Bar */}
-          <View style={styles.searchBarWrapper}>
-            <MaterialIcons
-              name="search"
-              size={22}
-              color="#64748b"
-              style={{ marginRight: 8 }}
-            />
-            <TextInput
-              style={styles.searchBarInput}
-              placeholder="Search for courses..."
-              placeholderTextColor="#94a3b8"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <MaterialIcons name="cancel" size={18} color="#94a3b8" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          {/* Suggested Courses for You Section */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Suggested Courses for You</Text>
-            {filteredCourses.length > 0 && (
-              <View style={styles.courseCountBadge}>
-                <Text style={styles.courseCountBadgeText}>
-                  {filteredCourses.length} {filteredCourses.length === 1 ? "Course" : "Courses"}
-                </Text>
+          {/* Active Batches Section for Teachers */}
+          {isTeacher && facultyBatches.length > 0 && (
+            <View style={styles.teacherBatchesSection}>
+              <View style={styles.sectionHeaderRow}>
+                <View>
+                  <Text style={styles.sectionTitle}>Your Active Batches 🕒</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Quickly launch meeting links & take attendance
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.viewAllPill}
+                  onPress={() => router.push("/(app)/batches")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
               </View>
-            )}
-          </View>
 
-          {filteredCourses.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.coursesHorizontalScroll}
-            >
-              {filteredCourses.map((course: any, index: number) => {
-                const badgeLabel = course.modeBadge || course.mode || "ONLINE";
-                let durationLabel = null;
-                if (course.duration) {
-                  const durStr = String(course.duration).trim();
-                  durationLabel = /^\d+$/.test(durStr) ? `${durStr} Months` : durStr;
-                }
-                const subtitle = course.instructor
-                  ? `Instructor: ${course.instructor}`
-                  : (course.description || "Speak Hub Course");
-
-                return (
-                  <TouchableOpacity
-                    key={course.id || index}
-                    style={styles.suggestedCourseCard}
-                    onPress={() => handleOpenBookingModal(course)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.suggestedCourseTitle} numberOfLines={1}>
-                      {course.courseName || course.name || "Course"}
-                    </Text>
-
-                    <Text style={styles.suggestedCourseInstructor} numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-
-                    <View style={styles.suggestedCourseBadgeRow}>
-                      <View style={styles.levelBadgePill}>
-                        <Text style={styles.levelBadgeText}>
-                          {badgeLabel}
-                        </Text>
-                      </View>
-                      {durationLabel && (
-                        <View style={[styles.levelBadgePill, { backgroundColor: "#f1f5f9", marginLeft: 6 }]}>
-                          <Text style={[styles.levelBadgeText, { color: "#475569" }]}>
-                            {durationLabel}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.suggestedCourseFooter}>
-                      <Text style={styles.suggestedCoursePrice}>
-                        ₹{course.monthlyFee ?? 0}
-                        <Text style={styles.suggestedCoursePriceSub}>/mo</Text>
+              {facultyBatches.slice(0, 3).map((b) => (
+                <View key={b.id} style={styles.teacherBatchCard}>
+                  <View style={styles.teacherBatchCardTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.teacherBatchCardName} numberOfLines={1}>
+                        {b.batchName || b.name || "Batch"}
                       </Text>
-                      <View style={styles.bookPill}>
-                        <Text style={styles.bookPillText}>Book Seat</Text>
-                      </View>
+                      <Text style={styles.teacherBatchCardTiming}>
+                        ⏰ {b.timing || b.timeSlot || "Schedule Assigned"} {b.courseName ? `• ${b.courseName}` : ''}
+                      </Text>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <View style={styles.noCoursesContainer}>
-              <MaterialIcons name="school" size={28} color="#94a3b8" />
-              <Text style={styles.noCoursesText}>
-                {searchQuery ? "No courses matching your search." : "No courses published yet."}
-              </Text>
+                    <View style={styles.teacherBatchActiveBadge}>
+                      <Text style={styles.teacherBatchActiveText}>ACTIVE</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.teacherBatchActionsRow}>
+                    <TouchableOpacity
+                      style={styles.teacherBatchAttBtn}
+                      onPress={() => router.push("/(app)/attendance")}
+                      activeOpacity={0.85}
+                    >
+                      <MaterialIcons name="how-to-reg" size={15} color="#4338CA" />
+                      <Text style={styles.teacherBatchAttBtnText}>Attendance</Text>
+                    </TouchableOpacity>
+
+                    {b.meetingLink ? (
+                      <TouchableOpacity
+                        style={styles.teacherBatchMeetBtn}
+                        onPress={() => Linking.openURL(b.meetingLink)}
+                        activeOpacity={0.85}
+                      >
+                        <MaterialIcons name="videocam" size={15} color="#FFFFFF" />
+                        <Text style={styles.teacherBatchMeetBtnText}>Start Class</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
             </View>
+          )}
+
+          {/* Student-Only Course Catalog & Seat Booking */}
+          {!isTeacher && (
+            <>
+              {/* Search Bar */}
+              <View style={styles.searchBarWrapper}>
+                <MaterialIcons
+                  name="search"
+                  size={22}
+                  color="#64748b"
+                  style={{ marginRight: 8 }}
+                />
+                <TextInput
+                  style={styles.searchBarInput}
+                  placeholder="Search for courses..."
+                  placeholderTextColor="#94a3b8"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery ? (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <MaterialIcons name="cancel" size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {/* Suggested Courses for You Section */}
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Suggested Courses for You</Text>
+                {filteredCourses.length > 0 && (
+                  <View style={styles.courseCountBadge}>
+                    <Text style={styles.courseCountBadgeText}>
+                      {filteredCourses.length} {filteredCourses.length === 1 ? "Course" : "Courses"}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {filteredCourses.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.coursesHorizontalScroll}
+                >
+                  {filteredCourses.map((course: any, index: number) => {
+                    const badgeLabel = course.modeBadge || course.mode || "ONLINE";
+                    let durationLabel = null;
+                    if (course.duration) {
+                      const durStr = String(course.duration).trim();
+                      durationLabel = /^\d+$/.test(durStr) ? `${durStr} Months` : durStr;
+                    }
+                    const subtitle = course.instructor
+                      ? `Instructor: ${course.instructor}`
+                      : (course.description || "Speak Hub Course");
+
+                    return (
+                      <TouchableOpacity
+                        key={course.id || index}
+                        style={styles.suggestedCourseCard}
+                        onPress={() => handleOpenBookingModal(course)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.suggestedCourseTitle} numberOfLines={1}>
+                          {course.courseName || course.name || "Course"}
+                        </Text>
+
+                        <Text style={styles.suggestedCourseInstructor} numberOfLines={1}>
+                          {subtitle}
+                        </Text>
+
+                        <View style={styles.suggestedCourseBadgeRow}>
+                          <View style={styles.levelBadgePill}>
+                            <Text style={styles.levelBadgeText}>
+                              {badgeLabel}
+                            </Text>
+                          </View>
+                          {durationLabel && (
+                            <View style={[styles.levelBadgePill, { backgroundColor: "#f1f5f9", marginLeft: 6 }]}>
+                              <Text style={[styles.levelBadgeText, { color: "#475569" }]}>
+                                {durationLabel}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        <View style={styles.suggestedCourseFooter}>
+                          <Text style={styles.suggestedCoursePrice}>
+                            ₹{course.monthlyFee ?? 0}
+                            <Text style={styles.suggestedCoursePriceSub}>/mo</Text>
+                          </Text>
+                          <View style={styles.bookPill}>
+                            <Text style={styles.bookPillText}>Book Seat</Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <View style={styles.noCoursesContainer}>
+                  <MaterialIcons name="school" size={28} color="#94a3b8" />
+                  <Text style={styles.noCoursesText}>
+                    {searchQuery ? "No courses matching your search." : "No courses published yet."}
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
@@ -2712,5 +2873,115 @@ const styles = StyleSheet.create({
   teacherStudioPillText: {
     fontSize: 10.5,
     fontWeight: "700",
+  },
+  /* Teacher Live Stats Pills */
+  teacherStatPillsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+  teacherStatPill: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  teacherStatPillNumber: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  teacherStatPillLabel: {
+    fontSize: 10.5,
+    fontWeight: "600",
+    color: "#C7D2FE",
+    marginTop: 1,
+    textTransform: "uppercase",
+  },
+  /* Teacher Batches Section */
+  teacherBatchesSection: {
+    marginBottom: 20,
+  },
+  teacherBatchCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  teacherBatchCardTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  teacherBatchCardName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: 2,
+  },
+  teacherBatchCardTiming: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  teacherBatchActiveBadge: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  teacherBatchActiveText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#166534",
+  },
+  teacherBatchActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    paddingTop: 10,
+  },
+  teacherBatchAttBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF2FF",
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  teacherBatchAttBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4338CA",
+  },
+  teacherBatchMeetBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#059669",
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  teacherBatchMeetBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

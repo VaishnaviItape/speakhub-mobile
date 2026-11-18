@@ -28,6 +28,9 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import ProfileDrawer from '../ui/ProfileDrawer';
 
 export interface BatchItem {
   id: string;
@@ -58,6 +61,9 @@ export interface HolidayItem {
 export default function TeacherAttendanceView() {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
@@ -518,14 +524,32 @@ export default function TeacherAttendanceView() {
   return (
     <View style={styles.container}>
       {/* ── Top Batch Selector & Header Bar ──────────────────────────────── */}
-      <View style={styles.headerContainer}>
+      <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.headerTitleRow}>
-          <View>
-            <View style={styles.portalBadge}>
-              <MaterialIcons name="school" size={13} color="#4F46E5" />
-              <Text style={styles.portalBadgeText}>Teacher Portal</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            {router.canGoBack() && (
+              <TouchableOpacity
+                style={styles.navBtn}
+                onPress={() => router.back()}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="arrow-back" size={22} color="#1E293B" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => setIsDrawerOpen(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="menu" size={24} color="#1E293B" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <View style={styles.portalBadge}>
+                <MaterialIcons name="school" size={13} color="#4F46E5" />
+                <Text style={styles.portalBadgeText}>Teacher Portal</Text>
+              </View>
+              <Text style={styles.screenTitle} numberOfLines={1}>Batch Attendance</Text>
             </View>
-            <Text style={styles.screenTitle}>Batch Attendance</Text>
           </View>
 
           {/* Saved Status Indicator */}
@@ -1059,6 +1083,8 @@ export default function TeacherAttendanceView() {
           </View>
         </View>
       </Modal>
+
+      <ProfileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
     </View>
   );
 }
@@ -1081,6 +1107,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  navBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
   },
   portalBadge: {
     flexDirection: 'row',

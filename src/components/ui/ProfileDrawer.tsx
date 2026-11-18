@@ -189,9 +189,16 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
                   </View>
 
                   <View style={styles.userInfoCol}>
-                    <Text style={styles.greetingTitle} numberOfLines={1}>Hi, {name.split(' ')[0]}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.greetingTitle} numberOfLines={1}>Hi, {(name || 'User').split(' ')[0]}</Text>
+                      {(user?.role === 'teacher' || user?.role === 'admin') && (
+                        <View style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '800', color: '#4F46E5' }}>FACULTY</Text>
+                        </View>
+                      )}
+                    </View>
                     <TouchableOpacity onPress={() => setIsProfileModalOpen(true)}>
-                      <Text style={[styles.viewProfileText, { color: COLORS.primary, fontWeight: '700' }]}>View profile ›</Text>
+                      <Text style={[styles.viewProfileText, { color: (user?.role === 'teacher' || user?.role === 'admin') ? '#4F46E5' : COLORS.primary, fontWeight: '700' }]}>View profile ›</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -209,12 +216,33 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
 
               {/* Minimalist Developed Icon List Options */}
               <View style={styles.menuList}>
-                {(user?.role === 'teacher' || user?.role === 'admin') && (
+                {(user?.role === 'teacher' || user?.role === 'admin') ? (
                   <>
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/dashboard')}>
+                      <MaterialIcons name="dashboard" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Faculty Dashboard
+                      </Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/students')}>
                       <MaterialIcons name="people" size={24} color="#4F46E5" />
                       <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
-                        Student Master (Add Students)
+                        Student Master (Directory)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
+                      <MaterialIcons name="how-to-reg" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Batch Attendance
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
+                      <MaterialIcons name="menu-book" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Notes Studio (Add Notes)
                       </Text>
                     </TouchableOpacity>
 
@@ -231,47 +259,72 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
                         Course Master (Add Courses)
                       </Text>
                     </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/fees')}>
+                      <MaterialIcons name="account-balance-wallet" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Student Fee Dues & Reminders
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/profile')}>
+                      <MaterialIcons name="person" size={24} color="#4F46E5" />
+                      <Text style={[styles.menuRowLabel, { fontWeight: '700', color: '#1E293B' }]}>
+                        Teacher Profile
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/dashboard')}>
+                      <MaterialIcons name="dashboard" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>Home Dashboard</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
+                      <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>Notes & Study Materials</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
+                      <MaterialIcons name="event-available" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>My Attendance</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/fees')}>
+                      <MaterialIcons name="receipt-long" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>My Purchases & Receipts</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/homework')}>
+                      <MaterialIcons name="assignment" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>Homework & Assignments</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/exams')}>
+                      <MaterialIcons name="assessment" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>Test Series & Results</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/profile')}>
+                      <MaterialIcons name="person" size={24} color={COLORS.primary} />
+                      <Text style={styles.menuRowLabel}>Student Profile</Text>
+                    </TouchableOpacity>
                   </>
                 )}
 
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/notes')}>
-                  <MaterialIcons name="menu-book" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>
-                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Notes Studio (Add Notes)' : 'Notes & Study Materials'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/attendance')}>
-                  <MaterialIcons name="event-available" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>
-                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Batch Attendance' : 'My Attendance'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/fees')}>
-                  <MaterialIcons name={user?.role === 'teacher' || user?.role === 'admin' ? "account-balance-wallet" : "receipt-long"} size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>
-                    {user?.role === 'teacher' || user?.role === 'admin' ? 'Student Fee Dues & Reminders' : 'My Purchases & Receipts'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/homework')}>
-                  <MaterialIcons name="assignment" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>Homework & Assignments</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/exams')}>
-                  <MaterialIcons name="assessment" size={24} color={COLORS.primary} />
-                  <Text style={styles.menuRowLabel}>Test Series & Results</Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/support')}>
-                  <MaterialIcons name="headset-mic" size={24} color={COLORS.primary} />
+                  <MaterialIcons name="headset-mic" size={24} color={(user?.role === 'teacher' || user?.role === 'admin') ? '#4F46E5' : COLORS.primary} />
                   <Text style={styles.menuRowLabel}>Help & Support</Text>
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.menuRow} onPress={() => handleNavigation('/(app)/privacy')}>
+                  <MaterialIcons name="privacy-tip" size={24} color={(user?.role === 'teacher' || user?.role === 'admin') ? '#4F46E5' : COLORS.primary} />
+                  <Text style={styles.menuRowLabel}>Privacy Policy & Terms</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.menuRow} onPress={() => setIsAboutModalOpen(true)}>
-                  <MaterialIcons name="info-outline" size={24} color={COLORS.primary} />
+                  <MaterialIcons name="info-outline" size={24} color={(user?.role === 'teacher' || user?.role === 'admin') ? '#4F46E5' : COLORS.primary} />
                   <Text style={styles.menuRowLabel}>About Us</Text>
                 </TouchableOpacity>
               </View>

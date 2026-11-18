@@ -80,12 +80,36 @@ export default function AppLayout() {
           }} 
         />
         <Tabs.Screen 
+          name="students" 
+          options={{ 
+            headerShown: false,
+            href: isTeacher ? '/(app)/students' : null,
+            title: 'Students',
+            tabBarLabel: 'Students',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "people" : "people-outline"} size={23} color={color} />
+            )
+          }} 
+        />
+        <Tabs.Screen 
+          name="attendance" 
+          options={{ 
+            headerShown: false,
+            href: isTeacher ? '/(app)/attendance' : null,
+            title: 'Attendance',
+            tabBarLabel: 'Attendance',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "how-to-reg" : "how-to-reg"} size={23} color={color} />
+            )
+          }} 
+        />
+        <Tabs.Screen 
           name="notes" 
           options={{ 
             headerShown: false,
             title: 'Notes',
             tabBarLabel: 'Notes',
-            headerTitle: 'Study Notes & Batches',
+            headerTitle: isTeacher ? 'Notes Studio' : 'Study Notes & Batches',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "menu-book" : "menu-book"} size={23} color={color} />
             )
@@ -95,6 +119,7 @@ export default function AppLayout() {
           name="exams" 
           options={{ 
             headerShown: false,
+            href: isTeacher ? null : '/(app)/exams',
             title: 'Exams',
             tabBarLabel: 'Exams',
             headerTitle: 'Exams & Quizzes',
@@ -127,17 +152,9 @@ export default function AppLayout() {
         <Tabs.Screen 
           name="fees" 
           options={{ 
+            headerShown: false,
             href: null,
             title: isTeacher ? 'Student Fee Dues' : 'Fee Receipts',
-            headerTitle: isTeacher ? 'Student Fee Dues & Reminders' : 'Fee Receipts',
-          }} 
-        />
-        <Tabs.Screen 
-          name="attendance" 
-          options={{ 
-            href: null,
-            title: isTeacher ? 'Batch Attendance' : 'My Attendance',
-            headerTitle: isTeacher ? 'Batch Attendance' : 'My Attendance',
           }} 
         />
         <Tabs.Screen 
@@ -156,14 +173,6 @@ export default function AppLayout() {
           }} 
         />
         <Tabs.Screen 
-          name="students" 
-          options={{ 
-            headerShown: false,
-            href: null,
-            title: 'Student Master'
-          }} 
-        />
-        <Tabs.Screen 
           name="batches" 
           options={{ 
             headerShown: false,
@@ -177,6 +186,14 @@ export default function AppLayout() {
             headerShown: false,
             href: null,
             title: 'Course Master'
+          }} 
+        />
+        <Tabs.Screen 
+          name="privacy" 
+          options={{ 
+            headerShown: false,
+            href: null,
+            title: 'Privacy Policy'
           }} 
         />
       </Tabs>
