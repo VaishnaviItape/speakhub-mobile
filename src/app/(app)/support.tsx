@@ -63,7 +63,7 @@ export default function SupportScreen() {
         
         {/* Modern Gradient Header */}
         <LinearGradient
-          colors={[COLORS.primary, COLORS.primaryDark || '#3730A3']}
+          colors={[COLORS.primary, COLORS.primaryDark]}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -87,8 +87,8 @@ export default function SupportScreen() {
               onPress={handleCall}
               activeOpacity={0.8}
             >
-              <View style={[styles.iconWrapper, { backgroundColor: '#eef2ff' }]}>
-                <MaterialIcons name="phone-in-talk" size={26} color="#4f46e5" />
+              <View style={[styles.iconWrapper, { backgroundColor: '#FFF1F2' }]}>
+                <MaterialIcons name="phone-in-talk" size={26} color={COLORS.primary} />
               </View>
               <Text style={styles.contactCardTitle}>Call Support</Text>
               <Text style={styles.contactCardSub}>+91 93078 29005</Text>

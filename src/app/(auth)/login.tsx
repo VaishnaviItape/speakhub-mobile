@@ -33,10 +33,8 @@ export default function LoginScreen() {
 
   // Dynamic theme colors based on role
   const isTeacher = roleTab === 'teacher';
-  const accentColor = isTeacher ? '#4F46E5' : COLORS.primary;
-  const gradientColors = (isTeacher 
-    ? ['#4338CA', '#312E81'] 
-    : [COLORS.gradientStart, COLORS.gradientEnd]) as [string, string, ...string[]];
+  const accentColor = COLORS.primary;
+  const gradientColors = [COLORS.gradientStart, COLORS.gradientEnd] as [string, string, ...string[]];
 
   const handleRoleChange = (newRole: 'student' | 'teacher') => {
     setRoleTab(newRole);
@@ -173,7 +171,7 @@ export default function LoginScreen() {
           <View style={styles.roleBadgeContainer}>
             <View style={[
               styles.roleBadge,
-              { backgroundColor: isTeacher ? '#EEF2FF' : '#FEF2F2', borderColor: isTeacher ? '#C7D2FE' : '#FECACA' }
+              { backgroundColor: COLORS.primaryLightest, borderColor: '#FECDD3' }
             ]}>
               <MaterialIcons 
                 name={isTeacher ? 'verified-user' : 'auto-stories'} 
@@ -310,7 +308,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
           ) : (
             <View style={styles.teacherHelpBox}>
-              <MaterialIcons name="info-outline" size={16} color="#6366F1" style={{ marginRight: 6 }} />
+              <MaterialIcons name="info-outline" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
               <Text style={styles.teacherHelpText}>
                 Teacher accounts are provisioned by academy administration. Contact admin if you need credentials.
               </Text>
@@ -407,8 +405,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   activeTeacherTab: {
-    backgroundColor: '#4F46E5',
-    shadowColor: '#4F46E5',
+    backgroundColor: COLORS.primaryDark,
+    shadowColor: COLORS.primaryDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -550,7 +548,7 @@ const styles = StyleSheet.create({
   teacherHelpBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     borderRadius: 10,
     padding: 10,
     marginTop: 4,
@@ -558,7 +556,7 @@ const styles = StyleSheet.create({
   teacherHelpText: {
     flex: 1,
     fontSize: 11.5,
-    color: '#4338CA',
+    color: COLORS.primaryDark,
     lineHeight: 16,
   },
 });

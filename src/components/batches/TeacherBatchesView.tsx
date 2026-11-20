@@ -71,6 +71,7 @@ export default function TeacherBatchesView() {
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [batchTab, setBatchTab] = useState<'active' | 'inactive'>('active');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'inactive'>('all');
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
 
@@ -329,8 +330,12 @@ export default function TeacherBatchesView() {
   // ── Filtered Batches ──────────────────────────────────────────────────
   const filteredBatches = useMemo(() => {
     return batches.filter((b) => {
-      // Status filter
-      if (statusFilter !== 'all' && b.status !== statusFilter) return false;
+      // Primary Active / Inactive Tab Switcher
+      if (batchTab === 'active') {
+        if (b.status !== 'active') return false;
+      } else {
+        if (b.status === 'active') return false;
+      }
 
       // Course filter
       if (selectedCourseFilter !== 'all' && b.courseId !== selectedCourseFilter) return false;
@@ -346,12 +351,13 @@ export default function TeacherBatchesView() {
 
       return true;
     });
-  }, [batches, statusFilter, selectedCourseFilter, searchQuery]);
+  }, [batches, batchTab, selectedCourseFilter, searchQuery]);
 
   // Counts
   const activeCount = batches.filter((b) => b.status === 'active').length;
   const completedCount = batches.filter((b) => b.status === 'completed').length;
   const inactiveCount = batches.filter((b) => b.status === 'inactive').length;
+  const inactiveTotalCount = completedCount + inactiveCount;
 
   return (
     <View style={styles.container}>
@@ -375,17 +381,41 @@ export default function TeacherBatchesView() {
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <View style={styles.facultyPill}>
-              <MaterialIcons name="groups" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Batches</Text>
-            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>Batch Master</Text>
           </View>
         </View>
+      </View>
 
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
-          <MaterialIcons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>New Batch</Text>
+      {/* ── Active vs Inactive Segmented Tabs ────────────────────────── */}
+      <View style={styles.segmentTabContainer}>
+        <TouchableOpacity
+          style={[styles.segmentTab, batchTab === 'active' && styles.segmentTabActive]}
+          onPress={() => setBatchTab('active')}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons
+            name="check-circle"
+            size={16}
+            color={batchTab === 'active' ? '#FFFFFF' : '#059669'}
+          />
+          <Text style={[styles.segmentTabText, batchTab === 'active' && styles.segmentTabTextActive]}>
+            Active Batches ({activeCount})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, batchTab === 'inactive' && styles.segmentTabActive]}
+          onPress={() => setBatchTab('inactive')}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons
+            name="pause-circle-outline"
+            size={16}
+            color={batchTab === 'inactive' ? '#FFFFFF' : '#64748B'}
+          />
+          <Text style={[styles.segmentTabText, batchTab === 'inactive' && styles.segmentTabTextActive]}>
+            Inactive Batches ({inactiveTotalCount})
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -547,7 +577,7 @@ export default function TeacherBatchesView() {
                     </View>
 
                     <View style={styles.teacherTag}>
-                      <MaterialIcons name="person" size={12} color="#4338CA" />
+                      <MaterialIcons name="person" size={12} color={COLORS.primary} />
                       <Text style={styles.teacherTagText} numberOfLines={1}>{matchedTeacherName}</Text>
                     </View>
                   </View>
@@ -570,11 +600,11 @@ export default function TeacherBatchesView() {
                       onPress={() => WebBrowser.openBrowserAsync(item.meetingLink!)}
                       activeOpacity={0.85}
                     >
-                      <MaterialIcons name="videocam" size={16} color="#4338CA" />
+                      <MaterialIcons name="videocam" size={16} color={COLORS.primary} />
                       <Text style={styles.meetingLaunchBtnText} numberOfLines={1}>
                         Launch Live Class Room
                       </Text>
-                      <MaterialIcons name="open-in-new" size={14} color="#4338CA" />
+                      <MaterialIcons name="open-in-new" size={14} color={COLORS.primary} />
                     </TouchableOpacity>
                   ) : null}
 
@@ -592,7 +622,7 @@ export default function TeacherBatchesView() {
                       style={styles.editBtn}
                       onPress={() => handleOpenEditModal(item)}
                     >
-                      <MaterialIcons name="edit" size={14} color="#4338CA" />
+                      <MaterialIcons name="edit" size={14} color={COLORS.primary} />
                       <Text style={styles.editBtnText}>Edit</Text>
                     </TouchableOpacity>
                   </View>
@@ -605,7 +635,7 @@ export default function TeacherBatchesView() {
 
       {/* ── Floating Action Button ──────────────────────────────────── */}
       <TouchableOpacity style={styles.fabBtn} onPress={handleOpenAddModal} activeOpacity={0.9}>
-        <MaterialIcons name="add" size={26} color="#FFFFFF" />
+        <MaterialIcons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* ── Create / Edit Batch Modal ───────────────────────────────── */}
@@ -810,7 +840,7 @@ const styles = StyleSheet.create({
   facultyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -821,7 +851,7 @@ const styles = StyleSheet.create({
   facultyPillText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
     textTransform: 'uppercase',
   },
   headerTitle: {
@@ -829,16 +859,53 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
   },
+  segmentTabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 10,
+  },
+  segmentTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  segmentTabActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  segmentTabText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  segmentTabTextActive: {
+    color: '#FFFFFF',
+  },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
     gap: 4,
     elevation: 2,
-    shadowColor: '#4338CA',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 3,
@@ -866,9 +933,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   statBoxActive: {
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#818CF8',
+    borderColor: '#FDA4AF',
   },
   statBoxActiveActive: {
     backgroundColor: '#DCFCE7',
@@ -928,8 +995,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterChipText: {
     fontSize: 12,
@@ -972,7 +1039,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1060,7 +1127,7 @@ const styles = StyleSheet.create({
   teacherTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1069,7 +1136,7 @@ const styles = StyleSheet.create({
   teacherTagText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   scheduleRow: {
     flexDirection: 'row',
@@ -1085,18 +1152,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: COLORS.primaryLight,
     marginBottom: 10,
   },
   meetingLaunchBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
     flex: 1,
     marginLeft: 6,
   },
@@ -1125,7 +1192,7 @@ const styles = StyleSheet.create({
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -1134,23 +1201,23 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   fabBtn: {
     position: 'absolute',
     bottom: 84,
     right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#4338CA',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   /* Modal Styles */
   modalOverlay: {
@@ -1218,8 +1285,8 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   selectPillActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   selectPillText: {
     fontSize: 12,
@@ -1244,8 +1311,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusOptBtnActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6366F1',
+    backgroundColor: COLORS.primaryLightest,
+    borderColor: COLORS.primary,
   },
   statusOptText: {
     fontSize: 11.5,
@@ -1253,7 +1320,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   statusOptTextActive: {
-    color: '#4338CA',
+    color: COLORS.primary,
     fontWeight: '800',
   },
   modalFooter: {

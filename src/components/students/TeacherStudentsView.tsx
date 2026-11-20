@@ -545,18 +545,9 @@ export default function TeacherStudentsView() {
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <View style={styles.facultyPill}>
-              <MaterialIcons name="school" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Students</Text>
-            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>Student Master</Text>
           </View>
         </View>
-
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
-          <MaterialIcons name="person-add" size={17} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>Add Student</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── Stats Strip ─────────────────────────────────────────────── */}
@@ -716,9 +707,11 @@ export default function TeacherStudentsView() {
                         </View>
                       </View>
 
-                      {item.studentCode ? (
-                        <Text style={styles.studentCodeText}>Code: {item.studentCode}</Text>
-                      ) : null}
+                      <View style={styles.studentCodeBadge}>
+                        <Text style={styles.studentCodeText}>
+                          Code: {item.studentCode || ('SH-' + (item.phone ? item.phone.slice(-4) : item.id.slice(-4).toUpperCase()))}
+                        </Text>
+                      </View>
                     </View>
                   </View>
 
@@ -730,7 +723,7 @@ export default function TeacherStudentsView() {
                     </View>
 
                     <View style={styles.batchPill}>
-                      <MaterialIcons name="groups" size={12} color="#4338CA" />
+                      <MaterialIcons name="groups" size={12} color={COLORS.primary} />
                       <Text style={styles.batchPillText} numberOfLines={1}>{matchedBatchName}</Text>
                     </View>
                   </View>
@@ -782,7 +775,7 @@ export default function TeacherStudentsView() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.credentialsLabel}>🔑 Login Credentials</Text>
                       <Text style={styles.credentialsVal}>
-                        Phone: <Text style={{ fontWeight: '700', color: '#1E293B' }}>{item.phone}</Text> | Pass: <Text style={{ fontWeight: '700', color: '#4F46E5' }}>{autoPwd}</Text>
+                        Phone: <Text style={{ fontWeight: '700', color: '#1E293B' }}>{item.phone}</Text> | Pass: <Text style={{ fontWeight: '700', color: COLORS.primary }}>{autoPwd}</Text>
                       </Text>
                     </View>
 
@@ -791,7 +784,7 @@ export default function TeacherStudentsView() {
                       onPress={() => handleCopyCredentials(item)}
                       activeOpacity={0.8}
                     >
-                      <MaterialIcons name="content-copy" size={14} color="#4F46E5" />
+                      <MaterialIcons name="content-copy" size={14} color={COLORS.primary} />
                       <Text style={styles.copyCredBtnText}>Copy</Text>
                     </TouchableOpacity>
                   </View>
@@ -806,7 +799,7 @@ export default function TeacherStudentsView() {
                       style={styles.editBtn}
                       onPress={() => handleOpenEditModal(item)}
                     >
-                      <MaterialIcons name="edit" size={14} color="#4338CA" />
+                      <MaterialIcons name="edit" size={14} color={COLORS.primary} />
                       <Text style={styles.editBtnText}>Edit Details</Text>
                     </TouchableOpacity>
                   </View>
@@ -819,7 +812,7 @@ export default function TeacherStudentsView() {
 
       {/* ── Floating Action Button ──────────────────────────────────── */}
       <TouchableOpacity style={styles.fabBtn} onPress={handleOpenAddModal} activeOpacity={0.9}>
-        <MaterialIcons name="person-add" size={24} color="#FFFFFF" />
+        <MaterialIcons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* ── Add / Edit Student Modal ────────────────────────────────── */}
@@ -902,7 +895,7 @@ export default function TeacherStudentsView() {
 
               {/* Auto Password Preview Callout */}
               <View style={styles.pwdPreviewCard}>
-                <MaterialIcons name="vpn-key" size={16} color="#4F46E5" />
+                <MaterialIcons name="vpn-key" size={16} color={COLORS.primary} />
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={styles.pwdPreviewLabel}>Default Login Password:</Text>
                   <Text style={styles.pwdPreviewVal}>{generateStudentPassword(firstName, dob)}</Text>
@@ -1095,7 +1088,7 @@ const styles = StyleSheet.create({
   facultyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -1106,7 +1099,7 @@ const styles = StyleSheet.create({
   facultyPillText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
     textTransform: 'uppercase',
   },
   headerTitle: {
@@ -1117,13 +1110,13 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
     gap: 4,
     elevation: 2,
-    shadowColor: '#4338CA',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 3,
@@ -1151,9 +1144,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   statBoxActive: {
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#818CF8',
+    borderColor: '#FDA4AF',
   },
   statBoxActiveActive: {
     backgroundColor: '#DCFCE7',
@@ -1213,8 +1206,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterChipText: {
     fontSize: 12,
@@ -1257,7 +1250,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1291,14 +1284,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   studentName: {
     fontSize: 15,
@@ -1306,11 +1299,18 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     flex: 1,
   },
+  studentCodeBadge: {
+    backgroundColor: COLORS.primaryLightest,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
   studentCodeText: {
     fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-    marginTop: 2,
+    color: COLORS.primaryDark,
+    fontWeight: '700',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -1363,7 +1363,7 @@ const styles = StyleSheet.create({
   batchPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1373,7 +1373,7 @@ const styles = StyleSheet.create({
   batchPillText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   contactRow: {
     flexDirection: 'row',
@@ -1420,17 +1420,17 @@ const styles = StyleSheet.create({
   credentialsBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     borderRadius: 8,
     padding: 9,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: COLORS.primaryLight,
     marginBottom: 10,
   },
   credentialsLabel: {
     fontSize: 10.5,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   credentialsVal: {
     fontSize: 11,
@@ -1446,12 +1446,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     gap: 4,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: COLORS.primaryLight,
   },
   copyCredBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: COLORS.primary,
   },
   cardActionsRow: {
     flexDirection: 'row',
@@ -1477,23 +1477,23 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   fabBtn: {
     position: 'absolute',
     bottom: 84,
     right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#4338CA',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   /* Modal Styles */
   modalOverlay: {
@@ -1555,28 +1555,28 @@ const styles = StyleSheet.create({
   pwdPreviewCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: COLORS.primaryLight,
     padding: 12,
     marginBottom: 14,
   },
   pwdPreviewLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   pwdPreviewVal: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#312E81',
+    color: COLORS.primaryDark,
     letterSpacing: 0.5,
     marginVertical: 2,
   },
   pwdPreviewHint: {
     fontSize: 10,
-    color: '#6366F1',
+    color: COLORS.primary,
   },
   selectPill: {
     paddingHorizontal: 12,
@@ -1587,8 +1587,8 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   selectPillActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   selectPillText: {
     fontSize: 12,
@@ -1636,8 +1636,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusOptBtnActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6366F1',
+    backgroundColor: COLORS.primaryLightest,
+    borderColor: COLORS.primary,
   },
   statusOptText: {
     fontSize: 11.5,
@@ -1645,7 +1645,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   statusOptTextActive: {
-    color: '#4338CA',
+    color: COLORS.primary,
     fontWeight: '800',
   },
   modalFooter: {

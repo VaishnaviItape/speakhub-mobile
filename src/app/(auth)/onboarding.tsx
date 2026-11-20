@@ -58,8 +58,8 @@ const ONBOARDING_STEPS: OnboardingSlide[] = [
     description:
       'Attend live online classes, attempt timed tests and exams with instant answer reviews, submit homework assignments, and access study notes on the go.',
     type: 'interactive',
-    accentColor: '#6366F1',
-    accentBg: ['#EEF2FF', '#E0E7FF'],
+    accentColor: COLORS.primaryHover,
+    accentBg: ['#FFF1F2', '#FFE4E6'],
   },
   {
     id: '3',
@@ -167,8 +167,8 @@ export default function OnboardingScreen() {
     if (type === 'interactive') {
       return (
         <View style={styles.heroWrapper}>
-          {/* Ambient Indigo/Purple Glow */}
-          <View style={[styles.ambientGlow, { backgroundColor: '#EEF2FF' }]} />
+          {/* Ambient Accent Glow */}
+          <View style={[styles.ambientGlow, { backgroundColor: '#FFF1F2' }]} />
 
           {/* Main Classroom Mockup Frame */}
           <View style={styles.classroomCard}>
@@ -179,7 +179,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.liveBadgeText}>LIVE BATCH</Text>
               </View>
               <View style={styles.attendancePreview}>
-                <MaterialIcons name="group" size={14} color="#6366F1" />
+                <MaterialIcons name="group" size={14} color={COLORS.primary} />
                 <Text style={styles.attendanceText}>Active Class</Text>
               </View>
             </View>
@@ -264,7 +264,7 @@ export default function OnboardingScreen() {
               <Text style={styles.receiptMiniText}>Fee Receipts</Text>
             </View>
             <View style={styles.receiptMiniCard}>
-              <MaterialIcons name="verified" size={16} color="#2563EB" />
+              <MaterialIcons name="verified" size={16} color={COLORS.primary} />
               <Text style={styles.receiptMiniText}>Verified Certificate</Text>
             </View>
           </View>
@@ -593,13 +593,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 18,
-    shadowColor: '#6366F1',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#EEF2FF',
+    borderColor: '#FFE4E6',
   },
   classroomHeader: {
     flexDirection: 'row',
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   attendanceText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#6366F1',
+    color: COLORS.primary,
   },
   batchInfoRow: {
     flexDirection: 'row',
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#6366F1',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -97,14 +97,27 @@ export function filterBatchesForTeacher(allBatches: any[], user: TeacherUser | n
  * Filters a list of students for the logged-in user.
  * If user is a teacher, returns only students enrolled in assigned batches.
  */
-export function filterStudentsForTeacher(allStudents: any[], assignedBatchIds: Set<string>, user: TeacherUser | null | undefined): any[] {
+export function filterStudentsForTeacher(
+  allStudents: any[],
+  assignedBatchIdsOrUser: Set<string> | TeacherUser | null | undefined,
+  user?: TeacherUser | null | undefined
+): any[] {
   if (!allStudents || !Array.isArray(allStudents)) return [];
-  if (!user) return [];
+
+  const actualUser: TeacherUser | null | undefined =
+    user || (assignedBatchIdsOrUser && !(assignedBatchIdsOrUser instanceof Set) ? (assignedBatchIdsOrUser as TeacherUser) : null);
+
+  if (!actualUser) return [];
 
   // Superadmin gets global access; teachers are strictly isolated
-  if (user.role === 'admin') {
+  if (actualUser.role === 'admin') {
     return allStudents;
   }
 
-  return allStudents.filter((student) => isStudentInTeacherBatches(student, assignedBatchIds));
+  const assignedSet: Set<string> =
+    assignedBatchIdsOrUser instanceof Set
+      ? assignedBatchIdsOrUser
+      : getTeacherAssignedBatchSet(actualUser, []);
+
+  return allStudents.filter((student) => isStudentInTeacherBatches(student, assignedSet));
 }

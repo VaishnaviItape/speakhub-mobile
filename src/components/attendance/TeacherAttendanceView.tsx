@@ -435,7 +435,7 @@ export default function TeacherAttendanceView() {
     } else if (diffDays === 0) {
       return { label: 'Fee Due Today', color: '#D97706', bg: '#FEF3C7' };
     } else if (diffDays <= 5) {
-      return { label: `Due in ${diffDays}d`, color: '#2563EB', bg: '#DBEAFE' };
+      return { label: `Due in ${diffDays}d`, color: COLORS.primary, bg: '#FFF1F2' };
     }
     return null;
   };
@@ -526,7 +526,7 @@ export default function TeacherAttendanceView() {
       {/* ── Top Batch Selector & Header Bar ──────────────────────────────── */}
       <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.headerTitleRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
             {router.canGoBack() && (
               <TouchableOpacity
                 style={styles.navBtn}
@@ -543,11 +543,7 @@ export default function TeacherAttendanceView() {
             >
               <MaterialIcons name="menu" size={24} color="#1E293B" />
             </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <View style={styles.portalBadge}>
-                <MaterialIcons name="school" size={13} color="#4F46E5" />
-                <Text style={styles.portalBadgeText}>Teacher Portal</Text>
-              </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.screenTitle} numberOfLines={1}>Batch Attendance</Text>
             </View>
           </View>
@@ -573,7 +569,7 @@ export default function TeacherAttendanceView() {
 
         {/* Batches Horizontal Chips */}
         {isLoadingBatches ? (
-          <ActivityIndicator size="small" color="#4F46E5" style={{ marginVertical: 12 }} />
+          <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 12 }} />
         ) : batches.length === 0 ? (
           <View style={styles.noBatchesBox}>
             <MaterialIcons name="info-outline" size={18} color="#64748B" />
@@ -626,7 +622,7 @@ export default function TeacherAttendanceView() {
       <ScrollView
         style={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4F46E5']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
         }
         contentContainerStyle={{ paddingBottom: 100 }}
       >
@@ -645,7 +641,7 @@ export default function TeacherAttendanceView() {
             onPress={() => setIsDatePickerOpen(true)}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="event" size={20} color="#4F46E5" style={{ marginRight: 6 }} />
+            <MaterialIcons name="event" size={20} color={COLORS.primary} style={{ marginRight: 6 }} />
             <Text style={styles.dateDisplayText}>{formattedDateDisplay}</Text>
             {selectedDate === todayStr ? (
               <View style={styles.todayPill}>
@@ -707,7 +703,7 @@ export default function TeacherAttendanceView() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={[styles.statValue, { color: '#4F46E5' }]}>{stats.rate}%</Text>
+            <Text style={[styles.statValue, { color: COLORS.primary }]}>{stats.rate}%</Text>
             <Text style={styles.statLabel}>Rate</Text>
           </View>
         </View>
@@ -736,12 +732,12 @@ export default function TeacherAttendanceView() {
 
             {selectedDate !== todayStr && (
               <TouchableOpacity 
-                style={[styles.quickBtn, { backgroundColor: '#EEF2FF' }]}
+                style={[styles.quickBtn, { backgroundColor: '#FFF1F2' }]}
                 onPress={handleSetToday}
                 activeOpacity={0.8}
               >
-                <MaterialIcons name="today" size={16} color="#4F46E5" />
-                <Text style={[styles.quickBtnText, { color: '#4F46E5' }]}>Jump to Today</Text>
+                <MaterialIcons name="today" size={16} color={COLORS.primary} />
+                <Text style={[styles.quickBtnText, { color: COLORS.primary }]}>Jump to Today</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -792,7 +788,7 @@ export default function TeacherAttendanceView() {
         {/* ── Student Roster List ─────────────────────────────────────────── */}
         {isLoadingStudents ? (
           <View style={styles.loadingStudentsBox}>
-            <ActivityIndicator size="large" color="#4F46E5" />
+            <ActivityIndicator size="large" color={COLORS.primary} />
             <Text style={styles.loadingStudentsText}>Loading batch students...</Text>
           </View>
         ) : filteredStudents.length === 0 ? (
@@ -862,7 +858,7 @@ export default function TeacherAttendanceView() {
                       <MaterialIcons 
                         name={student.remarks ? "chat" : "add-comment"} 
                         size={20} 
-                        color={student.remarks ? "#4F46E5" : "#94A3B8"} 
+                        color={student.remarks ? COLORS.primary : "#94A3B8"} 
                       />
                     </TouchableOpacity>
                   </View>
@@ -1067,7 +1063,7 @@ export default function TeacherAttendanceView() {
                     <MaterialIcons 
                       name={isToday ? "today" : "event"} 
                       size={20} 
-                      color={isSelected ? "#ffffff" : isToday ? "#4F46E5" : "#64748B"} 
+                      color={isSelected ? "#ffffff" : isToday ? COLORS.primary : "#64748B"} 
                       style={{ marginRight: 10 }}
                     />
                     <Text style={[
@@ -1116,7 +1112,7 @@ const styles = StyleSheet.create({
   portalBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
@@ -1126,7 +1122,7 @@ const styles = StyleSheet.create({
   portalBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: COLORS.primary,
     marginLeft: 4,
   },
   screenTitle: {
@@ -1173,7 +1169,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   batchChipActive: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: COLORS.primary,
   },
   batchChipText: {
     fontSize: 13,
@@ -1191,7 +1187,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   batchChipTimingActive: {
-    color: '#E0E7FF',
+    color: '#FFE4E6',
   },
   scrollContent: {
     flex: 1,
@@ -1228,7 +1224,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   todayPill: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
@@ -1237,7 +1233,7 @@ const styles = StyleSheet.create({
   todayPillText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#4F46E5',
+    color: COLORS.primary,
   },
   holidayBanner: {
     flexDirection: 'row',
@@ -1345,7 +1341,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   filterPillActive: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: COLORS.primary,
   },
   filterPillText: {
     fontSize: 11,
@@ -1425,7 +1421,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -1433,7 +1429,7 @@ const styles = StyleSheet.create({
   studentAvatarText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#4F46E5',
+    color: COLORS.primary,
   },
   studentDetails: {
     flex: 1,
@@ -1468,7 +1464,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   remarksIconBtnActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
   },
   remarksSnippet: {
     backgroundColor: '#F8FAFC',
@@ -1476,7 +1472,7 @@ const styles = StyleSheet.create({
     padding: 6,
     marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#4F46E5',
+    borderLeftColor: COLORS.primary,
   },
   remarksSnippetText: {
     fontSize: 11.5,
@@ -1553,7 +1549,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   saveBtn: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 18,
     paddingVertical: 11,
     borderRadius: 12,
@@ -1561,7 +1557,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
-    shadowColor: '#4F46E5',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -1635,7 +1631,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#4F46E5',
+    backgroundColor: COLORS.primary,
   },
   modalSaveBtnText: {
     fontSize: 13,
@@ -1651,7 +1647,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   datePickItemActive: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: COLORS.primary,
   },
   datePickText: {
     fontSize: 13.5,

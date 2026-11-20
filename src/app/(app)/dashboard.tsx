@@ -851,7 +851,7 @@ export default function DashboardScreen() {
       )}
 
       {/* Top Header: Avatar, Greeting, Hamburger, Notification Bell */}
-      <View style={styles.topHeader}>
+      <View style={[styles.topHeader, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.headerLeft}>
           <Image
             source={
@@ -862,10 +862,10 @@ export default function DashboardScreen() {
             style={styles.avatar}
           />
           <View style={styles.greetingContainer}>
-            <Text style={styles.greetingTitle}>
+            <Text style={styles.greetingTitle} numberOfLines={1}>
               Hi, {isTeacher ? (user?.name || "Teacher") : studentFirstName}! 👋
             </Text>
-            <Text style={styles.greetingSubtitle}>
+            <Text style={styles.greetingSubtitle} numberOfLines={1}>
               {isTeacher ? "Speak Hub Faculty Portal 🎓" : "Welcome to Speak Hub! 😊"}
             </Text>
           </View>
@@ -946,14 +946,14 @@ export default function DashboardScreen() {
           {isTeacher ? (
             <View style={styles.teacherHeroCard}>
               <LinearGradient
-                colors={['#4338CA', '#312E81']}
+                colors={[COLORS.primary, COLORS.primaryDark]}
                 style={styles.teacherHeroGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
                 <View style={styles.teacherHeroHeader}>
                   <View style={styles.teacherBadgePill}>
-                    <MaterialIcons name="school" size={13} color="#A5B4FC" />
+                    <MaterialIcons name="school" size={13} color="#FFFFFF" />
                     <Text style={styles.teacherBadgePillText}>Faculty Workspace</Text>
                   </View>
                   <Text style={styles.teacherHeroGreeting}>Instructor: {user?.name || 'Teacher'}</Text>
@@ -997,7 +997,7 @@ export default function DashboardScreen() {
                     onPress={() => router.push("/(app)/students")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="person-add" size={17} color="#4338CA" style={{ marginRight: 6 }} />
+                    <MaterialIcons name="person-add" size={17} color={COLORS.primary} style={{ marginRight: 6 }} />
                     <Text style={styles.teacherAttendanceBtnText}>+ Add Student</Text>
                   </TouchableOpacity>
 
@@ -1006,7 +1006,7 @@ export default function DashboardScreen() {
                     onPress={() => router.push("/(app)/batches")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="groups" size={17} color="#4338CA" style={{ marginRight: 6 }} />
+                    <MaterialIcons name="groups" size={17} color={COLORS.primary} style={{ marginRight: 6 }} />
                     <Text style={styles.teacherAttendanceBtnText}>+ New Batch</Text>
                   </TouchableOpacity>
                 </View>
@@ -1108,13 +1108,13 @@ export default function DashboardScreen() {
                   onPress={() => router.push("/(app)/students")}
                   activeOpacity={0.85}
                 >
-                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#EEF2FF' }]}>
-                    <MaterialIcons name="people" size={24} color="#4F46E5" />
+                  <View style={[styles.teacherStudioIconBox, { backgroundColor: '#FFF1F2' }]}>
+                    <MaterialIcons name="people" size={24} color={COLORS.primary} />
                   </View>
                   <Text style={styles.teacherStudioCardTitle}>Student Master</Text>
                   <Text style={styles.teacherStudioCardDesc}>Register students & view credentials</Text>
-                  <View style={[styles.teacherStudioPill, { backgroundColor: '#EEF2FF' }]}>
-                    <Text style={[styles.teacherStudioPillText, { color: '#4F46E5' }]}>+ Add Student</Text>
+                  <View style={[styles.teacherStudioPill, { backgroundColor: '#FFF1F2' }]}>
+                    <Text style={[styles.teacherStudioPillText, { color: COLORS.primary }]}>+ Add Student</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -1258,7 +1258,7 @@ export default function DashboardScreen() {
                 />
               </View>
               <Text style={styles.quickActionLabel}>
-                {isTeacher ? "Exams & Results" : "My Progress"}
+                {isTeacher ? "Student Marks" : "My Progress"}
               </Text>
             </TouchableOpacity>
 
@@ -1444,7 +1444,7 @@ export default function DashboardScreen() {
                       onPress={() => router.push("/(app)/attendance")}
                       activeOpacity={0.85}
                     >
-                      <MaterialIcons name="how-to-reg" size={15} color="#4338CA" />
+                      <MaterialIcons name="how-to-reg" size={15} color={COLORS.primary} />
                       <Text style={styles.teacherBatchAttBtnText}>Attendance</Text>
                     </TouchableOpacity>
 
@@ -1950,18 +1950,23 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f1f5f9",
   },
   headerLeft: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    marginRight: 10,
+    minWidth: 0,
   },
   avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#ffe4e6",
-    marginRight: 12,
+    marginRight: 10,
   },
   greetingContainer: {
+    flex: 1,
     justifyContent: "center",
+    minWidth: 0,
   },
   greetingTitle: {
     fontSize: 17,
@@ -2750,7 +2755,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 14,
     elevation: 3,
-    shadowColor: "#4338CA",
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
@@ -2774,7 +2779,7 @@ const styles = StyleSheet.create({
   teacherBadgePillText: {
     fontSize: 10.5,
     fontWeight: "700",
-    color: "#E0E7FF",
+    color: "#FFE4E6",
     marginLeft: 4,
   },
   teacherHeroGreeting: {
@@ -2785,7 +2790,7 @@ const styles = StyleSheet.create({
   },
   teacherHeroDesc: {
     fontSize: 12,
-    color: "#C7D2FE",
+    color: "#FFE4E6",
     lineHeight: 16,
   },
   teacherHeroActionsRow: {
@@ -2806,7 +2811,7 @@ const styles = StyleSheet.create({
   teacherAttendanceBtnText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#4338CA",
+    color: COLORS.primary,
   },
   teacherDuesBtn: {
     flexDirection: "row",
@@ -2975,7 +2980,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: COLORS.primaryLightest,
     paddingVertical: 8,
     borderRadius: 8,
     gap: 4,
@@ -2983,7 +2988,7 @@ const styles = StyleSheet.create({
   teacherBatchAttBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#4338CA",
+    color: COLORS.primary,
   },
   teacherBatchMeetBtn: {
     flex: 1,

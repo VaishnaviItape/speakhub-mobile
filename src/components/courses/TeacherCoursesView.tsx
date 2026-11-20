@@ -312,18 +312,9 @@ export default function TeacherCoursesView() {
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <View style={styles.facultyPill}>
-              <MaterialIcons name="library-books" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Courses</Text>
-            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>Course Master</Text>
           </View>
         </View>
-
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
-          <MaterialIcons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>New Course</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── Stats Strip ─────────────────────────────────────────────── */}
@@ -530,7 +521,7 @@ export default function TeacherCoursesView() {
                       style={styles.editBtn}
                       onPress={() => handleOpenEditModal(item)}
                     >
-                      <MaterialIcons name="edit" size={14} color="#4338CA" />
+                      <MaterialIcons name="edit" size={14} color={COLORS.primary} />
                       <Text style={styles.editBtnText}>Edit Course</Text>
                     </TouchableOpacity>
                   </View>
@@ -543,7 +534,7 @@ export default function TeacherCoursesView() {
 
       {/* ── Floating Action Button ──────────────────────────────────── */}
       <TouchableOpacity style={styles.fabBtn} onPress={handleOpenAddModal} activeOpacity={0.9}>
-        <MaterialIcons name="add" size={26} color="#FFFFFF" />
+        <MaterialIcons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* ── Add / Edit Course Modal ─────────────────────────────────── */}
@@ -797,7 +788,7 @@ const styles = StyleSheet.create({
   facultyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -808,7 +799,7 @@ const styles = StyleSheet.create({
   facultyPillText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
     textTransform: 'uppercase',
   },
   headerTitle: {
@@ -819,13 +810,13 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
     gap: 4,
     elevation: 2,
-    shadowColor: '#4338CA',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 3,
@@ -853,9 +844,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   statBoxActive: {
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#818CF8',
+    borderColor: '#FDA4AF',
   },
   statBoxActiveOnline: {
     backgroundColor: '#E0F2FE',
@@ -915,8 +906,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterChipText: {
     fontSize: 12,
@@ -959,7 +950,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1130,7 +1121,7 @@ const styles = StyleSheet.create({
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -1139,23 +1130,23 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   fabBtn: {
     position: 'absolute',
     bottom: 84,
     right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#4338CA',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   /* Modal Styles */
   modalOverlay: {
@@ -1280,8 +1271,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusOptBtnActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6366F1',
+    backgroundColor: COLORS.primaryLightest,
+    borderColor: COLORS.primary,
   },
   statusOptText: {
     fontSize: 11.5,
@@ -1289,7 +1280,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   statusOptTextActive: {
-    color: '#4338CA',
+    color: COLORS.primary,
     fontWeight: '800',
   },
   modalFooter: {

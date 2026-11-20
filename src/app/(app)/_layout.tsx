@@ -95,7 +95,7 @@ export default function AppLayout() {
           name="attendance" 
           options={{ 
             headerShown: false,
-            href: isTeacher ? '/(app)/attendance' : null,
+            href: '/(app)/attendance',
             title: 'Attendance',
             tabBarLabel: 'Attendance',
             tabBarIcon: ({ color, focused }) => (
@@ -104,9 +104,23 @@ export default function AppLayout() {
           }} 
         />
         <Tabs.Screen 
+          name="profile" 
+          options={{ 
+            title: 'Profile',
+            tabBarLabel: 'Profile',
+            headerTitle: isTeacher ? 'Teacher Profile' : 'Student Profile',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "person" : "person-outline"} size={23} color={color} />
+            )
+          }} 
+        />
+
+        {/* Hidden Auxiliary Screens (accessible via Dashboard & Profile Drawer) */}
+        <Tabs.Screen 
           name="notes" 
           options={{ 
             headerShown: false,
+            href: null,
             title: 'Notes',
             tabBarLabel: 'Notes',
             headerTitle: isTeacher ? 'Notes Studio' : 'Study Notes & Batches',
@@ -119,23 +133,12 @@ export default function AppLayout() {
           name="exams" 
           options={{ 
             headerShown: false,
-            href: isTeacher ? null : '/(app)/exams',
-            title: 'Exams',
-            tabBarLabel: 'Exams',
-            headerTitle: 'Exams & Quizzes',
+            href: null,
+            title: isTeacher ? 'Marks' : 'Exams',
+            tabBarLabel: isTeacher ? 'Marks' : 'Exams',
+            headerTitle: isTeacher ? 'Student Marks' : 'Exams & Quizzes',
             tabBarIcon: ({ color, focused }) => (
-              <MaterialIcons name={focused ? "assignment" : "assignment"} size={23} color={color} />
-            )
-          }} 
-        />
-        <Tabs.Screen 
-          name="profile" 
-          options={{ 
-            title: 'Profile',
-            tabBarLabel: 'Profile',
-            headerTitle: isTeacher ? 'Teacher Profile' : 'Student Profile',
-            tabBarIcon: ({ color, focused }) => (
-              <MaterialIcons name={focused ? "person" : "person-outline"} size={23} color={color} />
+              <MaterialIcons name={isTeacher ? "assessment" : "assignment"} size={23} color={color} />
             )
           }} 
         />

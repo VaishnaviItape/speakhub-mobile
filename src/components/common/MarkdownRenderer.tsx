@@ -760,9 +760,9 @@ const styles = StyleSheet.create({
   instructionPromptCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#FECDD3',
     borderRadius: 8,
     padding: 9,
     marginVertical: 6,
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
   instructionPromptText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#3730A3',
+    color: COLORS.primary,
     flex: 1,
     lineHeight: 18,
   },

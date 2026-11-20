@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.primary || '#4f46e5',
+    color: COLORS.primary,
   },
   statLabel: {
     fontSize: 10,
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeToggleBtn: {
-    backgroundColor: COLORS.primary || '#4f46e5',
+    backgroundColor: COLORS.primary,
   },
   toggleText: {
     fontSize: 13,
@@ -659,10 +659,10 @@ const styles = StyleSheet.create({
   },
   todayCell: {
     borderWidth: 2,
-    borderColor: COLORS.primary || '#4f46e5',
+    borderColor: COLORS.primary,
   },
   selectedCell: {
-    backgroundColor: COLORS.primary || '#4f46e5',
+    backgroundColor: COLORS.primary,
   },
   dayNumberText: {
     fontSize: 13,
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeFilterTab: {
-    backgroundColor: COLORS.primary || '#4f46e5',
+    backgroundColor: COLORS.primary,
   },
   activeHolidayFilterTab: {
     backgroundColor: '#f59e0b',

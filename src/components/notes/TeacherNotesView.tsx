@@ -506,18 +506,9 @@ export default function TeacherNotesView() {
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <View style={styles.facultyPill}>
-              <MaterialIcons name="menu-book" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Notes</Text>
-            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>Notes Studio</Text>
           </View>
         </View>
-
-        <TouchableOpacity style={styles.addNoteHeaderBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
-          <MaterialIcons name="post-add" size={17} color="#FFFFFF" />
-          <Text style={styles.addNoteHeaderBtnText}>Add Note</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── Metrics Stats Strip ─────────────────────────────────────── */}
@@ -689,7 +680,7 @@ export default function TeacherNotesView() {
                   {/* Batch & Course Assignment Tags */}
                   <View style={styles.assignmentTagsRow}>
                     <View style={styles.assignmentTag}>
-                      <MaterialIcons name="groups" size={13} color="#4F46E5" />
+                      <MaterialIcons name="groups" size={13} color={COLORS.primary} />
                       <Text style={styles.assignmentTagText}>
                         {item.batchIds?.includes('all') || item.batchId === 'all'
                           ? 'All Batches'
@@ -747,7 +738,7 @@ export default function TeacherNotesView() {
                         style={styles.editBtn}
                         onPress={() => handleOpenEditModal(item)}
                       >
-                        <MaterialIcons name="edit" size={15} color="#4338CA" />
+                        <MaterialIcons name="edit" size={15} color={COLORS.primary} />
                         <Text style={styles.editBtnText}>Edit</Text>
                       </TouchableOpacity>
 
@@ -768,7 +759,7 @@ export default function TeacherNotesView() {
 
       {/* ── Floating Action Button ──────────────────────────────────── */}
       <TouchableOpacity style={styles.fabBtn} onPress={handleOpenAddModal} activeOpacity={0.9}>
-        <MaterialIcons name="add" size={26} color="#FFFFFF" />
+        <MaterialIcons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* ── Add / Edit Study Note Modal ─────────────────────────────── */}
@@ -816,8 +807,8 @@ export default function TeacherNotesView() {
                       setIsAllBatches(val);
                       if (val) setSelectedBatchIds([]);
                     }}
-                    trackColor={{ false: '#CBD5E1', true: '#818CF8' }}
-                    thumbColor={isAllBatches ? '#4F46E5' : '#F8FAFC'}
+                    trackColor={{ false: '#CBD5E1', true: COLORS.primaryLight }}
+                    thumbColor={isAllBatches ? COLORS.primary : '#F8FAFC'}
                   />
                 </View>
 
@@ -842,7 +833,7 @@ export default function TeacherNotesView() {
                             <MaterialIcons
                               name={isSelected ? 'check-box' : 'check-box-outline-blank'}
                               size={16}
-                              color={isSelected ? '#4F46E5' : '#64748B'}
+                              color={isSelected ? COLORS.primary : '#64748B'}
                             />
                             <Text style={[styles.batchCheckChipText, isSelected && styles.batchCheckChipTextActive]}>
                               {b.name}
@@ -907,7 +898,7 @@ export default function TeacherNotesView() {
                   style={[styles.tabToggleBtn, uploadMode === 'file' && styles.tabToggleBtnActive]}
                   onPress={() => setUploadMode('file')}
                 >
-                  <MaterialIcons name="attach-file" size={16} color={uploadMode === 'file' ? '#4F46E5' : '#64748B'} />
+                  <MaterialIcons name="attach-file" size={16} color={uploadMode === 'file' ? COLORS.primary : '#64748B'} />
                   <Text style={[styles.tabToggleText, uploadMode === 'file' && styles.tabToggleTextActive]}>
                     Upload File / Document
                   </Text>
@@ -917,7 +908,7 @@ export default function TeacherNotesView() {
                   style={[styles.tabToggleBtn, uploadMode === 'link' && styles.tabToggleBtnActive]}
                   onPress={() => setUploadMode('link')}
                 >
-                  <MaterialIcons name="link" size={16} color={uploadMode === 'link' ? '#4F46E5' : '#64748B'} />
+                  <MaterialIcons name="link" size={16} color={uploadMode === 'link' ? COLORS.primary : '#64748B'} />
                   <Text style={[styles.tabToggleText, uploadMode === 'link' && styles.tabToggleTextActive]}>
                     Web Link / Google Drive
                   </Text>
@@ -928,7 +919,7 @@ export default function TeacherNotesView() {
                 <View style={styles.filePickerBox}>
                   {pickedFile ? (
                     <View style={styles.fileSelectedRow}>
-                      <MaterialIcons name="insert-drive-file" size={24} color="#4F46E5" />
+                      <MaterialIcons name="insert-drive-file" size={24} color={COLORS.primary} />
                       <View style={{ flex: 1, marginHorizontal: 8 }}>
                         <Text style={styles.fileNameText} numberOfLines={1}>{pickedFile.name}</Text>
                         <Text style={styles.fileSizeText}>
@@ -952,7 +943,7 @@ export default function TeacherNotesView() {
                     </View>
                   ) : (
                     <TouchableOpacity style={styles.uploadPromptBtn} onPress={handlePickDocument}>
-                      <MaterialIcons name="cloud-upload" size={28} color="#4F46E5" />
+                      <MaterialIcons name="cloud-upload" size={28} color={COLORS.primary} />
                       <Text style={styles.uploadPromptText}>Tap to pick PDF, DOC, or Document file</Text>
                       <Text style={styles.uploadPromptSub}>Supports PDF, Word, Images, Text</Text>
                     </TouchableOpacity>
@@ -1151,7 +1142,7 @@ const styles = StyleSheet.create({
   facultyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -1162,7 +1153,7 @@ const styles = StyleSheet.create({
   facultyPillText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
     textTransform: 'uppercase',
   },
   headerTitle: {
@@ -1173,13 +1164,13 @@ const styles = StyleSheet.create({
   addNoteHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
     gap: 4,
     elevation: 2,
-    shadowColor: '#4338CA',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 3,
@@ -1207,9 +1198,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   statBoxActive: {
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#818CF8',
+    borderColor: '#FDA4AF',
   },
   statBoxActivePublished: {
     backgroundColor: '#DCFCE7',
@@ -1269,8 +1260,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterChipText: {
     fontSize: 12,
@@ -1313,7 +1304,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4338CA',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1424,7 +1415,7 @@ const styles = StyleSheet.create({
   assignmentTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1433,7 +1424,7 @@ const styles = StyleSheet.create({
   assignmentTagText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4F46E5',
+    color: COLORS.primary,
   },
   linksRow: {
     flexDirection: 'row',
@@ -1483,7 +1474,7 @@ const styles = StyleSheet.create({
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -1492,7 +1483,7 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
   },
   deleteBtn: {
     padding: 5,
@@ -1501,17 +1492,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 84,
     right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#4338CA',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
   },
   /* Modal Styles */
   modalOverlay: {
@@ -1579,8 +1570,8 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   selectPillActive: {
-    backgroundColor: '#4338CA',
-    borderColor: '#4338CA',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   selectPillText: {
     fontSize: 12,
@@ -1630,8 +1621,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   batchCheckChipActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#818CF8',
+    backgroundColor: COLORS.primaryLightest,
+    borderColor: COLORS.primary,
   },
   batchCheckChipText: {
     fontSize: 12,
@@ -1639,7 +1630,7 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   batchCheckChipTextActive: {
-    color: '#4338CA',
+    color: COLORS.primary,
     fontWeight: '700',
   },
   tabToggleRow: {
@@ -1669,7 +1660,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   tabToggleTextActive: {
-    color: '#4F46E5',
+    color: COLORS.primary,
     fontWeight: '700',
   },
   filePickerBox: {
@@ -1689,7 +1680,7 @@ const styles = StyleSheet.create({
   uploadPromptText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: COLORS.primary,
     marginTop: 6,
   },
   uploadPromptSub: {
@@ -1712,7 +1703,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   changeFileBtn: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primaryLightest,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -1720,7 +1711,7 @@ const styles = StyleSheet.create({
   changeFileBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: COLORS.primary,
   },
   statusOptionsRow: {
     flexDirection: 'row',
@@ -1737,8 +1728,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusOptBtnActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6366F1',
+    backgroundColor: COLORS.primaryLightest,
+    borderColor: COLORS.primary,
   },
   statusOptText: {
     fontSize: 11.5,
@@ -1746,7 +1737,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   statusOptTextActive: {
-    color: '#4338CA',
+    color: COLORS.primary,
     fontWeight: '800',
   },
   modalFooter: {

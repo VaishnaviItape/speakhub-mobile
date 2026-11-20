@@ -1247,7 +1247,7 @@ export default function NotesScreen() {
           <MaterialIcons
             name="file-download"
             size={18}
-            color={activeTab === "downloaded" ? "#ffffff" : "#2563eb"}
+            color={activeTab === "downloaded" ? "#ffffff" : COLORS.primary}
           />
           <Text
             style={[
@@ -1547,9 +1547,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   topicPillBlueActive: {
-    backgroundColor: "#2563eb",
+    backgroundColor: COLORS.primaryDark,
     elevation: 2,
-    shadowColor: "#2563eb",
+    shadowColor: COLORS.primaryDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,

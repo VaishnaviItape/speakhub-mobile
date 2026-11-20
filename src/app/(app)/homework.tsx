@@ -1275,7 +1275,7 @@ const styles = StyleSheet.create({
   modalBatchText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#6366f1',
+    color: COLORS.primary,
   },
   modalTitle: {
     fontSize: 17,
@@ -1388,9 +1388,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: '#FECDD3',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
@@ -1398,7 +1398,7 @@ const styles = StyleSheet.create({
   videoBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#2563eb',
+    color: COLORS.primary,
   },
   cardFooter: {
     marginTop: 2,

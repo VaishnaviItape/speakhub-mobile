@@ -33,12 +33,19 @@ import { useLoader } from "../../contexts/LoaderContext";
 import { db } from "../../config/firebase";
 import { formatGoogleDriveImageUrl } from "../../utils/imageUrl";
 import ProfileDrawer from "../../components/ui/ProfileDrawer";
+import TeacherMarksView from "../../components/marks/TeacherMarksView";
 
 export default function ExamsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { showLoader, hideLoader } = useLoader();
+
+  // If faculty/teacher/admin, display the dedicated Student Marks portal
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  if (isTeacher) {
+    return <TeacherMarksView />;
+  }
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [exams, setExams] = useState<any[]>([]);

@@ -146,7 +146,7 @@ export default function NotificationCenterScreen() {
       case 'FEE_DUE':
         return { name: 'account-balance-wallet', bg: '#fee2e2', color: '#e11d48' };
       case 'HOMEWORK':
-        return { name: 'menu-book', bg: '#e0e7ff', color: '#4f46e5' };
+        return { name: 'menu-book', bg: '#FFF1F2', color: COLORS.primary };
       case 'EXAM':
         return { name: 'assignment', bg: '#fef3c7', color: '#d97706' };
       case 'BATCH':

@@ -654,7 +654,7 @@ Speak Hub Academy`;
     <View style={styles.container}>
       {/* Top Header Bar */}
       <View style={[styles.topHeaderBar, { paddingTop: Math.max(insets.top, 14) }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           {router.canGoBack() && (
             <TouchableOpacity
               style={styles.navBtn}
@@ -671,12 +671,8 @@ Speak Hub Academy`;
           >
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
-          <View>
-            <View style={styles.facultyBadgePill}>
-              <MaterialIcons name="school" size={12} color="#4338CA" />
-              <Text style={styles.facultyBadgePillText}>Faculty Finance</Text>
-            </View>
-            <Text style={styles.topHeaderTitle}>Student Fee Dues</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.topHeaderTitle} numberOfLines={1}>Student Fee Dues</Text>
           </View>
         </View>
       </View>
@@ -1046,7 +1042,7 @@ Speak Hub Academy`;
                       onPress={() => handleCallStudent(rec.phone)}
                       activeOpacity={0.8}
                     >
-                      <MaterialIcons name="phone" size={16} color="#2563eb" />
+                      <MaterialIcons name="phone" size={16} color={COLORS.primary} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1152,7 +1148,7 @@ const styles = StyleSheet.create({
   facultyBadgePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF1F2',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -1163,7 +1159,7 @@ const styles = StyleSheet.create({
   facultyBadgePillText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#4338CA',
+    color: COLORS.primary,
     textTransform: 'uppercase',
   },
   topHeaderTitle: {
@@ -1623,9 +1619,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   callActionBtn: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: '#FECDD3',
     width: 38,
     height: 38,
     borderRadius: 12,
