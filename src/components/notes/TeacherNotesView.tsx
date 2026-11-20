@@ -35,6 +35,10 @@ import { COLORS } from '../../constants/theme';
 import ProfileDrawer from '../ui/ProfileDrawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import {
+  filterBatchesForTeacher,
+  getTeacherAssignedBatchSet
+} from '../../utils/teacherScoping';
 
 export interface NoteDoc {
   id: string;
@@ -108,7 +112,7 @@ export default function TeacherNotesView() {
   // Reader / Preview Modal State
   const [previewNote, setPreviewNote] = useState<NoteDoc | null>(null);
 
-  // ── Fetch Master Courses and Batches ──────────────────────────────────
+  // ── Fetch Master Courses and Batches (Teacher-Scoped) ─────────────────
   useEffect(() => {
     const fetchMasters = async () => {
       try {
@@ -121,24 +125,24 @@ export default function TeacherNotesView() {
         setCourses(cList);
 
         const bSnap = await getDocs(collection(db, 'batches'));
-        const bList: { id: string; name: string; courseId?: string }[] = [];
+        const rawBatches: any[] = [];
         bSnap.forEach((d) => {
-          const data = d.data();
-          bList.push({
-            id: d.id,
-            name: data.batchName || data.name || 'Batch',
-            courseId: data.courseId || '',
-          });
+          rawBatches.push({ id: d.id, ...d.data() });
         });
-        setBatches(bList);
+        const scopedBatches = filterBatchesForTeacher(rawBatches, user).map((d) => ({
+          id: d.id,
+          name: d.batchName || d.name || 'Batch',
+          courseId: d.courseId || '',
+        }));
+        setBatches(scopedBatches);
       } catch (err) {
         console.warn('Error fetching courses/batches in TeacherNotesView:', err);
       }
     };
     fetchMasters();
-  }, []);
+  }, [user]);
 
-  // ── Real-time Notes Listener ──────────────────────────────────────────
+  // ── Real-time Notes Listener (Teacher-Scoped) ─────────────────────────
   useEffect(() => {
     setIsLoading(true);
     const nRef = collection(db, 'notes');
@@ -148,6 +152,13 @@ export default function TeacherNotesView() {
     } catch {
       q = nRef;
     }
+
+    let allBatchesCache: any[] = [];
+    getDocs(collection(db, 'batches'))
+      .then((bSnap) => {
+        bSnap.forEach((d) => allBatchesCache.push({ id: d.id, ...d.data() }));
+      })
+      .catch(() => {});
 
     const unsub = onSnapshot(
       q,
@@ -179,7 +190,24 @@ export default function TeacherNotesView() {
             updatedAt: data.updatedAt || null,
           });
         });
-        setNotes(list);
+
+        // If teacher, show notes authored by this teacher or attached to their assigned batches
+        const isTeacherOnly = user?.role === 'teacher';
+        if (isTeacherOnly) {
+          const assignedSet = getTeacherAssignedBatchSet(user, allBatchesCache);
+          const teacherId = String(user?.id || user?.uid || '');
+          const scopedNotes = list.filter((n) => {
+            if (teacherId && n.teacherId === teacherId) return true;
+            if (n.batchId === 'all') return true;
+            if (n.batchId && assignedSet.has(n.batchId)) return true;
+            if (Array.isArray(n.batchIds) && n.batchIds.some((bId) => assignedSet.has(bId))) return true;
+            return false;
+          });
+          setNotes(scopedNotes);
+        } else {
+          setNotes(list);
+        }
+
         setIsLoading(false);
         setRefreshing(false);
       },
@@ -477,18 +505,18 @@ export default function TeacherNotesView() {
           >
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
-          <View>
+          <View style={styles.headerTitleWrap}>
             <View style={styles.facultyPill}>
-              <MaterialIcons name="verified-user" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Notes Studio</Text>
+              <MaterialIcons name="menu-book" size={12} color="#4338CA" />
+              <Text style={styles.facultyPillText}>Faculty Notes</Text>
             </View>
-            <Text style={styles.headerTitle}>Notes & Study Materials</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>Notes Studio</Text>
           </View>
         </View>
 
         <TouchableOpacity style={styles.addNoteHeaderBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
-          <MaterialIcons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.addNoteHeaderBtnText}>+ Add Note</Text>
+          <MaterialIcons name="post-add" size={17} color="#FFFFFF" />
+          <Text style={styles.addNoteHeaderBtnText}>Add Note</Text>
         </TouchableOpacity>
       </View>
 
@@ -591,11 +619,11 @@ export default function TeacherNotesView() {
               <Text style={styles.emptySubtitle}>
                 {searchQuery || statusFilter !== 'all'
                   ? 'No study notes match your search or filter criteria.'
-                  : 'You have not uploaded any study notes yet. Click "+ Add Note" to create one.'}
+                  : 'No notes uploaded for your assigned batches yet. Tap "Add Note" to create one.'}
               </Text>
               <TouchableOpacity style={styles.emptyAddBtn} onPress={handleOpenAddModal}>
-                <MaterialIcons name="add" size={18} color="#FFFFFF" />
-                <Text style={styles.emptyAddBtnText}>Add Your First Note</Text>
+                <MaterialIcons name="post-add" size={18} color="#FFFFFF" />
+                <Text style={styles.emptyAddBtnText}>Create New Note</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -1101,9 +1129,11 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   topHeaderLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    minWidth: 0,
   },
   menuBtn: {
     padding: 6,
@@ -1113,6 +1143,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
     marginRight: 2,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   facultyPill: {
     flexDirection: 'row',
@@ -1132,23 +1166,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
   },
   addNoteHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
     gap: 4,
     elevation: 2,
+    shadowColor: '#4338CA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    flexShrink: 0,
   },
   addNoteHeaderBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
   },
   statsStrip: {
@@ -1274,7 +1313,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1460,12 +1499,12 @@ const styles = StyleSheet.create({
   },
   fabBtn: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 84,
     right: 20,
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,

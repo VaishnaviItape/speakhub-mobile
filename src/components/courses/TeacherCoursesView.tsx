@@ -311,18 +311,18 @@ export default function TeacherCoursesView() {
           >
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
-          <View>
+          <View style={styles.headerTitleWrap}>
             <View style={styles.facultyPill}>
               <MaterialIcons name="library-books" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Course Master</Text>
+              <Text style={styles.facultyPillText}>Faculty Courses</Text>
             </View>
-            <Text style={styles.headerTitle}>Course Master</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>Course Master</Text>
           </View>
         </View>
 
         <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
           <MaterialIcons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>+ Add Course</Text>
+          <Text style={styles.addBtnText}>New Course</Text>
         </TouchableOpacity>
       </View>
 
@@ -423,11 +423,11 @@ export default function TeacherCoursesView() {
               <Text style={styles.emptySubtitle}>
                 {searchQuery
                   ? 'No courses match your search keywords.'
-                  : 'No courses registered in this category yet. Click "+ Add Course" to create one.'}
+                  : 'No courses registered in this category yet. Tap "New Course" to create and configure one.'}
               </Text>
               <TouchableOpacity style={styles.emptyAddBtn} onPress={handleOpenAddModal}>
                 <MaterialIcons name="add" size={18} color="#FFFFFF" />
-                <Text style={styles.emptyAddBtnText}>Create First Course</Text>
+                <Text style={styles.emptyAddBtnText}>Create New Course</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -775,9 +775,11 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   topHeaderLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    minWidth: 0,
   },
   menuBtn: {
     padding: 6,
@@ -787,6 +789,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
     marginRight: 2,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   facultyPill: {
     flexDirection: 'row',
@@ -806,23 +812,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
   },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
     gap: 4,
     elevation: 2,
+    shadowColor: '#4338CA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    flexShrink: 0,
   },
   addBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
   },
   statsStrip: {
@@ -948,7 +959,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1132,12 +1143,12 @@ const styles = StyleSheet.create({
   },
   fabBtn: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 84,
     right: 20,
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,

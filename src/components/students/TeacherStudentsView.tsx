@@ -35,6 +35,11 @@ import { validateName, validatePhoneNumber } from '../../utils/validation';
 import ProfileDrawer from '../ui/ProfileDrawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import {
+  getTeacherAssignedBatchSet,
+  filterBatchesForTeacher,
+  filterStudentsForTeacher
+} from '../../utils/teacherScoping';
 
 export interface StudentDoc {
   id: string;
@@ -165,30 +170,54 @@ export default function TeacherStudentsView() {
         setCourses(cList);
 
         const bSnap = await getDocs(collection(db, 'batches'));
-        const bList: { id: string; name: string; courseId?: string }[] = [];
+        const bList: { id: string; name: string; courseId?: string; teacherId?: string; teacherIds?: string[] }[] = [];
         bSnap.forEach((d) => {
           const data = d.data();
           bList.push({
             id: d.id,
             name: data.batchName || data.name || 'Batch',
             courseId: data.courseId || '',
+            teacherId: data.teacherId || '',
+            teacherIds: Array.isArray(data.teacherIds) ? data.teacherIds : [],
           });
         });
-        setBatches(bList);
+        const scopedBatches = filterBatchesForTeacher(bList, user);
+        setBatches(scopedBatches);
       } catch (e) {
         console.warn('Error fetching courses/batches:', e);
       }
     };
     fetchMasters();
-  }, []);
+  }, [user]);
 
-  // ── Real-time Students Listener ───────────────────────────────────────
+  // ── Real-time Students Listener with Strict Teacher Batch Scoping ─────
   useEffect(() => {
     setIsLoading(true);
+    const bRef = collection(db, 'batches');
     const uRef = collection(db, 'users');
     const q = query(uRef, where('role', '==', 'student'));
 
-    const unsub = onSnapshot(
+    let batchesSnapshotData: any[] = [];
+
+    const unsubBatches = onSnapshot(bRef, (bSnap) => {
+      batchesSnapshotData = [];
+      const bList: { id: string; name: string; courseId?: string; teacherId?: string; teacherIds?: string[] }[] = [];
+      bSnap.forEach((d) => {
+        const data = d.data();
+        batchesSnapshotData.push({ id: d.id, ...data });
+        bList.push({
+          id: d.id,
+          name: data.batchName || data.name || 'Batch',
+          courseId: data.courseId || '',
+          teacherId: data.teacherId || '',
+          teacherIds: Array.isArray(data.teacherIds) ? data.teacherIds : [],
+        });
+      });
+      const scopedBatches = filterBatchesForTeacher(bList, user);
+      setBatches(scopedBatches);
+    });
+
+    const unsubStudents = onSnapshot(
       q,
       (snapshot) => {
         const list: StudentDoc[] = [];
@@ -227,9 +256,12 @@ export default function TeacherStudentsView() {
           });
         });
 
-        // Sort by name or createdAt
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        setStudents(list);
+        // Strictly filter to students in teacher's assigned batches
+        const assignedSet = getTeacherAssignedBatchSet(user, batchesSnapshotData);
+        const scopedStudents = filterStudentsForTeacher(list, assignedSet, user);
+
+        scopedStudents.sort((a, b) => a.name.localeCompare(b.name));
+        setStudents(scopedStudents);
         setIsLoading(false);
         setRefreshing(false);
       },
@@ -240,8 +272,11 @@ export default function TeacherStudentsView() {
       }
     );
 
-    return () => unsub();
-  }, []);
+    return () => {
+      unsubBatches();
+      unsubStudents();
+    };
+  }, [user]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -509,18 +544,18 @@ export default function TeacherStudentsView() {
           >
             <MaterialIcons name="menu" size={24} color="#1E293B" />
           </TouchableOpacity>
-          <View>
+          <View style={styles.headerTitleWrap}>
             <View style={styles.facultyPill}>
               <MaterialIcons name="school" size={12} color="#4338CA" />
-              <Text style={styles.facultyPillText}>Faculty Student Master</Text>
+              <Text style={styles.facultyPillText}>Faculty Students</Text>
             </View>
-            <Text style={styles.headerTitle}>Student Directory</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>Student Master</Text>
           </View>
         </View>
 
         <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal} activeOpacity={0.85}>
           <MaterialIcons name="person-add" size={17} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>+ Add Student</Text>
+          <Text style={styles.addBtnText}>Add Student</Text>
         </TouchableOpacity>
       </View>
 
@@ -623,11 +658,11 @@ export default function TeacherStudentsView() {
               <Text style={styles.emptySubtitle}>
                 {searchQuery || statusFilter !== 'all'
                   ? 'No students match your current search or filter criteria.'
-                  : 'No registered students in this category yet. Click "+ Add Student" to register one.'}
+                  : 'No students currently enrolled in your assigned batches. Tap "Add Student" to register one.'}
               </Text>
               <TouchableOpacity style={styles.emptyAddBtn} onPress={handleOpenAddModal}>
                 <MaterialIcons name="person-add" size={18} color="#FFFFFF" />
-                <Text style={styles.emptyAddBtnText}>Register First Student</Text>
+                <Text style={styles.emptyAddBtnText}>Register New Student</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -1038,9 +1073,11 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   topHeaderLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    minWidth: 0,
   },
   menuBtn: {
     padding: 6,
@@ -1050,6 +1087,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
     marginRight: 2,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   facultyPill: {
     flexDirection: 'row',
@@ -1069,23 +1110,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0F172A',
   },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
     gap: 4,
     elevation: 2,
+    shadowColor: '#4338CA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    flexShrink: 0,
   },
   addBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
   },
   statsStrip: {
@@ -1211,7 +1257,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1435,12 +1481,12 @@ const styles = StyleSheet.create({
   },
   fabBtn: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 84,
     right: 20,
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4338CA',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,

@@ -42,6 +42,11 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead
 } from "../../utils/notificationService";
+import {
+  getTeacherAssignedBatchSet,
+  filterBatchesForTeacher,
+  filterStudentsForTeacher
+} from "../../utils/teacherScoping";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -627,18 +632,29 @@ export default function DashboardScreen() {
           const bSnap = await getDocs(collection(db, "batches"));
           const cSnap = await getDocs(collection(db, "courses"));
 
-          const batchList: any[] = [];
+          const allBatches: any[] = [];
           bSnap.forEach((bDoc) => {
             const data = bDoc.data();
-            batchList.push({ id: bDoc.id, ...data });
+            allBatches.push({ id: bDoc.id, ...data });
           });
 
+          // Strictly scope batches for teacher
+          const teacherBatches = filterBatchesForTeacher(allBatches, user);
+          const assignedBatchIds = getTeacherAssignedBatchSet(user, allBatches);
+
+          // Strictly scope students enrolled in teacher's assigned batches
+          const allStudents: any[] = [];
+          sSnap.forEach((sDoc) => {
+            allStudents.push({ id: sDoc.id, ...sDoc.data() });
+          });
+          const teacherStudents = filterStudentsForTeacher(allStudents, assignedBatchIds, user);
+
           setFacultyStats({
-            studentsCount: sSnap.size,
-            batchesCount: batchList.length,
+            studentsCount: teacherStudents.length,
+            batchesCount: teacherBatches.length,
             coursesCount: cSnap.size,
           });
-          setFacultyBatches(batchList);
+          setFacultyBatches(teacherBatches);
         } catch (fErr) {
           console.warn("Error fetching faculty stats:", fErr);
         }
@@ -981,17 +997,17 @@ export default function DashboardScreen() {
                     onPress={() => router.push("/(app)/students")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="person-add" size={17} color="#4338CA" style={{ marginRight: 5 }} />
+                    <MaterialIcons name="person-add" size={17} color="#4338CA" style={{ marginRight: 6 }} />
                     <Text style={styles.teacherAttendanceBtnText}>+ Add Student</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.teacherAttendanceBtn}
-                    onPress={() => router.push("/(app)/attendance")}
+                    onPress={() => router.push("/(app)/batches")}
                     activeOpacity={0.85}
                   >
-                    <MaterialIcons name="how-to-reg" size={17} color="#4338CA" style={{ marginRight: 5 }} />
-                    <Text style={styles.teacherAttendanceBtnText}>Attendance</Text>
+                    <MaterialIcons name="groups" size={17} color="#4338CA" style={{ marginRight: 6 }} />
+                    <Text style={styles.teacherAttendanceBtnText}>+ New Batch</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -999,20 +1015,20 @@ export default function DashboardScreen() {
                 <View style={[styles.teacherHeroActionsRow, { marginTop: 8 }]}>
                   <TouchableOpacity
                     style={[styles.teacherDuesBtn, { flex: 1 }]}
+                    onPress={() => router.push("/(app)/attendance")}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialIcons name="how-to-reg" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.teacherDuesBtnText}>Attendance</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.teacherDuesBtn, { flex: 1 }]}
                     onPress={() => router.push("/(app)/notes")}
                     activeOpacity={0.85}
                   >
                     <MaterialIcons name="menu-book" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
                     <Text style={styles.teacherDuesBtnText}>+ Notes</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.teacherDuesBtn, { flex: 1 }]}
-                    onPress={() => router.push("/(app)/batches")}
-                    activeOpacity={0.85}
-                  >
-                    <MaterialIcons name="groups" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.teacherDuesBtnText}>+ Batch</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity

@@ -153,9 +153,9 @@ export default function TeacherAttendanceView() {
           );
         });
 
-        // Fallback: If no batches are explicitly assigned yet, allow access to all active batches
-        if (filteredBatches.length === 0 && assignedIds.size === 0) {
-          filteredBatches = rawBatches;
+        // If no batches are assigned, keep filteredBatches empty to protect privacy
+        if (filteredBatches.length === 0) {
+          filteredBatches = [];
         }
       }
 
