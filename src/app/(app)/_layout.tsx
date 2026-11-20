@@ -92,6 +92,19 @@ export default function AppLayout() {
           }} 
         />
         <Tabs.Screen 
+          name="exams" 
+          options={{ 
+            headerShown: false,
+            href: !isTeacher ? '/(app)/exams' : null,
+            title: 'Exam',
+            tabBarLabel: 'Exam',
+            headerTitle: isTeacher ? 'Student Marks' : 'Exams & Quizzes',
+            tabBarIcon: ({ color, focused }) => (
+              <MaterialIcons name={focused ? "assignment" : "assignment"} size={23} color={color} />
+            )
+          }} 
+        />
+        <Tabs.Screen 
           name="attendance" 
           options={{ 
             headerShown: false,
@@ -126,19 +139,6 @@ export default function AppLayout() {
             headerTitle: isTeacher ? 'Notes Studio' : 'Study Notes & Batches',
             tabBarIcon: ({ color, focused }) => (
               <MaterialIcons name={focused ? "menu-book" : "menu-book"} size={23} color={color} />
-            )
-          }} 
-        />
-        <Tabs.Screen 
-          name="exams" 
-          options={{ 
-            headerShown: false,
-            href: null,
-            title: isTeacher ? 'Marks' : 'Exams',
-            tabBarLabel: isTeacher ? 'Marks' : 'Exams',
-            headerTitle: isTeacher ? 'Student Marks' : 'Exams & Quizzes',
-            tabBarIcon: ({ color, focused }) => (
-              <MaterialIcons name={isTeacher ? "assessment" : "assignment"} size={23} color={color} />
             )
           }} 
         />
